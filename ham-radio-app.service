@@ -1,3 +1,10 @@
+#Install service file
+#sudo cp ham-radio-app.service /etc/systemd/system/
+#sudo systemctl daemon-reload
+#sudo systemctl enable ham-radio-app
+#sudo systemctl start ham-radio-app
+#sudo systemctl status ham-radio-app
+
 [Unit]
 Description=Ham Radio Operator Web Application
 After=network.target
