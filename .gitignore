@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Flask
+instance/
+.webassets-cache
+*.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Application specific
+data/certs/*.pem
+data/certs/*.key
+ham_radio.db
+*.log
+
+# Environment
+.env
+.flaskenv
+
+# Backup files
+*.bak
+*.backup
