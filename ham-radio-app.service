@@ -1,0 +1,17 @@
+[Unit]
+Description=Ham Radio Operator Web Application
+After=network.target
+
+[Service]
+Type=simple
+User=hamradio
+WorkingDirectory=/opt/ham_radio_app
+Environment="PATH=/opt/ham_radio_app/venv/bin"
+Environment="FLASK_ENV=production"
+Environment="USE_MOCK_DEVICES=False"
+ExecStart=/opt/ham_radio_app/venv/bin/python app.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
