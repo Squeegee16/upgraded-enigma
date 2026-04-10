@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Ham Radio App{% endblock %}
+
+{% block content %}
+<h2><i class="fas fa-tachometer-alt"></i> Dashboard</h2>
+<hr>
+
+<div class="row">
+    <!-- User Info Card -->
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5><i class="fas fa-user-circle"></i> Operator Info</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Callsign:</strong> {{ current_user.callsign }}</p>
+                <p><strong>Member Since:</strong> {{ current_user.created_at.strftime('%Y-%m-%d') }}</p>
+                <p><strong>Total Contacts:</strong> {{ total_contacts }}</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Location Card -->
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5><i class="fas fa-map-marker-alt"></i> Location</h5>
+            </div>
+            <div class="card-body" id="location-card">
+                {% if gps_data %}
+                <p><strong>Grid:</strong> {{ gps_data.grid }}</p>
+                <p><strong>Latitude:</strong> {{ "%.4f"|format(gps_data.latitude) }}°</p>
+                <p><strong>Longitude:</strong> {{ "%.4f"|format(gps_data.longitude) }}°</p>
+                <p><strong>Altitude:</strong> {{ "%.1f"|format(gps_data.altitude) }} m</p>
+                <p><strong>Satellites:</strong> {{ gps_data.satellites }}</p>
+                {% else %}
+                <p class="text-muted">GPS not available</p>
+                <button class="btn btn-sm btn-primary" onclick="refreshLocation()">
+                    <i class="fas fa-sync"></i> Refresh
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Device Status Card -->
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5><i class="fas fa-microchip"></i> Device Status</h5>
+            </div>
+            <div class="card-body" id="device-status">
+                <div class="spinner-border" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Available Plugins -->
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header bg-warning">
+                <h5><i class="fas fa-plug"></i> Available Plugins</h5>
+            </div>
+            <div class="card-body">
+                {% if plugins %}
+                <div class="row">
+                    {% for plugin_name, plugin in plugins.items() %}
+                    <div class="col-md-4 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ plugin.name }}</h5>
+                                <p class="card-text">{{ plugin.description }}</p>
+                                <p class="text-muted small">v{{ plugin.version }} by {{ plugin.author }}</p>
+                            </div>
+                            <div class="card-footer">
+                                <a href="{{ url_for(plugin_name + '.index') }}" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-arrow-right"></i> Open
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted">No plugins currently loaded</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Contacts -->
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h5><i class="fas fa-history"></i> Recent Contacts</h5>
+            </div>
+            <div class="card-body">
+                {% if recent_contacts %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Callsign</th>
+                                <th>Mode</th>
+                                <th>Band</th>
+                                <th>Grid</th>
+                                <th>Date/Time (UTC)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for contact in recent_contacts %}
+                            <tr>
+                                <td><strong>{{ contact.contact_callsign }}</strong></td>
+                                <td>{{ contact.mode }}</td>
+                                <td>{{ contact.band or 'N/A' }}</td>
+                                <td>{{ contact.grid or 'N/A' }}</td>
+                                <td>{{ contact.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="text-center">
+                    <a href="{{ url_for('logbook.index') }}" class="btn btn-primary">
+                        <i class="fas fa-book"></i> View Full Logbook
+                    </a>
+                </div>
+                {% else %}
+                <p class="text-muted">No contacts logged yet</p>
+                <a href="{{ url_for('logbook.add_contact') }}" class="btn btn-success">
+                    <i class="fas fa-plus"></i> Log Your First Contact
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Refresh device status
+function refreshDeviceStatus() {
+    $.get('{{ url_for("dashboard.get_devices") }}', function(data) {
+        let html = '<ul class="list-group">';
+        
+        for (let device in data) {
+            let status = data[device];
+            let icon = status.connected ? 'check-circle text-success' : 'times-circle text-danger';
+            let statusText = status.connected ? 'Connected' : 'Disconnected';
+            
+            html += `<li class="list-group-item d-flex justify-content-between align-items-center">`;
+            html += `<span><i class="fas fa-${device === 'gps' ? 'satellite-dish' : device === 'radio' ? 'broadcast-tower' : 'signal'}"></i> ${device.toUpperCase()}</span>`;
+            html += `<span><i class="fas fa-${icon}"></i> ${statusText}</span>`;
+            html += `</li>`;
+        }
+        
+        html += '</ul>';
+        $('#device-status').html(html);
+    });
+}
+
+// Refresh location
+function refreshLocation() {
+    $.get('{{ url_for("dashboard.get_location") }}', function(data) {
+        let html = '';
+        if (data.error) {
+            html = `<p class="text-danger">${data.error}</p>`;
+        } else {
+            html = `
+                <p><strong>Grid:</strong> ${data.grid}</p>
+                <p><strong>Latitude:</strong> ${data.latitude.toFixed(4)}°</p>
+                <p><strong>Longitude:</strong> ${data.longitude.toFixed(4)}°</p>
+                <p><strong>Altitude:</strong> ${data.altitude.toFixed(1)} m</p>
+                <p><strong>Satellites:</strong> ${data.satellites}</p>
+            `;
+        }
+        html += `<button class="btn btn-sm btn-primary" onclick="refreshLocation()">
+                    <i class="fas fa-sync"></i> Refresh
+                 </button>`;
+        $('#location-card').html(html);
+    });
+}
+
+// Load device status on page load
+$(document).ready(function() {
+    refreshDeviceStatus();
+    // Refresh every 30 seconds
+    setInterval(refreshDeviceStatus, 30000);
+});
+</script>
+{% endblock %}

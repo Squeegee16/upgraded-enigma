@@ -1,0 +1,245 @@
+{% extends "plugins/plugin_page.html" %}
+
+{% block plugin_content %}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-signal"></i> SDR Monitor Control</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label for="frequency" class="form-label">Center Frequency (MHz)</label>
+                        <input type="number" class="form-control" id="frequency" value="144.5" step="0.001">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="sample_rate" class="form-label">Sample Rate (Hz)</label>
+                        <select class="form-select" id="sample_rate">
+                            <option value="1024000">1.024 MHz</option>
+                            <option value="2048000" selected>2.048 MHz</option>
+                            <option value="2400000">2.4 MHz</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button class="btn btn-success me-2" onclick="startMonitoring()">
+                            <i class="fas fa-play"></i> Start
+                        </button>
+                        <button class="btn btn-danger" onclick="stopMonitoring()">
+                            <i class="fas fa-stop"></i> Stop
+                        </button>
+                        <button class="btn btn-info ms-2" onclick="refreshSpectrum()">
+                            <i class="fas fa-sync"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="status-message" class="alert alert-info" role="alert" style="display: none;">
+                    <i class="fas fa-info-circle"></i> <span id="status-text">Ready</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-area"></i> Spectrum Display</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="spectrum-canvas" width="800" height="400"></canvas>
+                <div id="spectrum-info" class="mt-3 text-muted">
+                    <small>Center: <span id="center-freq">--</span> MHz | Sample Rate: <span id="sample-rate-display">--</span> Hz</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-list"></i> Detected Signals</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped" id="signals-table">
+                        <thead>
+                            <tr>
+                                <th>Frequency</th>
+                                <th>Power</th>
+                                <th>Time</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="signals-tbody">
+                            <tr>
+                                <td colspan="4" class="text-center text-muted">No signals detected</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let monitoringActive = false;
+let spectrumInterval = null;
+
+function showStatus(message, type = 'info') {
+    $('#status-message').removeClass('alert-info alert-success alert-danger alert-warning');
+    $('#status-message').addClass(`alert-${type}`);
+    $('#status-text').text(message);
+    $('#status-message').fadeIn();
+    
+    setTimeout(() => {
+        $('#status-message').fadeOut();
+    }, 5000);
+}
+
+function startMonitoring() {
+    const frequency = parseFloat($('#frequency').val());
+    const sample_rate = parseInt($('#sample_rate').val());
+    
+    $.ajax({
+        url: '{{ url_for("SDR Monitor.start_monitoring") }}',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            frequency: frequency,
+            sample_rate: sample_rate
+        }),
+        success: function(data) {
+            if (data.success) {
+                showStatus('Monitoring started', 'success');
+                monitoringActive = true;
+                // Start auto-refresh
+                spectrumInterval = setInterval(refreshSpectrum, 2000);
+            } else {
+                showStatus('Failed to start monitoring: ' + data.message, 'danger');
+            }
+        },
+        error: function(xhr) {
+            showStatus('Error starting monitoring', 'danger');
+        }
+    });
+}
+
+function stopMonitoring() {
+    $.ajax({
+        url: '{{ url_for("SDR Monitor.stop_monitoring") }}',
+        method: 'POST',
+        success: function(data) {
+            if (data.success) {
+                showStatus('Monitoring stopped', 'info');
+                monitoringActive = false;
+                if (spectrumInterval) {
+                    clearInterval(spectrumInterval);
+                    spectrumInterval = null;
+                }
+            }
+        },
+        error: function(xhr) {
+            showStatus('Error stopping monitoring', 'danger');
+        }
+    });
+}
+
+function refreshSpectrum() {
+    $.ajax({
+        url: '{{ url_for("SDR Monitor.get_spectrum") }}',
+        method: 'GET',
+        success: function(data) {
+            if (data.success && data.data) {
+                drawSpectrum(data.data);
+                $('#center-freq').text(data.data.center_frequency);
+                $('#sample-rate-display').text(data.data.sample_rate);
+            } else {
+                console.log('No spectrum data available');
+            }
+        },
+        error: function(xhr) {
+            console.error('Error fetching spectrum');
+        }
+    });
+}
+
+function drawSpectrum(data) {
+    const canvas = document.getElementById('spectrum-canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw grid
+    ctx.strokeStyle = '#e0e0e0';
+    ctx.lineWidth = 1;
+    
+    // Vertical grid lines
+    for (let i = 0; i <= 10; i++) {
+        const x = (canvas.width / 10) * i;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+    
+    // Horizontal grid lines
+    for (let i = 0; i <= 8; i++) {
+        const y = (canvas.height / 8) * i;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+    
+    // Draw spectrum
+    if (data.power && data.power.length > 0) {
+        const frequencies = data.frequencies;
+        const power = data.power;
+        
+        // Find min/max for scaling
+        const minPower = Math.min(...power);
+        const maxPower = Math.max(...power);
+        const powerRange = maxPower - minPower;
+        
+        ctx.strokeStyle = '#007bff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        for (let i = 0; i < power.length; i++) {
+            const x = (i / power.length) * canvas.width;
+            const normalizedPower = (power[i] - minPower) / powerRange;
+            const y = canvas.height - (normalizedPower * canvas.height);
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        
+        ctx.stroke();
+    }
+}
+
+// Check status on page load
+$(document).ready(function() {
+    $.ajax({
+        url: '{{ url_for("SDR Monitor.get_status") }}',
+        method: 'GET',
+        success: function(data) {
+            if (data.monitoring) {
+                monitoringActive = true;
+                spectrumInterval = setInterval(refreshSpectrum, 2000);
+                showStatus('Monitoring active', 'success');
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
