@@ -1,5 +1,6 @@
 # upgraded-enigma
 Project structure
+
 hamradio_app/
 │
 ├── app.py
