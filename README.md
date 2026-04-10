@@ -319,10 +319,11 @@ Submit a pull request
 Support
 For issues and questions:
 
-Check the troubleshooting section
+#Check the troubleshooting section
 Review application logs
 Submit an issue on GitHub
-Acknowledgments
+
+#Acknowledgments
 Hamlib project for radio control
 RTL-SDR project for SDR support
 FLdigi for digital modes
