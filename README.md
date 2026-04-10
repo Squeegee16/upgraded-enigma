@@ -32,18 +32,22 @@ hamradio_app/
 └── README.md
 
 #WiFi Hotspot
+
 sudo apt install hostapd dnsmasq
 
 #Setup
+
 sudo apt install python3 python3-venv
 python3 -m venv venv
 source venv/bin/activate
 pip install flask flask-login flask-bcrypt flask-wtf flask-sqlalchemy
 
 #Generate self-signed cert:
+
 openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes
 
 #run
+
 python app.py
 
 #Access from laptop/tablet:
