@@ -63,33 +63,48 @@ ENV PYTHONUNBUFFERED=1 \
     FLASK_APP=app.py \
     FLASK_ENV=production
 
-# Install runtime dependencies
-# - hamlib-utils: For radio control via Hamlib
-# - rtl-sdr: For RTL-SDR device support
-# - gpsd: For GPS device support (optional)
+# Install runtime dependencies (including build tools for compilation)
+# - wget: For downloading packages
+# - autoconf: For building from source
+# - build-essential: Compiler toolchain
+# - cmake: Build system for SDR projects
+# - git: For cloning SDR projects
+# - pkg-config: For finding libraries
+# - libusb-1.0-0-dev: For rtl-sdr USB support
+# - libhamlib-dev: For radio control via Hamlib
+# - gnuradio: GNU Radio framework
+# - gpsd: For GPS device support
 # - ca-certificates: For SSL/TLS support
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     autoconf \
     build-essential \
+    cmake \
+    git \
+    pkg-config \
+    libusb-1.0-0-dev \
     libhamlib-dev \
     gnuradio \
-    rm -rf /var/lib/apt/lists/*
+    gpsd \
+    gpsd-clients \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
+# Build SoapySDR from source
 RUN cd /tmp && \
     git clone https://github.com/pothosware/SoapySDR.git && \
     cd SoapySDR && \
-    mkdir build  && \
-    cd build  && \
-    cmake ..  && \
-    make -j`nproc`  && \
-    sudo make install -j`nproc`  && \
-    sudo ldconfig  && \
-    SoapySDRUtil --info  && \
+    mkdir build && \
+    cd build && \
+    cmake .. && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
     cd / && \
     rm -rf /tmp/SoapySDR
 
+# Build hamlib from source
 RUN cd /tmp && \
     wget https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download -O hamlib-4.7.0.tar.gz && \
     tar -xzf hamlib-4.7.0.tar.gz && \
@@ -97,9 +112,11 @@ RUN cd /tmp && \
     ./configure && \
     make && \
     make install && \
+    ldconfig && \
     cd / && \
     rm -rf /tmp/hamlib-*
 
+# Build rtl-sdr from source
 RUN cd /tmp && \
     git clone git://git.osmocom.org/rtl-sdr.git && \
     cd rtl-sdr && \
@@ -107,16 +124,10 @@ RUN cd /tmp && \
     cd build && \
     cmake -DINSTALL_UDEV_RULES=ON .. && \
     make && \
-    sudo make install && \
-    sudo ldconfig && \
+    make install && \
+    ldconfig && \
     cd / && \
     rm -rf /tmp/rtl-sdr
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gpsd \
-    gpsd-clients \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
 
 #Install native plugins
 # https://github.com/jketterl/openwebrx/wiki/Setup-Guide
