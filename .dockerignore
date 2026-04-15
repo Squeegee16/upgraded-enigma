@@ -1,0 +1,89 @@
+# Ham Radio App - Docker Ignore File
+# ===================================
+# Files and directories to exclude from Docker build context
+# This speeds up builds and reduces image size
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+LICENSE
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Data and runtime files
+*.db
+*.log
+data/
+*.sqlite
+*.sqlite3
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Test files
+tests/
+test_*.py
+*_test.py
+.pytest_cache/
+
+# Environment files
+.env
+.env.*
+.flaskenv
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+
+# Certificates (will be generated in container)
+*.pem
+*.key
+*.crt
+*.csr
+
+# Backups
+*.backup
+backups/
