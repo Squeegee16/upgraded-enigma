@@ -62,7 +62,23 @@ ENV PYTHONUNBUFFERED=1 \
 # - gpsd: For GPS device support (optional)
 # - ca-certificates: For SSL/TLS support
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    hamlib-utils \
+    wget \
+    autoconf \
+    build-essential \
+    libhamlib-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN cd /tmp && \
+    wget https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download -O hamlib-4.7.0.tar.gz && \
+    tar -xzf hamlib-4.7.0.tar.gz && \
+    cd hamlib-* && \
+    ./configure && \
+    make && \
+    make install && \
+    cd / && \
+    rm -rf /tmp/hamlib-*
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
     rtl-sdr \
     gpsd \
     gpsd-clients \
