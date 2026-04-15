@@ -12,7 +12,7 @@
 #   docker-compose logs -f app    # View application logs
 #   docker-compose exec app bash  # Access container shell
 
-version: '3.8'
+#version: '3.8'
 
 # Named volumes for persistent data storage
 # These volumes persist data even when containers are removed
