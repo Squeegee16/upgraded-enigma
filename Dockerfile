@@ -121,6 +121,8 @@ RUN mkdir -p \
     /app/plugins/implementations \
     && chown -R hamradio:hamradio /data /app
 
+COPY --chown=hamradio:hamradio amateur_delim.txt ./data/db
+
 # Switch to non-root user
 USER hamradio
 
