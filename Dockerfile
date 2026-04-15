@@ -23,9 +23,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     make \
+    cmake \
     libffi-dev \
     libssl-dev \
+    build-essential \
+    libusb-1.0-0-dev \
     python3-dev \
+    libpython3-dev \
+    python3-numpy \
+    swig \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Create application directory
@@ -61,12 +68,27 @@ ENV PYTHONUNBUFFERED=1 \
 # - rtl-sdr: For RTL-SDR device support
 # - gpsd: For GPS device support (optional)
 # - ca-certificates: For SSL/TLS support
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     autoconf \
     build-essential \
-    libhamlib-dev && \
+    libhamlib-dev \
+    gnuradio \
     rm -rf /var/lib/apt/lists/*
+
+RUN cd /tmp && \
+    git clone https://github.com/pothosware/SoapySDR.git && \
+    cd SoapySDR && \
+    mkdir build  && \
+    cd build  && \
+    cmake ..  && \
+    make -j`nproc`  && \
+    sudo make install -j`nproc`  && \
+    sudo ldconfig  && \
+    SoapySDRUtil --info  && \
+    cd / && \
+    rm -rf /tmp/SoapySDR
 
 RUN cd /tmp && \
     wget https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download -O hamlib-4.7.0.tar.gz && \
@@ -78,12 +100,33 @@ RUN cd /tmp && \
     cd / && \
     rm -rf /tmp/hamlib-*
 
+RUN cd /tmp && \
+    git clone git://git.osmocom.org/rtl-sdr.git && \
+    cd rtl-sdr && \
+    mkdir build && \
+    cd build && \
+    cmake -DINSTALL_UDEV_RULES=ON .. && \
+    make && \
+    sudo make install && \
+    sudo ldconfig && \
+    cd / && \
+    rm -rf /tmp/rtl-sdr
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    rtl-sdr \
     gpsd \
     gpsd-clients \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+#Install native plugins
+# https://github.com/jketterl/openwebrx/wiki/Setup-Guide
+
+# SDR monitor 
+# RUN git clone https://github.com/shajen/sdr-monitor.git
+
+# FLDIGI
+
+# WINLINK
 
 # Create non-root user for running the application
 # Security best practice: never run containers as root
@@ -111,6 +154,7 @@ COPY --chown=hamradio:hamradio templates ./templates/
 COPY --chown=hamradio:hamradio static ./static/
 COPY --chown=hamradio:hamradio app.py .
 COPY --chown=hamradio:hamradio requirements.txt .
+COPY --chown=hamradio:hamradio blacklist-rtl.conf /etc/modprobe.d/
 
 # Create necessary directories with proper permissions
 RUN mkdir -p \
@@ -121,7 +165,7 @@ RUN mkdir -p \
     /app/plugins/implementations \
     && chown -R hamradio:hamradio /data /app
 
-COPY --chown=hamradio:hamradio amateur_delim.txt ./data/db
+COPY --chown=hamradio:hamradio amateur_delim.txt ./data/callsigns/
 
 # Switch to non-root user
 USER hamradio
