@@ -45,11 +45,16 @@ class HamlibRadio(BaseDevice):
             # Test connection by querying frequency
             result = self._execute_command('f')
             self.connected = result is not None
+            if self.connected:
+                print(f"Radio device connected: model {self.model} on {self.port}")
             return self.connected
         except Exception as e:
             print(f"Radio connection error: {e}")
-            self.connected = False
-            return False
+            print("Falling back to mock radio device")
+            # Fall back to mock device
+            self.use_mock = True
+            self.device = MockRadioDevice()
+            return self.device.connect()
     
     def disconnect(self):
         """Disconnect from radio."""
