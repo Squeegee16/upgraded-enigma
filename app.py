@@ -142,18 +142,74 @@ def create_app(config_name='default'):
         return redirect(url_for('auth.login'))
     
     # Error handlers
+# Error handlers
     @app.errorhandler(404)
     def not_found_error(error):
         """Handle 404 errors."""
         from flask import render_template
-        return render_template('errors/404.html'), 404
+        try:
+            return render_template('errors/404.html'), 404
+        except Exception as e:
+            print(f"Error rendering 404 template: {e}")
+            # Fallback to simple HTML if template fails
+            return '''
+            <!DOCTYPE html>
+            <html>
+            <head><title>404 - Not Found</title></head>
+            <body>
+                <h1>404 - Page Not Found</h1>
+                <p>The page you are looking for does not exist.</p>
+                <a href="/">Go to Home</a>
+            </body>
+            </html>
+            ''', 404
     
     @app.errorhandler(500)
     def internal_error(error):
         """Handle 500 errors."""
         from flask import render_template
         db.session.rollback()
-        return render_template('errors/500.html'), 500
+        
+        # Log the error
+        print(f"500 Error: {error}")
+        import traceback
+        traceback.print_exc()
+        
+        try:
+            return render_template('errors/500.html', error=str(error)), 500
+        except Exception as e:
+            print(f"Error rendering 500 template: {e}")
+            # Fallback to simple HTML if template fails
+            return '''
+            <!DOCTYPE html>
+            <html>
+            <head><title>500 - Internal Server Error</title></head>
+            <body>
+                <h1>500 - Internal Server Error</h1>
+                <p>An unexpected error occurred. Please try again later.</p>
+                <a href="/">Go to Home</a>
+            </body>
+            </html>
+            ''', 500
+    
+    @app.errorhandler(403)
+    def forbidden_error(error):
+        """Handle 403 errors."""
+        from flask import render_template
+        try:
+            return render_template('errors/403.html'), 403
+        except:
+            return '''
+            <!DOCTYPE html>
+            <html>
+            <head><title>403 - Forbidden</title></head>
+            <body>
+                <h1>403 - Forbidden</h1>
+                <p>You don't have permission to access this resource.</p>
+                <a href="/">Go to Home</a>
+            </body>
+            </html>
+            ''', 403
     
     # Cleanup on shutdown
     @app.teardown_appcontext
