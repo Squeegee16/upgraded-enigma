@@ -6,7 +6,7 @@ WTForms for user registration and login with validation.
 
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SubmitField
-from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, Optional
+from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, Optional, Length
 from models.user import User
 import os
 
@@ -26,7 +26,7 @@ class LoginForm(FlaskForm):
 class RegistrationForm(FlaskForm):
     """Registration form with callsign validation and password strength check."""
     
-    callsign = StringField('Callsign', validators=[DataRequired()])
+    callsign = StringField('Callsign', validators=[DataRequired(), Length(min=3, max=20)])
     email = StringField('Email (Optional)', validators=[Optional(), Email()])
     password = PasswordField('Password', validators=[DataRequired()])
     password2 = PasswordField(
@@ -62,6 +62,17 @@ class RegistrationForm(FlaskForm):
                     raise ValidationError(
                         'Callsign not found in database. Please verify your callsign.'
                     )
+    
+    def validate_email(self, email):
+        """
+        Validate email uniqueness if provided.
+        Only check if email is not empty.
+        """
+        # Only validate if email was actually provided
+        if email.data and email.data.strip():
+            user = User.query.filter_by(email=email.data.strip().lower()).first()
+            if user is not None:
+                raise ValidationError('Email address already registered. Please use a different email address.')
     
     def validate_password(self, password):
         """Validate password strength."""
