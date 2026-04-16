@@ -54,7 +54,7 @@ FROM python:3.11-slim-bookworm
 # Set runtime metadata
 LABEL maintainer="Ham Radio App Team"
 LABEL description="Ham Radio Operator Web Application"
-LABEL version="1.0.0"
+LABEL version="0.1.0"
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
