@@ -129,11 +129,18 @@ RUN cd /tmp && \
     cd / && \
     rm -rf /tmp/rtl-sdr
 
+RUN apt-get install librtlsdr0 librtlsdr-dev -y 
+
 #Install native plugins
+# OWRX https://fms.komkon.org/OWRX/#INSTALL-PACKAGES
 # https://github.com/jketterl/openwebrx/wiki/Setup-Guide
 
 # SDR monitor 
 # RUN git clone https://github.com/shajen/sdr-monitor.git
+# SDR openwebrx (OWRX
+#curl -s https://luarvique.github.io/ppa/openwebrx-plus.gpg | sudo gpg --yes --dearmor -o /etc/apt/trusted.gpg.d/openwebrx-plus.gpg
+#sudo tee /etc/apt/sources.list.d/openwebrx-plus.list <<<"deb [signed-by=/etc/apt/trusted.gpg.d/openwebrx-plus.gpg] https://luarvique.github.io/ppa/bookworm ./"
+#sudo apt install openwebrx
 
 # FLDIGI
 
