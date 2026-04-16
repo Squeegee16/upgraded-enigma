@@ -166,7 +166,7 @@ COPY --chown=hamradio:hamradio static ./static/
 COPY --chown=hamradio:hamradio app.py .
 COPY --chown=hamradio:hamradio requirements.txt .
 COPY --chown=hamradio:hamradio blacklist-rtl.conf /etc/modprobe.d/
-
+COPY --chown=hamradio:hamradio callsigns.txt ./data/callsigns/
 # Create necessary directories with proper permissions
 RUN mkdir -p \
     /data/db \
@@ -175,8 +175,6 @@ RUN mkdir -p \
     /data/backups \
     /app/plugins/implementations \
     && chown -R hamradio:hamradio /data /app
-
-COPY --chown=hamradio:hamradio amateur_delim.txt ./data/callsigns/
 
 # Switch to non-root user
 USER hamradio
