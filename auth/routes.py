@@ -70,9 +70,14 @@ def register():
     
     if form.validate_on_submit():
         # Create new user
+        # Handle optional email - store None if empty, otherwise lowercase trimmed version
+        email_value = None
+        if form.email.data and form.email.data.strip():
+            email_value = form.email.data.strip().lower()
+        
         user = User(
             callsign=form.callsign.data.upper(),
-            email=form.email.data if form.email.data else None
+            email=email_value
         )
         user.set_password(form.password.data)
         
@@ -84,7 +89,14 @@ def register():
             return redirect(url_for('auth.login'))
         except Exception as e:
             db.session.rollback()
-            flash('An error occurred during registration. Please try again.', 'danger')
+            # Check if it's a unique constraint violation
+            if 'UNIQUE constraint failed' in str(e) or 'unique constraint' in str(e).lower():
+                if 'email' in str(e).lower():
+                    flash('Email address already registered. Please use a different email.', 'danger')
+                else:
+                    flash('Callsign already registered. Please use a different callsign.', 'danger')
+            else:
+                flash(f'An error occurred during registration: {str(e)}', 'danger')
             return redirect(url_for('auth.register'))
     
     return render_template('auth/register.html', title='Register', form=form)
