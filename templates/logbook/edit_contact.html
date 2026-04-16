@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Contact - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h4><i class="fas fa-edit"></i> Edit Contact</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('logbook.edit_contact', contact_id=contact.id) }}">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.contact_callsign.label(class="form-label") }}
+                            {{ form.contact_callsign(class="form-control" + (" is-invalid" if form.contact_callsign.errors else "")) }}
+                            {% if form.contact_callsign.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.contact_callsign.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            {{ form.timestamp.label(class="form-label") }}
+                            {{ form.timestamp(class="form-control" + (" is-invalid" if form.timestamp.errors else "")) }}
+                            {% if form.timestamp.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.timestamp.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.mode.label(class="form-label") }}
+                            {{ form.mode(class="form-select" + (" is-invalid" if form.mode.errors else "")) }}
+                            {% if form.mode.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.mode.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            {{ form.band.label(class="form-label") }}
+                            {{ form.band(class="form-select" + (" is-invalid" if form.band.errors else "")) }}
+                            {% if form.band.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.band.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            {{ form.frequency.label(class="form-label") }}
+                            {{ form.frequency(class="form-control" + (" is-invalid" if form.frequency.errors else ""), placeholder="14.074") }}
+                            {% if form.frequency.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.frequency.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.grid.label(class="form-label") }}
+                            {{ form.grid(class="form-control" + (" is-invalid" if form.grid.errors else ""), placeholder="FN20") }}
+                            {% if form.grid.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.grid.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            {{ form.signal_report_sent.label(class="form-label") }}
+                            {{ form.signal_report_sent(class="form-control" + (" is-invalid" if form.signal_report_sent.errors else ""), placeholder="59") }}
+                            {% if form.signal_report_sent.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.signal_report_sent.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            {{ form.signal_report_rcvd.label(class="form-label") }}
+                            {{ form.signal_report_rcvd(class="form-control" + (" is-invalid" if form.signal_report_rcvd.errors else ""), placeholder="59") }}
+                            {% if form.signal_report_rcvd.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.signal_report_rcvd.errors %}{{ error }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.notes.label(class="form-label") }}
+                        {{ form.notes(class="form-control" + (" is-invalid" if form.notes.errors else ""), rows="3") }}
+                        {% if form.notes.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.notes.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('logbook.index') }}" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
+                        {{ form.submit(class="btn btn-primary") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
