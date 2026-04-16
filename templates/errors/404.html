@@ -1,125 +1,27 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Ham Radio App{% endblock %}</title>
-    
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    
-    {% block extra_css %}{% endblock %}
-</head>
-<body>
-    <!-- Navigation Bar -->
-    {% if current_user.is_authenticated %}
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="{{ url_for('dashboard.index') }}">
-                <i class="fas fa-radio"></i> Ham Radio App
-            </a>
-            
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('dashboard.index') }}">
-                            <i class="fas fa-home"></i> Dashboard
-                        </a>
-                    </li>
-                    
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('logbook.index') }}">
-                            <i class="fas fa-book"></i> Logbook
-                        </a>
-                    </li>
-                    
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="pluginsDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-plug"></i> Plugins
-                        </a>
-                        <ul class="dropdown-menu">
-                            {% if plugins %}
-                                {% for plugin_name, plugin in plugins.items() %}
-                                <li>
-                                    <a class="dropdown-item" href="{{ url_for(plugin_name + '.index') }}">
-                                        {{ plugin.name }}
-                                    </a>
-                                </li>
-                                {% endfor %}
-                            {% else %}
-                                <li><span class="dropdown-item text-muted">No plugins loaded</span></li>
-                            {% endif %}
-                        </ul>
-                    </li>
-                </ul>
-                
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <span class="navbar-text me-3">
-                            <i class="fas fa-user"></i> {{ current_user.callsign }}
-                        </span>
-                    </li>
-                    <li class="nav-item">
-                        <span class="navbar-text me-3" id="utc-clock">
-                            <i class="far fa-clock"></i> <span id="time-display">--:--:-- UTC</span>
-                        </span>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('auth.logout') }}">
-                            <i class="fas fa-sign-out-alt"></i> Logout
-                        </a>
-                    </li>
-                </ul>
+{% extends "base.html" %}
+
+{% block title %}404 - Page Not Found{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center mt-5">
+        <div class="col-md-8 text-center">
+            <div class="error-template">
+                <h1 class="display-1">404</h1>
+                <h2>Page Not Found</h2>
+                <div class="error-details mt-3 mb-4">
+                    <p class="lead">Sorry, the page you are looking for does not exist.</p>
+                </div>
+                <div class="error-actions">
+                    <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary btn-lg">
+                        <i class="fas fa-home"></i> Go to Dashboard
+                    </a>
+                    <a href="javascript:history.back()" class="btn btn-secondary btn-lg">
+                        <i class="fas fa-arrow-left"></i> Go Back
+                    </a>
+                </div>
             </div>
         </div>
-    </nav>
-    {% endif %}
-    
-    <!-- Flash Messages -->
-    <div class="container mt-3">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
     </div>
-    
-    <!-- Main Content -->
-    <main class="container mt-4">
-        {% block content %}{% endblock %}
-    </main>
-    
-    <!-- Footer -->
-    <footer class="footer mt-5 py-3 bg-light">
-        <div class="container text-center">
-            <span class="text-muted">Ham Radio App v1.0.0 | 73!</span>
-        </div>
-    </footer>
-    
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- jQuery (optional, for easier AJAX) -->
-    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
-    
-    <!-- Custom JS -->
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
-    
-    {% block extra_js %}{% endblock %}
-</body>
-</html>
+</div>
+{% endblock %}
