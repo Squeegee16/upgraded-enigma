@@ -7,7 +7,6 @@ Supports both real RTL-SDR hardware and mock for testing.
 
 from devices.base import BaseDevice, MockSDRDevice
 import subprocess
-import numpy as np
 
 class RTLSDRDevice(BaseDevice):
     """
@@ -50,11 +49,20 @@ class RTLSDRDevice(BaseDevice):
                 timeout=5
             )
             self.connected = result.returncode == 0
+            if self.connected:
+                print(f"RTL-SDR device {self.device_index} connected")
             return self.connected
+        except FileNotFoundError:
+            print("rtl_test not found, falling back to mock SDR device")
+            self.use_mock = True
+            self.device = MockSDRDevice()
+            return self.device.connect()
         except Exception as e:
             print(f"RTL-SDR connection error: {e}")
-            self.connected = False
-            return False
+            print("Falling back to mock SDR device")
+            self.use_mock = True
+            self.device = MockSDRDevice()
+            return self.device.connect()
     
     def disconnect(self):
         """Disconnect from RTL-SDR."""
@@ -143,7 +151,12 @@ class RTLSDRDevice(BaseDevice):
         if self.use_mock:
             return self.device.read_samples(num_samples)
         
+        if not self.is_connected():
+            return None
+        
         try:
+            import numpy as np
+            
             # Use rtl_sdr to capture samples
             freq_hz = int(self.frequency * 1_000_000)
             
@@ -172,6 +185,13 @@ class RTLSDRDevice(BaseDevice):
                 return iq
             
             return None
+        except ImportError:
+            print("numpy not available, using mock SDR")
+            if not self.use_mock:
+                self.use_mock = True
+                self.device = MockSDRDevice()
+                self.device.connect()
+            return self.device.read_samples(num_samples)
         except Exception as e:
             print(f"RTL-SDR read error: {e}")
             return None
@@ -186,28 +206,40 @@ class RTLSDRDevice(BaseDevice):
         Returns:
             dict: Spectrum data with frequencies and power
         """
+        if self.use_mock:
+            return self.device.get_spectrum(num_samples)
+        
+        if not self.is_connected():
+            return None
+        
         samples = self.read_samples(num_samples)
         
         if samples is None:
             return None
         
-        # Compute FFT
-        fft = np.fft.fft(samples)
-        fft_shifted = np.fft.fftshift(fft)
-        
-        # Compute power spectrum in dB
-        power_db = 20 * np.log10(np.abs(fft_shifted) + 1e-10)
-        
-        # Generate frequency axis
-        freqs = np.fft.fftshift(np.fft.fftfreq(len(samples), 1/self.sample_rate))
-        freqs_mhz = freqs / 1_000_000 + self.frequency
-        
-        return {
-            'frequencies': freqs_mhz.tolist(),
-            'power': power_db.tolist(),
-            'center_frequency': self.frequency,
-            'sample_rate': self.sample_rate
-        }
+        try:
+            import numpy as np
+            
+            # Compute FFT
+            fft = np.fft.fft(samples)
+            fft_shifted = np.fft.fftshift(fft)
+            
+            # Compute power spectrum in dB
+            power_db = 20 * np.log10(np.abs(fft_shifted) + 1e-10)
+            
+            # Generate frequency axis
+            freqs = np.fft.fftshift(np.fft.fftfreq(len(samples), 1/self.sample_rate))
+            freqs_mhz = freqs / 1_000_000 + self.frequency
+            
+            return {
+                'frequencies': freqs_mhz.tolist(),
+                'power': power_db.tolist(),
+                'center_frequency': self.frequency,
+                'sample_rate': self.sample_rate
+            }
+        except ImportError:
+            print("numpy not available for spectrum calculation")
+            return None
 
 # Factory function
 def get_sdr_device(config):
