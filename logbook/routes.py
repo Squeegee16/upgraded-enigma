@@ -3,6 +3,10 @@ Logbook Routes
 ==============
 Routes for viewing, adding, and exporting contact logs.
 """
+import logging
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 from flask import Blueprint, render_template, redirect, url_for, flash, request, send_file, make_response
 from flask_login import login_required, current_user
