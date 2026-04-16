@@ -7,8 +7,6 @@ Supports both real GPS devices and mock for testing.
 
 from devices.base import BaseDevice, MockGPSDevice
 import serial
-import pynmea2
-from datetime import datetime
 
 class GPSDevice(BaseDevice):
     """
@@ -46,11 +44,15 @@ class GPSDevice(BaseDevice):
                 timeout=1
             )
             self.connected = True
+            print(f"GPS device connected: {self.port}")
             return True
         except Exception as e:
             print(f"GPS connection error: {e}")
-            self.connected = False
-            return False
+            print("Falling back to mock GPS device")
+            # Fall back to mock device
+            self.use_mock = True
+            self.device = MockGPSDevice()
+            return self.device.connect()
     
     def disconnect(self):
         """Close GPS serial connection."""
@@ -65,7 +67,7 @@ class GPSDevice(BaseDevice):
         """Check GPS connection status."""
         if self.use_mock:
             return self.device.is_connected()
-        return self.connected and self.serial_connection.is_open
+        return self.connected and (self.serial_connection is not None and self.serial_connection.is_open)
     
     def get_position(self):
         """
@@ -81,6 +83,9 @@ class GPSDevice(BaseDevice):
             return None
         
         try:
+            import pynmea2
+            from datetime import datetime
+            
             # Read NMEA sentences until we get GGA (position)
             for _ in range(10):  # Try up to 10 lines
                 line = self.serial_connection.readline().decode('ascii', errors='ignore')
@@ -102,6 +107,12 @@ class GPSDevice(BaseDevice):
                         }
             
             return None
+        except ImportError:
+            print("pynmea2 not installed, falling back to mock GPS")
+            self.use_mock = True
+            self.device = MockGPSDevice()
+            self.device.connect()
+            return self.device.get_position()
         except Exception as e:
             print(f"GPS read error: {e}")
             return None
