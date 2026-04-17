@@ -7,6 +7,7 @@ Handles environment-specific settings and security parameters.
 
 import os
 from datetime import timedelta
+from pathlib import Path
 
 class Config:
     """Base configuration class with common settings."""
@@ -16,13 +17,24 @@ class Config:
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
     
     # Database Configuration
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
-        f'sqlite:///{os.path.join(BASE_DIR, "ham_radio.db")}'
+    # Handle both environment variable and default path
+    DATABASE_URL = os.environ.get('DATABASE_URL')
+    if not DATABASE_URL:
+        # Create data directory if it doesn't exist
+        data_dir = os.path.join(BASE_DIR, 'data', 'db')
+        os.makedirs(data_dir, exist_ok=True)
+        DATABASE_URL = f'sqlite:///{os.path.join(data_dir, "ham_radio.db")}'
+    
+    SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_pre_ping': True,
+        'pool_recycle': 300,
+    }
     
     # Session Configuration
     PERMANENT_SESSION_LIFETIME = timedelta(hours=24)
-    SESSION_COOKIE_SECURE = True  # Use HTTPS
+    SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
     
@@ -36,7 +48,7 @@ class Config:
     GPS_BAUD_RATE = int(os.environ.get('GPS_BAUD_RATE', '9600'))
     
     # Radio Configuration (Hamlib)
-    RADIO_MODEL = int(os.environ.get('RADIO_MODEL', '1035'))  # Yaesu FT-891
+    RADIO_MODEL = int(os.environ.get('RADIO_MODEL', '1035'))
     RADIO_PORT = os.environ.get('RADIO_PORT', '/dev/ttyUSB1')
     RADIO_BAUD_RATE = int(os.environ.get('RADIO_BAUD_RATE', '38400'))
     
@@ -45,12 +57,12 @@ class Config:
     SDR_SAMPLE_RATE = int(os.environ.get('SDR_SAMPLE_RATE', '2048000'))
     
     # Callsign Validation
-    CALLSIGN_FILE = os.path.join(BASE_DIR, 'data', 'callsigns.txt')
+    CALLSIGN_FILE = os.environ.get('CALLSIGN_FILE', os.path.join(BASE_DIR, 'data', 'callsigns', 'callsigns.txt'))
     VALIDATE_CALLSIGNS = os.environ.get('VALIDATE_CALLSIGNS', 'False').lower() == 'true'
     
     # SSL Configuration
-    SSL_CERT = os.path.join(BASE_DIR, 'data', 'certs', 'cert.pem')
-    SSL_KEY = os.path.join(BASE_DIR, 'data', 'certs', 'key.pem')
+    SSL_CERT = os.environ.get('SSL_CERT', os.path.join(BASE_DIR, 'data', 'certs', 'cert.pem'))
+    SSL_KEY = os.environ.get('SSL_KEY', os.path.join(BASE_DIR, 'data', 'certs', 'key.pem'))
     USE_SSL = os.environ.get('USE_SSL', 'True').lower() == 'true'
     
     # Server Configuration
@@ -76,4 +88,3 @@ config = {
     'production': ProductionConfig,
     'default': DevelopmentConfig
 }
-
