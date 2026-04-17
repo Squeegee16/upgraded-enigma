@@ -22,9 +22,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     make \
+    cmake \
     libffi-dev \
     libssl-dev \
+    build-essential \
+    libusb-1.0-0-dev \
     python3-dev \
+    libpython3-dev \
+    python3-numpy \
+    swig \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Create application directory
@@ -36,7 +43,9 @@ COPY requirements.txt .
 # Install Python dependencies in a virtual environment
 RUN python -m venv /opt/venv && \
     . /opt/venv/bin/activate && \
-    pip install --upgrade pip setuptools wheel && \
+    pip install --upgrade pip && \
+    pip install setuptools && \
+    pip install wheel && \
     pip install -r requirements.txt
 
 # Runtime stage - Minimal image with only runtime dependencies
@@ -45,23 +54,90 @@ FROM python:3.11-slim-bookworm
 # Set runtime metadata
 LABEL maintainer="Ham Radio App Team"
 LABEL description="Ham Radio Operator Web Application"
-LABEL version="1.0.0"
+LABEL version="0.1.0"
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     FLASK_APP=app.py \
-    FLASK_ENV=production
+    FLASK_ENV=development
 
-# Install runtime dependencies
+# Install runtime dependencies (including build tools for compilation)
+# - wget: For downloading packages
+# - autoconf: For building from source
+# - build-essential: Compiler toolchain
+# - cmake: Build system for SDR projects
+# - git: For cloning SDR projects
+# - pkg-config: For finding libraries
+# - libusb-1.0-0-dev: For rtl-sdr USB support
+# - libhamlib-dev: For radio control via Hamlib
+# - gnuradio: GNU Radio framework
+# - gpsd: For GPS device support
+# - ca-certificates: For SSL/TLS support
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    hamlib-utils \
-    rtl-sdr \
+    wget \
+    autoconf \
+    build-essential \
+    cmake \
+    git \
+    pkg-config \
+    libusb-1.0-0-dev \
+    libhamlib-dev \
+    gnuradio \
     gpsd \
     gpsd-clients \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Build SoapySDR from source
+RUN cd /tmp && \
+    git clone https://github.com/pothosware/SoapySDR.git && \
+    cd SoapySDR && \
+    mkdir build && \
+    cd build && \
+    cmake .. && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    cd / && \
+    rm -rf /tmp/SoapySDR
+
+# Build hamlib from source
+RUN cd /tmp && \
+    wget https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download -O hamlib-4.7.0.tar.gz && \
+    tar -xzf hamlib-4.7.0.tar.gz && \
+    cd hamlib-* && \
+    ./configure && \
+    make && \
+    make install && \
+    ldconfig && \
+    cd / && \
+    rm -rf /tmp/hamlib-*
+
+# Build rtl-sdr from source
+RUN cd /tmp && \
+    git clone git://git.osmocom.org/rtl-sdr.git && \
+    cd rtl-sdr && \
+    mkdir build && \
+    cd build && \
+    cmake -DINSTALL_UDEV_RULES=ON .. && \
+    make && \
+    make install && \
+    ldconfig && \
+    cd / && \
+    rm -rf /tmp/rtl-sdr
+#Install native plugins
+# OWRX https://fms.komkon.org/OWRX/#INSTALL-PACKAGES
+# https://github.com/jketterl/openwebrx/wiki/Setup-Guide
+
+# SDR monitor 
+# RUN git clone https://github.com/shajen/sdr-monitor.git
+# SDR openwebrx (OWRX
+#curl -s https://luarvique.github.io/ppa/openwebrx-plus.gpg | sudo gpg --yes --dearmor -o /etc/apt/trusted.gpg.d/openwebrx-plus.gpg
+#sudo tee /etc/apt/sources.list.d/openwebrx-plus.list <<<"deb [signed-by=/etc/apt/trusted.gpg.d/openwebrx-plus.gpg] https://luarvique.github.io/ppa/bookworm ./"
+#sudo apt install openwebrx
 
 # Create non-root user for running the application
 # IMPORTANT: Create user with specific UID/GID for volume permissions
@@ -93,6 +169,17 @@ COPY --chown=hamradio:hamradio templates ./templates/
 COPY --chown=hamradio:hamradio static ./static/
 COPY --chown=hamradio:hamradio app.py .
 COPY --chown=hamradio:hamradio requirements.txt .
+COPY --chown=hamradio:hamradio blacklist-rtl.conf /etc/modprobe.d/
+COPY --chown=hamradio:hamradio callsigns.txt ./data/callsigns/
+# Create necessary directories with proper permissions
+RUN mkdir -p \
+    /data/db \
+    /data/certs \
+    /data/callsigns \
+    /data/backups \
+    /app/plugins/implementations \
+    && chown -R hamradio:hamradio /data /app
+    
 
 # Copy and set permissions for entrypoint script
 COPY --chown=hamradio:hamradio docker-entrypoint.sh /usr/local/bin/
