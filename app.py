@@ -293,6 +293,17 @@ def main():
     print(f"Python version: {sys.version}")
     print("="*50 + "\n")
     
+    # Initialize secret key manager early
+    print("Initializing security...")
+    from secret_key_manager import get_secret_key
+    secret_key = get_secret_key()
+    
+    # Set environment variable so config can use it
+    if not os.environ.get('SECRET_KEY'):
+        os.environ['SECRET_KEY'] = secret_key
+    
+    print("✓ Secret key initialized\n")
+    
     # Create application
     app = create_app(config_name)
     
