@@ -129,7 +129,7 @@ services:
       - "com.hamradio.version=1.0.0"
       - "com.hamradio.description=Ham Radio Operator Web Application"
   
-  # =================================================================
+# =================================================================
   # Database Backup Service (Optional)
   # =================================================================
   backup:
@@ -145,27 +145,8 @@ services:
       - app_data:/data:ro
       - app_backups:/backups
     
-    command: >
-      sh -c '
-      echo "Backup service starting..."
-      while true; do
-        if [ -f /data/db/ham_radio.db ]; then
-          echo "[$(date)] Creating backup..."
-          BACKUP_FILE="/backups/ham_radio_$(date +%Y%m%d_%H%M%S).db"
-          cp /data/db/ham_radio.db "$$BACKUP_FILE"
-          gzip "$$BACKUP_FILE"
-          echo "[$(date)] Backup created: $$BACKUP_FILE.gz"
-          
-          # Remove old backups
-          find /backups -name "ham_radio_*.db.gz" -mtime +$$BACKUP_RETENTION -delete
-          echo "[$(date)] Old backups cleaned up"
-        else
-          echo "[$(date)] Database file not found, skipping backup"
-        fi
-        
-        sleep $$BACKUP_INTERVAL
-      done
-      '
+    # Single-line command with proper escaping
+    command: sh -c 'echo "Backup service starting..."; while true; do if [ -f /data/db/ham_radio.db ]; then echo "[$(date)] Creating backup..."; BACKUP_FILE="/backups/ham_radio_$(date +%Y%m%d_%H%M%S).db"; cp /data/db/ham_radio.db "$${BACKUP_FILE}"; gzip "$${BACKUP_FILE}"; echo "[$(date)] Backup created: $${BACKUP_FILE}.gz"; find /backups -name "ham_radio_*.db.gz" -mtime +$${BACKUP_RETENTION} -delete; echo "[$(date)] Old backups cleaned up"; else echo "[$(date)] Database file not found, skipping backup"; fi; sleep $${BACKUP_INTERVAL}; done'
     
     networks:
       - hamradio_net
@@ -187,3 +168,4 @@ services:
     
     labels:
       - "com.hamradio.app=backup"
+      - "com.hamradio.description=Automated database backup service"
