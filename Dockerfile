@@ -159,6 +159,7 @@ RUN chown hamradio:hamradio /app
 
 # Copy application files with proper ownership
 COPY --chown=hamradio:hamradio config.py .
+COPY --chown=hamradio:hamradio secret_key_manager.py .
 COPY --chown=hamradio:hamradio models ./models/
 COPY --chown=hamradio:hamradio auth ./auth/
 COPY --chown=hamradio:hamradio dashboard ./dashboard/
