@@ -45,7 +45,9 @@ COPY requirements.txt .
 # Using venv ensures clean separation and easier troubleshooting
 RUN python -m venv /opt/venv && \
     . /opt/venv/bin/activate && \
-    pip install --upgrade pip setuptools wheel && \
+    pip install --upgrade pip && \
+    pip install setuptools && \
+    pip install wheel && \
     pip install -r requirements.txt
 
 # Runtime stage - Minimal image with only runtime dependencies
@@ -129,7 +131,8 @@ RUN cd /tmp && \
     cd / && \
     rm -rf /tmp/rtl-sdr
 
-RUN apt-get install librtlsdr0 librtlsdr-dev -y 
+#RUN apt install librtlsdr-dev -y 
+#librtlsdr0 
 
 #Install native plugins
 # OWRX https://fms.komkon.org/OWRX/#INSTALL-PACKAGES
