@@ -8,16 +8,22 @@ Handles environment-specific settings and security parameters.
 import os
 from datetime import timedelta
 from pathlib import Path
+from secret_key_manager import get_secret_key
 
 class Config:
     """Base configuration class with common settings."""
     
-    # Application Settings
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
+    # Application Settings - Use auto-generated key if not provided
+    SECRET_KEY = os.environ.get('SECRET_KEY') or get_secret_key()
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
     
+    # Validate SECRET_KEY
+    if not SECRET_KEY or len(SECRET_KEY) < 32:
+        print("ERROR: SECRET_KEY is invalid or too short!")
+        print("A secure key will be generated automatically.")
+        SECRET_KEY = get_secret_key()
+    
     # Database Configuration
-    # Handle both environment variable and default path
     DATABASE_URL = os.environ.get('DATABASE_URL')
     if not DATABASE_URL:
         # Create data directory if it doesn't exist
