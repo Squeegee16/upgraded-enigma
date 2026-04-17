@@ -1,43 +1,18 @@
 version: '3.8'
 
-# Named volumes for persistent data storage
 volumes:
   app_data:
     driver: local
-    labels:
-      description: "Persistent storage for database, logs, and user data"
-  
-  app_certs:
-    driver: local
-    labels:
-      description: "SSL/TLS certificates for HTTPS"
-  
-  app_backups:
-    driver: local
-    labels:
-      description: "Automated database backups"
 
-# Custom network for service communication
 networks:
   hamradio_net:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-    labels:
-      description: "Isolated network for Ham Radio App services"
 
 services:
-  # =================================================================
-  # Main Application Service
-  # =================================================================
   app:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        - BUILD_DATE=${BUILD_DATE:-2024-04-15}
-        - VCS_REF=${VCS_REF:-dev}
     
     container_name: hamradio_app
     restart: unless-stopped
@@ -50,9 +25,12 @@ services:
       # Flask configuration
       - FLASK_ENV=${FLASK_ENV:-production}
       - FLASK_DEBUG=${FLASK_DEBUG:-0}
-      - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
       
-      # Database configuration - CRITICAL: Must be writable path
+      # SECRET_KEY is now optional - will be auto-generated if not provided
+      # Uncomment to provide your own key:
+      # - SECRET_KEY=${SECRET_KEY}
+      
+      # Database configuration
       - DATABASE_URL=sqlite:////data/db/ham_radio.db
       
       # Device configuration
@@ -82,24 +60,11 @@ services:
       - TZ=${TZ:-UTC}
     
     volumes:
-      # Use named volumes for better Docker management
       - app_data:/data
-      - app_certs:/data/certs
-      - app_backups:/data/backups
-      
-      # Optional: Custom plugins (if they exist on host)
-      # - ./plugins/implementations:/app/plugins/implementations:ro
-    
-    # Only include devices section if using real hardware
-    # devices:
-    #   - /dev/ttyUSB0:/dev/ttyUSB0
-    #   - /dev/ttyUSB1:/dev/ttyUSB1
-    #   - /dev/bus/usb:/dev/bus/usb
     
     networks:
       - hamradio_net
     
-    # Resource limits
     deploy:
       resources:
         limits:
@@ -109,14 +74,12 @@ services:
           cpus: '0.5'
           memory: 512M
     
-    # Logging configuration
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
     
-    # Health check
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/').read()"]
       interval: 30s
@@ -126,46 +89,3 @@ services:
     
     labels:
       - "com.hamradio.app=main"
-      - "com.hamradio.version=1.0.0"
-      - "com.hamradio.description=Ham Radio Operator Web Application"
-  
-# =================================================================
-  # Database Backup Service (Optional)
-  # =================================================================
-  backup:
-    image: alpine:latest
-    container_name: hamradio_backup
-    restart: unless-stopped
-    
-    environment:
-      - BACKUP_INTERVAL=${BACKUP_INTERVAL:-86400}
-      - BACKUP_RETENTION=${BACKUP_RETENTION:-7}
-    
-    volumes:
-      - app_data:/data:ro
-      - app_backups:/backups
-    
-    # Single-line command with proper escaping
-    command: sh -c 'echo "Backup service starting..."; while true; do if [ -f /data/db/ham_radio.db ]; then echo "[$(date)] Creating backup..."; BACKUP_FILE="/backups/ham_radio_$(date +%Y%m%d_%H%M%S).db"; cp /data/db/ham_radio.db "$${BACKUP_FILE}"; gzip "$${BACKUP_FILE}"; echo "[$(date)] Backup created: $${BACKUP_FILE}.gz"; find /backups -name "ham_radio_*.db.gz" -mtime +$${BACKUP_RETENTION} -delete; echo "[$(date)] Old backups cleaned up"; else echo "[$(date)] Database file not found, skipping backup"; fi; sleep $${BACKUP_INTERVAL}; done'
-    
-    networks:
-      - hamradio_net
-    
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-    
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "2"
-    
-    depends_on:
-      - app
-    
-    labels:
-      - "com.hamradio.app=backup"
-      - "com.hamradio.description=Automated database backup service"
