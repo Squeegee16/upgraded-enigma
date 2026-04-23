@@ -128,21 +128,14 @@ RUN cd /tmp && \
     ldconfig && \
     cd / && \
     rm -rf /tmp/rtl-sdr
-    
+
+
 #Install native plugins
 # graywolf
 RUN apt-get update && apt-get install -y --no-install-recommends \
     golang-go \
     && rm -rf /var/lib/apt/lists/*
-# OWRX https://fms.komkon.org/OWRX/#INSTALL-PACKAGES
-# https://github.com/jketterl/openwebrx/wiki/Setup-Guide
 
-# SDR monitor 
-# RUN git clone https://github.com/shajen/sdr-monitor.git
-# SDR openwebrx (OWRX
-#curl -s https://luarvique.github.io/ppa/openwebrx-plus.gpg | sudo gpg --yes --dearmor -o /etc/apt/trusted.gpg.d/openwebrx-plus.gpg
-#sudo tee /etc/apt/sources.list.d/openwebrx-plus.list <<<"deb [signed-by=/etc/apt/trusted.gpg.d/openwebrx-plus.gpg] https://luarvique.github.io/ppa/bookworm ./"
-#sudo apt install openwebrx
 
 # Create non-root user for running the application
 # IMPORTANT: Create user with specific UID/GID for volume permissions
@@ -177,6 +170,7 @@ COPY --chown=hamradio:hamradio app.py .
 COPY --chown=hamradio:hamradio requirements.txt .
 COPY --chown=hamradio:hamradio blacklist-rtl.conf /etc/modprobe.d/
 COPY --chown=hamradio:hamradio callsigns.txt ./data/callsigns/
+
 # Create necessary directories with proper permissions
 RUN mkdir -p \
     /data/db \
