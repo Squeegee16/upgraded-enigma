@@ -128,7 +128,12 @@ RUN cd /tmp && \
     ldconfig && \
     cd / && \
     rm -rf /tmp/rtl-sdr
+    
 #Install native plugins
+# graywolf
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    golang-go \
+    && rm -rf /var/lib/apt/lists/*
 # OWRX https://fms.komkon.org/OWRX/#INSTALL-PACKAGES
 # https://github.com/jketterl/openwebrx/wiki/Setup-Guide
 
