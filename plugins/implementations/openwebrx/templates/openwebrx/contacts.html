@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}OpenWebRX Signals - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-list"></i> Detected Signals</h2>
+    <div>
+        <button class="btn btn-outline-primary" onclick="refreshSignals()">
+            <i class="fas fa-sync"></i> Refresh
+        </button>
+        <a href="{{ url_for('OpenWebRX.index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover" id="signals-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Callsign</th>
+                        <th>Frequency (MHz)</th>
+                        <th>Mode</th>
+                        <th>SNR (dB)</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="signals-tbody">
+                    {% if signals %}
+                        {% for signal in signals %}
+                        <tr>
+                            <td><small>{{ signal.timestamp[:19] }}</small></td>
+                            <td><strong>{{ signal.callsign }}</strong></td>
+                            <td>
+                                {% if signal.frequency %}
+                                    {{ "%.4f"|format(signal.frequency / 1000000) }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                            <td><span class="badge bg-primary">{{ signal.mode }}</span></td>
+                            <td>{{ signal.snr if signal.snr else 'N/A' }}</td>
+                            <td>
+                                <button class="btn btn-success btn-sm"
+                                        onclick="logSignal('{{ signal.callsign }}', {{ signal.frequency or 'null' }}, '{{ signal.mode }}', '{{ signal.snr or '' }}')">
+                                    <i class="fas fa-book"></i> Log
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">
+                                <i class="fas fa-broadcast-tower fa-2x mb-2"></i>
+                                <br>No signals detected yet.
+                                {% if not status.running %}
+                                Start OpenWebRX to begin receiving signals.
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Notification -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+    <div id="logToast" class="toast align-items-center text-white" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toast-message">Signal logged!</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function showToast(message, type) {
+    const toast = document.getElementById('logToast');
+    const msg = document.getElementById('toast-message');
+    msg.textContent = message;
+    toast.className = `toast align-items-center text-white bg-${type}`;
+    new bootstrap.Toast(toast, {delay: 3000}).show();
+}
+
+function logSignal(callsign, frequency, mode, snr) {
+    const freqMhz = frequency ? (frequency / 1000000).toFixed(4) : null;
+    
+    $.ajax({
+        url: '{{ url_for("OpenWebRX.api_log_signal") }}',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            callsign: callsign,
+            frequency: freqMhz ? parseFloat(freqMhz) : null,
+            mode: mode,
+            signal_report: snr ? snr.toString() : '',
+            notes: 'Detected via OpenWebRX'
+        }),
+        success: function(data) {
+            showToast(
+                data.success ? `${callsign} logged!` : 'Failed: ' + data.message,
+                data.success ? 'success' : 'danger'
+            );
+        },
+        error: function() {
+            showToast('Error logging signal', 'danger');
+        }
+    });
+}
+
+function refreshSignals() {
+    $.get('{{ url_for("OpenWebRX.api_signals") }}?limit=50', function(data) {
+        const tbody = $('#signals-tbody');
+        tbody.empty();
+        
+        if (!data.signals || data.signals.length === 0) {
+            tbody.append(`
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-muted">
+                        No signals detected yet.
+                    </td>
+                </tr>
+            `);
+            return;
+        }
+        
+        data.signals.forEach(function(signal) {
+            const freqMhz = signal.frequency
+                ? (signal.frequency / 1000000).toFixed(4) : 'N/A';
+            
+            tbody.append(`
+                <tr>
+                    <td><small>${signal.timestamp.substring(0, 19)}</small></td>
+                    <td><strong>${signal.callsign}</strong></td>
+                    <td>${freqMhz}</td>
+                    <td><span class="badge bg-primary">${signal.mode}</span></td>
+                    <td>${signal.snr || 'N/A'}</td>
+                    <td>
+                        <button class="btn btn-success btn-sm"
+                                onclick="logSignal('${signal.callsign}', ${signal.frequency || 'null'}, '${signal.mode}', '${signal.snr || ''}')">
+                            <i class="fas fa-book"></i> Log
+                        </button>
+                    </td>
+                </tr>
+            `);
+        });
+    });
+}
+
+// Auto-refresh if running
+$(document).ready(function() {
+    {% if status.running %}
+    setInterval(refreshSignals, 15000);
+    {% endif %}
+});
+</script>
+{% endblock %}

@@ -1,0 +1,409 @@
+{% extends "base.html" %}
+
+{% block title %}OpenWebRX SDR - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-broadcast-tower"></i> OpenWebRX SDR Receiver</h2>
+    <div>
+        <a href="{{ url_for('OpenWebRX.settings') }}" class="btn btn-secondary">
+            <i class="fas fa-cog"></i> Settings
+        </a>
+        <a href="{{ url_for('OpenWebRX.contacts') }}" class="btn btn-info">
+            <i class="fas fa-list"></i> Signals
+        </a>
+    </div>
+</div>
+
+<!-- Installation Warning -->
+{% if not install_complete %}
+<div class="alert alert-warning">
+    <h5><i class="fas fa-exclamation-triangle"></i> Installation Required</h5>
+    {% if install_error %}
+    <p>Error: {{ install_error }}</p>
+    {% else %}
+    <p>OpenWebRX is not installed. Click below to install.</p>
+    {% endif %}
+    <button class="btn btn-warning" onclick="runInstall()" id="install-btn">
+        <i class="fas fa-download"></i> Install OpenWebRX
+    </button>
+    <div id="install-progress" class="mt-2" style="display:none;">
+        <div class="spinner-border spinner-border-sm me-2"></div>
+        Installing... This may take several minutes.
+    </div>
+</div>
+{% endif %}
+
+<div class="row mb-4">
+    <!-- Status Card -->
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h6><i class="fas fa-info-circle"></i> Status</h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between">
+                        Service
+                        <span class="badge {% if status.running %}bg-success{% else %}bg-danger{% endif %}">
+                            {{ 'Running' if status.running else 'Stopped' }}
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        API
+                        <span class="badge {% if status.connected %}bg-success{% else %}bg-secondary{% endif %}">
+                            {{ 'Online' if status.connected else 'Offline' }}
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        Users
+                        <strong>{{ status.users or 0 }}</strong>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        Method
+                        <small class="text-muted">{{ status.method or 'docker' }}</small>
+                    </li>
+                </ul>
+                
+                <div class="mt-3 d-grid gap-2">
+                    {% if status.running %}
+                    <a href="{{ status.url }}" target="_blank" class="btn btn-success btn-sm">
+                        <i class="fas fa-external-link-alt"></i> Open Receiver
+                    </a>
+                    <button class="btn btn-danger btn-sm" onclick="stopOpenWebRX()">
+                        <i class="fas fa-stop"></i> Stop
+                    </button>
+                    {% else %}
+                    <button class="btn btn-success btn-sm" onclick="startOpenWebRX()"
+                            {% if not install_complete %}disabled{% endif %}>
+                        <i class="fas fa-play"></i> Start OpenWebRX
+                    </button>
+                    {% endif %}
+                    <button class="btn btn-outline-secondary btn-sm" onclick="syncFrequency()">
+                        <i class="fas fa-sync"></i> Sync Radio Freq
+                    </button>
+                </div>
+                
+                {% if status.error %}
+                <div class="alert alert-danger mt-2 p-2">
+                    <small>{{ status.error }}</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Embedded Receiver -->
+    <div class="col-md-9">
+        <div class="card h-100">
+            <div class="card-header bg-dark text-white d-flex justify-content-between">
+                <h6><i class="fas fa-satellite-dish"></i> SDR Receiver</h6>
+                {% if status.running %}
+                <a href="{{ status.url }}" target="_blank" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-expand"></i> Full Screen
+                </a>
+                {% endif %}
+            </div>
+            <div class="card-body p-0" style="min-height: 400px;">
+                {% if status.running and status.connected %}
+                <iframe src="{{ status.url }}"
+                        style="width: 100%; height: 450px; border: none;"
+                        title="OpenWebRX Receiver"
+                        id="owrx-frame">
+                </iframe>
+                {% else %}
+                <div class="d-flex align-items-center justify-content-center"
+                     style="height: 400px; background: #1a1a2e;">
+                    <div class="text-center text-light">
+                        <i class="fas fa-satellite-dish fa-4x mb-3 text-secondary"></i>
+                        <h5>SDR Receiver Offline</h5>
+                        <p class="text-muted">Start OpenWebRX to view the receiver</p>
+                        <button class="btn btn-primary" onclick="startOpenWebRX()"
+                                {% if not install_complete %}disabled{% endif %}>
+                            <i class="fas fa-play"></i> Start OpenWebRX
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detected Signals -->
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-success text-white d-flex justify-content-between">
+                <h6><i class="fas fa-signal"></i> Recently Detected Signals</h6>
+                <button class="btn btn-outline-light btn-sm" onclick="refreshSignals()">
+                    <i class="fas fa-sync"></i> Refresh
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                    <table class="table table-sm table-striped mb-0" id="signals-table">
+                        <thead class="sticky-top bg-light">
+                            <tr>
+                                <th>Time</th>
+                                <th>Callsign</th>
+                                <th>Freq (MHz)</th>
+                                <th>Mode</th>
+                                <th>SNR</th>
+                                <th>Log</th>
+                            </tr>
+                        </thead>
+                        <tbody id="signals-tbody">
+                            {% if signals %}
+                                {% for signal in signals %}
+                                <tr>
+                                    <td><small>{{ signal.timestamp[:19] }}</small></td>
+                                    <td><strong>{{ signal.callsign }}</strong></td>
+                                    <td>{{ "%.4f"|format(signal.frequency / 1000000) if signal.frequency else 'N/A' }}</td>
+                                    <td><span class="badge bg-primary">{{ signal.mode }}</span></td>
+                                    <td>{{ signal.snr or 'N/A' }}</td>
+                                    <td>
+                                        <button class="btn btn-xs btn-success"
+                                                onclick="logSignal('{{ signal.callsign }}', {{ signal.frequency or 'null' }}, '{{ signal.mode }}', '{{ signal.snr or '' }}')">
+                                            <i class="fas fa-book"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-3">
+                                        No signals detected yet
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Activity Log -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-dark text-white d-flex justify-content-between">
+                <h6><i class="fas fa-terminal"></i> Log</h6>
+                <button class="btn btn-outline-light btn-sm" onclick="refreshLogs()">
+                    <i class="fas fa-sync"></i>
+                </button>
+            </div>
+            <div id="log-container"
+                 style="height: 300px; overflow-y: auto; background: #1e1e1e; padding: 8px; font-family: monospace; font-size: 0.8rem;">
+                {% for log in logs %}
+                <div class="{% if log.level == 'error' %}text-danger{% elif log.level == 'warning' %}text-warning{% else %}text-success{% endif %}">
+                    <small>{{ log.timestamp[11:19] }}</small> {{ log.message }}
+                </div>
+                {% else %}
+                <div class="text-muted">No log entries</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Log Signal Toast Notification -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+    <div id="logToast" class="toast align-items-center" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toast-message">Signal logged!</div>
+            <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Show toast notification
+function showToast(message, type) {
+    const toast = document.getElementById('logToast');
+    const msg = document.getElementById('toast-message');
+    msg.textContent = message;
+    toast.className = `toast align-items-center text-white bg-${type}`;
+    new bootstrap.Toast(toast, {delay: 3000}).show();
+}
+
+// Start OpenWebRX
+function startOpenWebRX() {
+    $.ajax({
+        url: '{{ url_for("OpenWebRX.api_start") }}',
+        method: 'POST',
+        success: function(data) {
+            if (data.success) {
+                showToast('OpenWebRX started!', 'success');
+                setTimeout(() => location.reload(), 3000);
+            } else {
+                showToast('Failed: ' + data.message, 'danger');
+            }
+        },
+        error: function() {
+            showToast('Server error', 'danger');
+        }
+    });
+}
+
+// Stop OpenWebRX
+function stopOpenWebRX() {
+    if (!confirm('Stop OpenWebRX?')) return;
+    
+    $.ajax({
+        url: '{{ url_for("OpenWebRX.api_stop") }}',
+        method: 'POST',
+        success: function(data) {
+            showToast(data.success ? 'OpenWebRX stopped' : 'Stop failed', 
+                      data.success ? 'info' : 'danger');
+            if (data.success) setTimeout(() => location.reload(), 2000);
+        }
+    });
+}
+
+// Log a signal to the central logbook
+function logSignal(callsign, frequency, mode, snr) {
+    const freqMhz = frequency ? (frequency / 1000000).toFixed(4) : null;
+    
+    $.ajax({
+        url: '{{ url_for("OpenWebRX.api_log_signal") }}',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            callsign: callsign,
+            frequency: parseFloat(freqMhz),
+            mode: mode,
+            signal_report: snr ? snr.toString() : '',
+            notes: 'Detected via OpenWebRX'
+        }),
+        success: function(data) {
+            showToast(
+                data.success ? `${callsign} logged to logbook!` : 'Log failed: ' + data.message,
+                data.success ? 'success' : 'danger'
+            );
+        },
+        error: function() {
+            showToast('Error logging signal', 'danger');
+        }
+    });
+}
+
+// Sync radio frequency with OpenWebRX
+function syncFrequency() {
+    $.ajax({
+        url: '{{ url_for("OpenWebRX.api_sync_frequency") }}',
+        method: 'POST',
+        success: function(data) {
+            if (data.success) {
+                const freq = data.frequency ? (data.frequency / 1e6).toFixed(3) : 'unknown';
+                showToast(`Frequency synced: ${freq} MHz`, 'info');
+            } else {
+                showToast('Sync failed: ' + (data.error || 'Radio not connected'), 'warning');
+            }
+        }
+    });
+}
+
+// Refresh detected signals
+function refreshSignals() {
+    $.get('{{ url_for("OpenWebRX.api_signals") }}?limit=20', function(data) {
+        const tbody = $('#signals-tbody');
+        tbody.empty();
+        
+        if (data.signals.length === 0) {
+            tbody.append('<tr><td colspan="6" class="text-center text-muted py-3">No signals detected yet</td></tr>');
+            return;
+        }
+        
+        data.signals.forEach(function(signal) {
+            const freqMhz = signal.frequency 
+                ? (signal.frequency / 1000000).toFixed(4) 
+                : 'N/A';
+            
+            tbody.append(`
+                <tr>
+                    <td><small>${signal.timestamp.substring(0, 19)}</small></td>
+                    <td><strong>${signal.callsign}</strong></td>
+                    <td>${freqMhz}</td>
+                    <td><span class="badge bg-primary">${signal.mode}</span></td>
+                    <td>${signal.snr || 'N/A'}</td>
+                    <td>
+                        <button class="btn btn-xs btn-success"
+                                onclick="logSignal('${signal.callsign}', ${signal.frequency || 'null'}, '${signal.mode}', '${signal.snr || ''}')">
+                            <i class="fas fa-book"></i>
+                        </button>
+                    </td>
+                </tr>
+            `);
+        });
+    });
+}
+
+// Refresh log display
+function refreshLogs() {
+    $.get('{{ url_for("OpenWebRX.api_logs") }}?limit=50', function(data) {
+        const container = $('#log-container');
+        container.empty();
+        
+        if (data.logs.length === 0) {
+            container.append('<div class="text-muted">No log entries</div>');
+            return;
+        }
+        
+        data.logs.forEach(function(log) {
+            const cls = log.level === 'error' ? 'text-danger'
+                      : log.level === 'warning' ? 'text-warning'
+                      : 'text-success';
+            container.append(
+                `<div class="${cls}"><small>${log.timestamp.substring(11, 19)}</small> ${log.message}</div>`
+            );
+        });
+        
+        container.scrollTop(container[0].scrollHeight);
+    });
+}
+
+// Trigger installation
+function runInstall() {
+    if (!confirm('Install OpenWebRX? This requires internet and may take several minutes.')) return;
+    
+    document.getElementById('install-btn').disabled = true;
+    document.getElementById('install-progress').style.display = 'block';
+    
+    $.ajax({
+        url: '{{ url_for("OpenWebRX.api_install") }}',
+        method: 'POST',
+        timeout: 600000, // 10 minutes
+        success: function(data) {
+            if (data.success) {
+                showToast('Installation complete! Reloading...', 'success');
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                showToast('Installation failed: ' + data.message, 'danger');
+                document.getElementById('install-btn').disabled = false;
+                document.getElementById('install-progress').style.display = 'none';
+            }
+        },
+        error: function() {
+            showToast('Installation error. Check server logs.', 'danger');
+            document.getElementById('install-btn').disabled = false;
+            document.getElementById('install-progress').style.display = 'none';
+        }
+    });
+}
+
+// Auto-refresh when running
+$(document).ready(function() {
+    {% if status.running %}
+    setInterval(refreshSignals, 15000);  // Refresh signals every 15 seconds
+    setInterval(refreshLogs, 10000);     // Refresh logs every 10 seconds
+    {% endif %}
+    
+    // Scroll log to bottom
+    const container = document.getElementById('log-container');
+    if (container) container.scrollTop = container.scrollHeight;
+});
+</script>
+{% endblock %}

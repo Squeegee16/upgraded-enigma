@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}OpenWebRX Settings - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-cog"></i> OpenWebRX Settings</h2>
+    <a href="{{ url_for('OpenWebRX.index') }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+</div>
+
+{% if install_error %}
+<div class="alert alert-warning">
+    <i class="fas fa-exclamation-triangle"></i> {{ install_error }}
+</div>
+{% endif %}
+
+<div class="row">
+    <div class="col-md-8">
+        <form method="POST" action="{{ url_for('OpenWebRX.settings') }}">
+            {{ form.hidden_tag() }}
+            
+            <!-- Server Settings -->
+            <div class="card mb-4">
+                <div class="card-header"><h5>Server Settings</h5></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.http_port.label(class="form-label") }}
+                            {{ form.http_port(class="form-control" + (" is-invalid" if form.http_port.errors else "")) }}
+                            {% if form.http_port.errors %}
+                                <div class="invalid-feedback">
+                                    {% for e in form.http_port.errors %}{{ e }}{% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="text-muted">{{ form.http_port.description }}</small>
+                        </div>
+                        <div class="col-md-8 mb-3 d-flex align-items-center">
+                            <div class="form-check mt-4">
+                                {{ form.allow_anonymous(class="form-check-input") }}
+                                {{ form.allow_anonymous.label(class="form-check-label") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Receiver Info -->
+            <div class="card mb-4">
+                <div class="card-header"><h5>Receiver Information</h5></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.receiver_name.label(class="form-label") }}
+                            {{ form.receiver_name(class="form-control" + (" is-invalid" if form.receiver_name.errors else "")) }}
+                            {% if form.receiver_name.errors %}
+                                <div class="invalid-feedback">
+                                    {% for e in form.receiver_name.errors %}{{ e }}{% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.receiver_admin.label(class="form-label") }}
+                            {{ form.receiver_admin(class="form-control") }}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            {{ form.receiver_location.label(class="form-label") }}
+                            {{ form.receiver_location(class="form-control") }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            {{ form.receiver_asl.label(class="form-label") }}
+                            {{ form.receiver_asl(class="form-control") }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- SDR Device Settings -->
+            <div class="card mb-4">
+                <div class="card-header"><h5>SDR Device Settings</h5></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.sdr_type.label(class="form-label") }}
+                            {{ form.sdr_type(class="form-select") }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            {{ form.sdr_device_index.label(class="form-label") }}
+                            {{ form.sdr_device_index(class="form-control") }}
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            {{ form.gain.label(class="form-label") }}
+                            {{ form.gain(class="form-control") }}
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            {{ form.ppm.label(class="form-label") }}
+                            {{ form.ppm(class="form-control") }}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.initial_frequency.label(class="form-label") }}
+                            {{ form.initial_frequency(class="form-control") }}
+                            <small class="text-muted">e.g., 145000000 for 145 MHz</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.initial_modulation.label(class="form-label") }}
+                            {{ form.initial_modulation(class="form-select") }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Signal Logging -->
+            <div class="card mb-4">
+                <div class="card-header"><h5>Signal Logging</h5></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check">
+                                {{ form.log_signals(class="form-check-input") }}
+                                {{ form.log_signals.label(class="form-check-label") }}
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.min_signal_strength.label(class="form-label") }}
+                            {{ form.min_signal_strength(class="form-control") }}
+                            <small class="text-muted">{{ form.min_signal_strength.description }}</small>
+                        </div>
+                    </div>
+                    <div class="form-check">
+                        {{ form.auto_start(class="form-check-input") }}
+                        {{ form.auto_start.label(class="form-check-label") }}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="d-flex justify-content-end gap-2">
+                <a href="{{ url_for('OpenWebRX.index') }}" class="btn btn-secondary">Cancel</a>
+                {{ form.submit(class="btn btn-primary") }}
+            </div>
+        </form>
+    </div>
+    
+    <!-- Info Panel -->
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header bg-info text-white">
+                <h6><i class="fas fa-info-circle"></i> About OpenWebRX</h6>
+            </div>
+            <div class="card-body">
+                <p>OpenWebRX is a multi-user SDR receiver with a web interface.</p>
+                <p><strong>Features:</strong></p>
+                <ul class="small">
+                    <li>Multi-user support</li>
+                    <li>Real-time waterfall</li>
+                    <li>FT8, WSPR, APRS decoding</li>
+                    <li>Multiple SDR support</li>
+                    <li>Band plan overlay</li>
+                </ul>
+                <a href="https://github.com/jketterl/openwebrx" 
+                   target="_blank" class="btn btn-outline-info btn-sm w-100">
+                    <i class="fab fa-github"></i> GitHub
+                </a>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h6><i class="fas fa-question-circle"></i> Installation Method</h6>
+            </div>
+            <div class="card-body small">
+                <p><strong>Docker</strong> (Recommended)<br>
+                Requires Docker installed on host.</p>
+                <p><strong>apt-get</strong><br>
+                Debian/Ubuntu systems only.</p>
+                <p><strong>pip</strong><br>
+                Fallback method, less reliable.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
