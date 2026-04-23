@@ -1,63 +1,3 @@
-ham_radio_app/
-├── app.py                      # Main application entry point
-├── config.py                   # Configuration management
-├── requirements.txt            # Python dependencies
-├── README.md                   # Setup and usage instructions
-├── models/
-│   ├── __init__.py
-│   ├── user.py                # User model
-│   └── logbook.py             # Contact log model
-├── auth/
-│   ├── __init__.py
-│   ├── routes.py              # Authentication routes
-│   └── forms.py               # Authentication forms
-├── dashboard/
-│   ├── __init__.py
-│   └── routes.py              # Dashboard routes
-├── logbook/
-│   ├── __init__.py
-│   ├── routes.py              # Logbook routes
-│   ├── forms.py               # Logbook forms
-│   └── export.py              # Export functionality
-├── plugins/
-│   ├── __init__.py
-│   ├── base.py                # Base plugin class
-│   ├── loader.py              # Plugin discovery and loading
-│   ├── routes.py              # Plugin routes
-│   └── implementations/
-│       ├── __init__.py
-│       ├── sdr_monitor.py     # SDR Monitor plugin
-│       ├── fldigi.py          # FLdigi plugin (stub)
-│       └── winlink.py         # Winlink plugin (stub)
-├── devices/
-│   ├── __init__.py
-│   ├── base.py                # Base device interface
-│   ├── gps.py                 # GPS device interface
-│   ├── radio.py               # Radio control via Hamlib
-│   └── sdr.py                 # RTL-SDR interface
-├── templates/
-│   ├── base.html              # Base template with navigation
-│   ├── auth/
-│   │   ├── login.html
-│   │   └── register.html
-│   ├── dashboard/
-│   │   └── index.html
-│   ├── logbook/
-│   │   ├── index.html
-│   │   └── add_contact.html
-│   └── plugins/
-│       └── plugin_page.html
-├── static/
-│   ├── css/
-│   │   └── style.css
-│   └── js/
-│       └── app.js
-└── data/
-    ├── callsigns.txt          # Valid callsign list
-    └── certs/                 # SSL certificates
-        ├── cert.pem
-        └── key.pem
-
         # Ham Radio Operator Web Application
 
 A comprehensive web-based application for ham radio operators, featuring a modular plugin architecture, device integration, and contact logging.
@@ -330,7 +270,7 @@ FLdigi for digital modes
 SDR Monitor project (https://github.com/shajen/sdr-monitor)
 Ham radio community for inspiration and support
 
-
+https://github.com/chrissnell/graywolf
 
 
 
