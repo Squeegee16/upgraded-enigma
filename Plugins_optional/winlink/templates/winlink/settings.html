@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}Winlink Settings - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-cog"></i> Winlink Settings</h2>
+    <a href="{{ url_for('Winlink.index') }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+</div>
+
+{% if install_error %}
+<div class="alert alert-warning">
+    <i class="fas fa-exclamation-triangle"></i> {{ install_error }}
+    <br><a href="https://getpat.io/" target="_blank">Install Pat Manually</a>
+</div>
+{% endif %}
+
+<div class="row">
+    <div class="col-md-8">
+        <form method="POST">
+            {{ form.hidden_tag() }}
+            
+            <!-- Identity -->
+            <div class="card mb-4">
+                <div class="card-header"><h5>Identity</h5></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.callsign.label(class="form-label") }}
+                            {{ form.callsign(class="form-control" + (" is-invalid" if form.callsign.errors else ""),
+                                            placeholder="W1ABC") }}
+                            {% if form.callsign.errors %}
+                                <div class="invalid-feedback">{% for e in form.callsign.errors %}{{ e }}{% endfor %}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            {{ form.password.label(class="form-label") }}
+                            {{ form.password(class="form-control", placeholder="Leave blank to keep") }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            {{ form.locator.label(class="form-label") }}
+                            {{ form.locator(class="form-control", placeholder="FN20") }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Connection -->
+            <div class="card mb-4">
+                <div class="card-header"><h5>Connection Settings</h5></div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        {{ form.connection_mode.label(class="form-label") }}
+                        {{ form.connection_mode(class="form-select", id="connection-mode") }}
+                    </div>
+                    
+                    <!-- Telnet Settings -->
+                    <div id="telnet-settings">
+                        <div class="row">
+                            <div class="col-md-8 mb-3">
+                                {{ form.telnet_host.label(class="form-label") }}
+                                {{ form.telnet_host(class="form-control") }}
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                {{ form.telnet_port.label(class="form-label") }}
+                                {{ form.telnet_port(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- AX.25 Settings -->
+                    <div id="ax25-settings" style="display:none;">
+                        <div class="mb-3">
+                            {{ form.ax25_port.label(class="form-label") }}
+                            {{ form.ax25_port(class="form-control") }}
+                            <small class="text-muted">AX.25 port name from /etc/ax25/axports</small>
+                        </div>
+                    </div>
+                    
+                    <!-- VARA Settings -->
+                    <div id="vara-settings" style="display:none;">
+                        <div class="row">
+                            <div class="col-md-8 mb-3">
+                                {{ form.vara_host.label(class="form-label") }}
+                                {{ form.vara_host(class="form-control") }}
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                {{ form.vara_port.label(class="form-label") }}
+                                {{ form.vara_port(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Pat Configuration -->
+            <div class="card mb-4">
+                <div class="card-header"><h5>Pat Configuration</h5></div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        {{ form.pat_http_addr.label(class="form-label") }}
+                        {{ form.pat_http_addr(class="form-control") }}
+                        <small class="text-muted">{{ form.pat_http_addr.description }}</small>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                {{ form.send_heartbeat(class="form-check-input") }}
+                                {{ form.send_heartbeat.label(class="form-check-label") }}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                {{ form.auto_start(class="form-check-input") }}
+                                {{ form.auto_start.label(class="form-check-label") }}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                {{ form.auto_connect(class="form-check-input") }}
+                                {{ form.auto_connect.label(class="form-check-label") }}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <div class="form-check">
+                            {{ form.log_messages(class="form-check-input") }}
+                            {{ form.log_messages.label(class="form-check-label") }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="d-flex justify-content-end gap-2">
+                <a href="{{ url_for('Winlink.index') }}" class="btn btn-secondary">Cancel</a>
+                {{ form.submit(class="btn btn-primary") }}
+            </div>
+        </form>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header bg-info text-white">
+                <h6><i class="fas fa-info-circle"></i> About Winlink</h6>
+            </div>
+            <div class="card-body small">
+                <p>Winlink is a worldwide radio email system for amateur radio operators.</p>
+                <p>This plugin uses <strong>Pat</strong> - a native Linux Winlink client.</p>
+                <ul>
+                    <li>Telnet: Internet gateway</li>
+                    <li>AX.25: VHF/UHF packet</li>
+                    <li>VARA HF: HF digital</li>
+                    <li>VARA FM: VHF digital</li>
+                    <li>ARDOP: HF digital</li>
+                </ul>
+                <a href="https://getpat.io/" target="_blank" class="btn btn-info btn-sm w-100">
+                    <i class="fas fa-external-link-alt"></i> Pat Documentation
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Show/hide connection settings based on mode
+function updateConnectionSettings() {
+    const mode = document.getElementById('connection-mode').value;
+    
+    document.getElementById('telnet-settings').style.display =
+        mode === 'telnet' ? 'block' : 'none';
+    document.getElementById('ax25-settings').style.display =
+        mode === 'ax25' ? 'block' : 'none';
+    document.getElementById('vara-settings').style.display =
+        (mode === 'vara_hf' || mode === 'vara_fm') ? 'block' : 'none';
+}
+
+document.getElementById('connection-mode').addEventListener('change', updateConnectionSettings);
+$(document).ready(updateConnectionSettings);
+</script>
+{% endblock %}

@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}WSJT-X Spots - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-list-alt"></i> Live Spots</h2>
+    <div class="btn-group">
+        <button class="btn btn-outline-primary btn-sm" onclick="refreshSpots()">
+            <i class="fas fa-sync"></i> Refresh
+        </button>
+        <button class="btn btn-outline-danger btn-sm" onclick="clearSpots()">
+            <i class="fas fa-trash"></i> Clear
+        </button>
+        <a href="{{ url_for('WSJTX.index') }}" class="btn btn-secondary btn-sm">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+    </div>
+</div>
+
+<!-- Filters Bar -->
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <span class="fw-bold">Filter:</span>
+            <a href="{{ url_for('WSJTX.spots') }}" class="btn btn-sm {% if not mode_filter %}btn-primary{% else %}btn-outline-primary{% endif %}">All</a>
+            <a href="{{ url_for('WSJTX.spots', mode='FT8') }}" class="btn btn-sm {% if mode_filter == 'FT8' %}btn-primary{% else %}btn-outline-primary{% endif %}">FT8</a>
+            <a href="{{ url_for('WSJTX.spots', mode='FT4') }}" class="btn btn-sm {% if mode_filter == 'FT4' %}btn-primary{% else %}btn-outline-primary{% endif %}">FT4</a>
+            <a href="{{ url_for('WSJTX.spots', mode='JT65') }}" class="btn btn-sm {% if mode_filter == 'JT65' %}btn-primary{% else %}btn-outline-primary{% endif %}">JT65</a>
+            <a href="{{ url_for('WSJTX.spots', mode='WSPR') }}" class="btn btn-sm {% if mode_filter == 'WSPR' %}btn-primary{% else %}btn-outline-primary{% endif %}">WSPR</a>
+            <div class="vr"></div>
+            <a href="{{ url_for('WSJTX.spots', cq='true') }}" class="btn btn-sm {% if show_cq %}btn-success{% else %}btn-outline-success{% endif %}">CQ Only</a>
+            
+            <div class="ms-auto">
+                <small class="text-muted">{{ spots|length }} spots</small>
+                {% if status.wsjtx_connected %}
+                <span class="badge bg-success ms-2">Live</span>
+                {% else %}
+                <span class="badge bg-secondary ms-2">Offline</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- WSJT-X Status Bar -->
+{% if wsjtx_status.mode %}
+<div class="alert alert-info py-2 mb-3">
+    <div class="d-flex gap-4 small">
+        <span><i class="fas fa-broadcast-tower"></i> Mode: <strong>{{ wsjtx_status.mode }}</strong></span>
+        {% if wsjtx_status.dial_frequency %}
+        <span><i class="fas fa-wave-square"></i> Freq: <strong>{{ "%.3f"|format(wsjtx_status.dial_frequency / 1000000) }} MHz</strong></span>
+        {% endif %}
+        <span><i class="fas fa-user"></i> {{ wsjtx_status.de_call or 'N/A' }}</span>
+        <span><i class="fas fa-map-marker"></i> {{ wsjtx_status.de_grid or 'N/A' }}</span>
+        {% if wsjtx_status.transmitting %}
+        <span class="text-danger"><i class="fas fa-microphone"></i> <strong>TRANSMITTING</strong></span>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Spots Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+            <table class="table table-sm table-striped table-hover mb-0" id="spots-table">
+                <thead class="sticky-top bg-light">
+                    <tr>
+                        <th>Time (UTC)</th>
+                        <th>dB SNR</th>
+                        <th>ΔT</th>
+                        <th>Hz</th>
+                        <th>Mode</th>
+                        <th>Message</th>
+                        <th>Grid</th>
+                        <th>Log</th>
+                    </tr>
+                </thead>
+                <tbody id="spots-tbody">
+                    {% if spots %}
+                        {% for spot in spots %}
+                        <tr class="{% if spot.is_cq %}table-success{% elif spot.low_confidence %}table-warning{% endif %}">
+                            <td><small>{{ spot.decode_time[11:19] if spot.decode_time else '?' }}</small></td>
+                            <td>
+                                <small class="fw-bold {% if spot.snr and spot.snr > -5 %}text-success{% elif spot.snr and spot.snr < -15 %}text-danger{% else %}text-body{% endif %}">
+                                    {{ spot.snr }}
+                                </small>
+                            </td>
+                            <td><small>{{ spot.delta_time }}</small></td>
+                            <td><small>{{ spot.delta_freq }}</small></td>
+                            <td><span class="badge bg-primary">{{ spot.mode }}</span></td>
+                            <td>
+                                <small>
+                                    {% if spot.is_cq %}<span class="badge bg-success">CQ</span> {% endif %}
+                                    {{ spot.message }}
+                                </small>
+                            </td>
+                            <td><small>{{ spot.grid or '' }}</small></td>
+                            <td>
+                                {% if spot.callsign or spot.de_call %}
+                                <button class="btn btn-xs btn-success"
+                                        onclick="logSpot('{{ spot.callsign or spot.de_call }}', '{{ spot.mode }}', {{ wsjtx_status.dial_frequency|default(0, true) }}, {{ spot.snr|default(0, true) }}, '{{ spot.grid or '' }}')"
+                                        title="Log {{ spot.callsign or spot.de_call }}">
+                                    <i class="fas fa-book"></i>
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="fas fa-satellite fa-2x mb-2"></i>
+                                <br>No spots received yet.
+                                {% if not status.udp_listening %}
+                                Start the UDP listener to receive WSJT-X data.
+                                {% else %}
+                                Waiting for WSJT-X decodes...
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+    <div id="spot-toast" class="toast align-items-center text-white" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toast-msg">Logged!</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function showToast(msg, type) {
+    const el = document.getElementById('spot-toast');
+    document.getElementById('toast-msg').textContent = msg;
+    el.className = `toast align-items-center text-white bg-${type}`;
+    new bootstrap.Toast(el, {delay: 3000}).show();
+}
+
+function logSpot(callsign, mode, freqHz, snr, grid) {
+    const freqMhz = freqHz ? (freqHz / 1000000).toFixed(3) : null;
+    
+    $.ajax({
+        url: '{{ url_for("WSJTX.api_log_contact") }}',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            callsign: callsign,
+            mode: mode,
+            frequency: freqMhz ? parseFloat(freqMhz) : null,
+            rst_sent: snr ? snr.toString() : '-10',
+            rst_rcvd: snr ? snr.toString() : '-10',
+            grid: grid || '',
+            notes: 'Logged from WSJT-X spot'
+        }),
+        success: function(data) {
+            showToast(
+                data.success ? `${callsign} logged!` : 'Failed: ' + data.message,
+                data.success ? 'success' : 'danger'
+            );
+        },
+        error: function() {
+            showToast('Error logging', 'danger');
+        }
+    });
+}
+
+function refreshSpots() {
+    const mode = '{{ mode_filter or "" }}';
+    const cq = '{{ "true" if show_cq else "false" }}';
+    let url = `{{ url_for("WSJTX.api_spots") }}?limit=100`;
+    if (mode) url += `&mode=${mode}`;
+    if (cq === 'true') url += '&cq=true';
+    
+    $.get(url, function(data) {
+        location.reload();
+    });
+}
+
+function clearSpots() {
+    if (!confirm('Clear all spots?')) return;
+    
+    $.ajax({
+        url: '{{ url_for("WSJTX.api_clear_spots") }}',
+        method: 'POST',
+        success: function() {
+            showToast('Spots cleared', 'info');
+            setTimeout(() => location.reload(), 500);
+        }
+    });
+}
+
+$(document).ready(function() {
+    {% if status.udp_listening %}
+    // Auto-refresh spots every 10 seconds when connected
+    setInterval(function() {
+        if (document.visibilityState === 'visible') {
+            location.reload();
+        }
+    }, 10000);
+    {% endif %}
+});
+</script>
+{% endblock %}
