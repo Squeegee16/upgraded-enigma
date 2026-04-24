@@ -483,26 +483,26 @@ After installation:
 - [ ] Save settings and start the plugin
 ##### Plugin-Specific Requirements
 ###### FLdigi
--[ ] FLdigi must have XML-RPC enabled
--[ ] In FLdigi: Configure → XML-RPC
--[ ] Set Host: localhost, Port: 7362
--[ ] Enable: "XML-RPC server"
+- [ ] FLdigi must have XML-RPC enabled
+- [ ] In FLdigi: Configure → XML-RPC
+- [ ] Set Host: localhost, Port: 7362
+- [ ] Enable: "XML-RPC server"
 
 ##### WSJT-X
--[ ] WSJT-X must have UDP enabled
--[ ] In WSJT-X: File → Settings → Reporting
--[ ] Set UDP Server: localhost
--[ ] Set Port: 2237
--[ ] Enable: "Accept UDP requests"
+- [ ] WSJT-X must have UDP enabled
+- [ ] In WSJT-X: File → Settings → Reporting
+- [ ] Set UDP Server: localhost
+- [ ] Set Port: 2237
+- [ ] Enable: "Accept UDP requests"
 
 ##### Winlink (Pat)
--[ ] Pat is installed automatically
--[ ] Configure callsign in plugin settings
--[ ] Supports: Telnet, AX.25, VARA HF, VARA FM, ARDOP
+- [ ] Pat is installed automatically
+- [ ] Configure callsign in plugin settings
+- [ ] Supports: Telnet, AX.25, VARA HF, VARA FM, ARDOP
 
 ##### QSSTV
--[ ] QSSTV requires a display (X11)
--[ ] For headless servers, 
+- [ ] QSSTV requires a display (X11)
+- [ ] For headless servers, 
 ###### use Xvfb:
     sudo apt-get install xvfb
     Xvfb :1 -screen 0 1024x768x24 &
@@ -510,16 +510,16 @@ After installation:
     Set Display=:1 in QSSTV plugin settings
 
 ##### SatDump
- -[ ] SatDump build requires ~4 GB disk space
- -[ ] Build time: 15-30 minutes on Raspberry Pi 4
+ - [ ] SatDump build requires ~4 GB disk space
+ - [ ] Build time: 15-30 minutes on Raspberry Pi 4
 ###### Recommended antennas:
- -[ ] VHF (137 MHz): V-dipole or QFH for NOAA/METEOR
- -[ ] L-Band (1.7 GHz): Patch antenna for GOES/Meteosat
+ - [ ] VHF (137 MHz): V-dipole or QFH for NOAA/METEOR
+ - [ ] L-Band (1.7 GHz): Patch antenna for GOES/Meteosat
 
 #### OpenWebRX
- -[ ] OpenWebRX is installed via Docker (recommended)
- -[ ] Requires Docker to be installed
- -[ ] Exposes web interface on port 8073
+ - [ ] OpenWebRX is installed via Docker (recommended)
+ - [ ] Requires Docker to be installed
+ - [ ] Exposes web interface on port 8073
 
 #### Canadian Callsign Database
 The application can validate and display information about Canadian amateur radio operators using the official ISED (Innovation, Science and Economic Development Canada) database.
@@ -530,10 +530,10 @@ What It Does:\
     - Quick lookup of any Canadian callsign from the dashboard
 
 ##### Downloading the Database
- -[ ] Log in to the application
- -[ ] On the Dashboard, click the database icon 🗄️ in the Operator card
- -[ ] Click Download / Update Database
- -[ ] Wait for the download to complete (~1–2 minutes)
+ - [ ] Log in to the application
+ - [ ] On the Dashboard, click the database icon 🗄️ in the Operator card
+ - [ ] Click Download / Update Database
+ - [ ] Wait for the download to complete (~1–2 minutes)
 
 ##### The database contains:
 80,000+ licensed Canadian operators
@@ -572,14 +572,14 @@ Firefox: Click "Advanced" → "Accept the Risk and Continue"\
 Safari: Click "Show Details" → "visit this website"\
 
 ### First Time Setup
- -[ ] Browse to https://localhost:5000
- -[ ] Register a new account with your callsign
- -[ ] Log in with your credentials
+ - [ ] Browse to https://localhost:5000
+ - [ ] Register a new account with your callsign
+ - [ ] Log in with your credentials
 
 #### On the Dashboard, verify your callsign is shown
- -[ ] Click the database icon to download the Canadian callsign database
- -[ ] Navigate to Settings for any plugin you want to use
- -[ ] Check the Logbook to start logging contacts
+ - [ ] Click the database icon to download the Canadian callsign database
+ - [ ] Navigate to Settings for any plugin you want to use
+ - [ ] Check the Logbook to start logging contacts
 
 ## Troubleshooting
 ### Application Will Not Start
