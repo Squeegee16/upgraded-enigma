@@ -585,7 +585,382 @@ function refreshLocation() {
         );
     });
 }
+<!-- ============================================================
+     ISED Database Update Modal
+     ============================================================ -->
+<div class="modal fade" id="dbModal" tabindex="-1"
+     aria-labelledby="dbModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="dbModalLabel">
+                    <i class="fas fa-database"></i>
+                    Canadian Amateur Radio Database
+                </h5>
+                <button type="button" class="btn-close btn-close-white"
+                        data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                
+                <!-- Database Status -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6>
+                                    <i class="fas fa-info-circle"></i>
+                                    Database Status
+                                </h6>
+                                <div id="db-status-display">
+                                    {% if db_stats %}
+                                    <dl class="row mb-0 small">
+                                        <dt class="col-6">Records:</dt>
+                                        <dd class="col-6">
+                                            <strong>{{ "{:,}".format(db_stats.record_count) }}</strong>
+                                        </dd>
+                                        <dt class="col-6">Last Updated:</dt>
+                                        <dd class="col-6">
+                                            {{ db_stats.last_updated_display }}
+                                        </dd>
+                                        <dt class="col-6">Source:</dt>
+                                        <dd class="col-6">
+                                            <small>ISED Canada</small>
+                                        </dd>
+                                    </dl>
+                                    {% if db_stats.needs_update %}
+                                    <div class="alert alert-warning py-1 px-2 mt-2 mb-0">
+                                        <small>
+                                            <i class="fas fa-exclamation-triangle"></i>
+                                            Database is outdated. Update recommended.
+                                        </small>
+                                    </div>
+                                    {% endif %}
+                                    {% else %}
+                                    <p class="text-muted small">
+                                        Status unavailable
+                                    </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6>
+                                    <i class="fas fa-search"></i>
+                                    Quick Callsign Lookup
+                                </h6>
+                                <div class="input-group input-group-sm">
+                                    <input type="text"
+                                           class="form-control"
+                                           id="lookup-callsign"
+                                           placeholder="Enter callsign..."
+                                           maxlength="15"
+                                           onkeypress="if(event.key==='Enter') lookupCallsign()">
+                                    <button class="btn btn-primary"
+                                            onclick="lookupCallsign()">
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                </div>
+                                <div id="lookup-result" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Download Progress -->
+                <div id="download-section">
+                    <div id="download-idle">
+                        <div class="alert alert-info">
+                            <h6>
+                                <i class="fas fa-info-circle"></i>
+                                About this Database
+                            </h6>
+                            <p class="mb-2 small">
+                                Downloads the official Canadian amateur radio 
+                                operators database from ISED (Innovation, Science 
+                                and Economic Development Canada).
+                            </p>
+                            <ul class="small mb-2">
+                                <li>~80,000+ licensed operators</li>
+                                <li>Names, qualifications, and locations</li>
+                                <li>Updated periodically by ISED</li>
+                                <li>Download size: ~5 MB</li>
+                            </ul>
+                            <small class="text-muted">
+                                Source:
+                                <a href="https://apc-cap.ic.gc.ca/datafiles/amateur_delim.zip"
+                                   target="_blank">
+                                    apc-cap.ic.gc.ca
+                                </a>
+                            </small>
+                        </div>
+                    </div>
+                    
+                    <!-- Progress Bar (shown during download) -->
+                    <div id="download-progress" style="display:none;">
+                        <h6 id="progress-message">Downloading...</h6>
+                        <div class="progress mb-2" style="height: 25px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                 id="progress-bar"
+                                 role="progressbar"
+                                 style="width: 0%">
+                                <span id="progress-pct">0%</span>
+                            </div>
+                        </div>
+                        <div class="row text-center small">
+                            <div class="col-4">
+                                <strong id="prog-imported">0</strong>
+                                <br><small class="text-muted">Imported</small>
+                            </div>
+                            <div class="col-4">
+                                <strong id="prog-total">0</strong>
+                                <br><small class="text-muted">Total</small>
+                            </div>
+                            <div class="col-4">
+                                <strong id="prog-status">Starting</strong>
+                                <br><small class="text-muted">Status</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Success Message -->
+                    <div id="download-success" style="display:none;">
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle"></i>
+                            <strong>Database updated successfully!</strong>
+                            <span id="success-count"></span>
+                        </div>
+                    </div>
+                    
+                    <!-- Error Message -->
+                    <div id="download-error" style="display:none;">
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>Update failed:</strong>
+                            <span id="error-message"></span>
+                            <br>
+                            <small>Check network connection and try again.</small>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary"
+                        data-bs-dismiss="modal">
+                    Close
+                </button>
+                <button type="button"
+                        class="btn btn-primary"
+                        id="update-db-btn"
+                        onclick="startDbUpdate()">
+                    <i class="fas fa-download"></i>
+                    Download / Update Database
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
+<!-- ============================================================
+     Database + Callsign JavaScript
+     ============================================================ -->
+<script>
+let dbPollTimer = null;
+
+// Open the database modal
+function showDbModal() {
+    new bootstrap.Modal(
+        document.getElementById('dbModal')
+    ).show();
+}
+
+// Start database update
+function startDbUpdate() {
+    document.getElementById('update-db-btn').disabled = true;
+    document.getElementById('download-idle').style.display = 'none';
+    document.getElementById('download-success').style.display = 'none';
+    document.getElementById('download-error').style.display = 'none';
+    document.getElementById('download-progress').style.display = 'block';
+
+    $.ajax({
+        url: '{{ url_for("dashboard.db_update") }}',
+        method: 'POST',
+        success: function(data) {
+            if (data.success) {
+                // Start polling for progress
+                dbPollTimer = setInterval(pollDbProgress, 1500);
+            } else {
+                showDbError(data.error || 'Failed to start');
+            }
+        },
+        error: function() {
+            showDbError('Server error starting download');
+        }
+    });
+}
+
+// Poll download progress
+function pollDbProgress() {
+    $.get('{{ url_for("dashboard.db_status") }}',
+        function(data) {
+            if (!data.available) {
+                clearInterval(dbPollTimer);
+                showDbError('Database service unavailable');
+                return;
+            }
+
+            const state = data.state || {};
+            const progress = state.progress || 0;
+            const message = state.message || '';
+            const status = state.status || 'idle';
+
+            // Update progress bar
+            document.getElementById('progress-bar')
+                .style.width = progress + '%';
+            document.getElementById('progress-pct')
+                .textContent = progress + '%';
+            document.getElementById('progress-message')
+                .textContent = message;
+            document.getElementById('prog-imported')
+                .textContent = (
+                    state.records_imported || 0
+                ).toLocaleString();
+            document.getElementById('prog-total')
+                .textContent = (
+                    state.total_records || 0
+                ).toLocaleString();
+            document.getElementById('prog-status')
+                .textContent = status.charAt(0).toUpperCase() +
+                status.slice(1);
+
+            // Handle terminal states
+            if (status === 'complete') {
+                clearInterval(dbPollTimer);
+                showDbSuccess(state.records_imported || 0);
+                // Reload page to show updated operator info
+                setTimeout(() => location.reload(), 3000);
+            } else if (status === 'error') {
+                clearInterval(dbPollTimer);
+                showDbError(state.error || 'Unknown error');
+            }
+        }
+    ).fail(function() {
+        // Don't stop polling on transient error
+        console.warn('Status poll failed, retrying...');
+    });
+}
+
+// Show success state
+function showDbSuccess(count) {
+    document.getElementById('download-progress').style.display = 'none';
+    document.getElementById('download-success').style.display = 'block';
+    document.getElementById('success-count').textContent =
+        ` ${count.toLocaleString()} operators imported.`;
+    document.getElementById('update-db-btn').disabled = false;
+}
+
+// Show error state
+function showDbError(message) {
+    document.getElementById('download-progress').style.display = 'none';
+    document.getElementById('download-error').style.display = 'block';
+    document.getElementById('error-message').textContent = message;
+    document.getElementById('update-db-btn').disabled = false;
+}
+
+// Quick callsign lookup in modal
+function lookupCallsign() {
+    const callsign = document.getElementById(
+        'lookup-callsign'
+    ).value.trim().toUpperCase();
+
+    if (!callsign) return;
+
+    const resultDiv = document.getElementById('lookup-result');
+    resultDiv.innerHTML = (
+        '<div class="spinner-border spinner-border-sm me-2"></div>' +
+        'Looking up...'
+    );
+
+    $.get(
+        `{{ url_for("dashboard.callsign_lookup", callsign="PLACEHOLDER") }}`
+        .replace('PLACEHOLDER', encodeURIComponent(callsign)),
+        function(data) {
+            if (data.found && data.operator) {
+                const op = data.operator;
+                let badgesHtml = '';
+                if (op.qualification_badges) {
+                    op.qualification_badges.forEach(function(b) {
+                        badgesHtml += (
+                            `<span class="badge bg-${b.colour} me-1">` +
+                            `<i class="fas fa-${b.icon} me-1"></i>` +
+                            `${b.label}</span>`
+                        );
+                    });
+                }
+                resultDiv.innerHTML = `
+                    <div class="card border-success">
+                        <div class="card-body py-2 px-3">
+                            <div class="d-flex justify-content-between">
+                                <strong class="text-success">
+                                    <i class="fas fa-check-circle me-1"></i>
+                                    ${op.callsign}
+                                </strong>
+                                <span class="text-muted small">
+                                    ${op.province || ''}
+                                </span>
+                            </div>
+                            <div class="fw-bold">${op.full_name}</div>
+                            ${op.city ? `<small class="text-muted">${op.city}</small>` : ''}
+                            <div class="mt-1">${badgesHtml}</div>
+                        </div>
+                    </div>`;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-warning py-2 px-3 mb-0 small">
+                        <i class="fas fa-question-circle me-1"></i>
+                        ${callsign} not found in database
+                    </div>`;
+            }
+        }
+    ).fail(function() {
+        resultDiv.innerHTML = (
+            '<div class="alert alert-danger py-2 small">Lookup error</div>'
+        );
+    });
+}
+
+// Allow Enter key in lookup field
+document.getElementById('lookup-callsign')
+    ?.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') lookupCallsign();
+    });
+
+// Check if download was already running when page loaded
+$(document).ready(function() {
+    $.get('{{ url_for("dashboard.db_status") }}', function(data) {
+        if (data.available && data.state) {
+            const status = data.state.status;
+            if (['downloading', 'parsing',
+                 'importing', 'starting'].includes(status)) {
+                // Resume showing progress
+                showDbModal();
+                document.getElementById('download-idle')
+                    .style.display = 'none';
+                document.getElementById('download-progress')
+                    .style.display = 'block';
+                document.getElementById('update-db-btn')
+                    .disabled = true;
+                dbPollTimer = setInterval(pollDbProgress, 1500);
+            }
+        }
+    });
+});
+</script>
 // ---------------------------------------------------------------
 // On page load
 // ---------------------------------------------------------------
