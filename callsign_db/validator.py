@@ -1,63 +1,56 @@
 """
 Callsign Validator
 ===================
-Validates amateur radio callsigns with optional
-lookup against the Canadian ISED database.
+Validates callsign format and optionally checks the
+ISED Canadian operator database.
 
-Validation Levels:
-    1. Format validation (regex) - always performed
-    2. Database lookup - performed when database
-       is populated and VALIDATE_CALLSIGNS is True
-
-Canadian Callsign Formats:
-    VE1-VE9 XXX    - Regular amateur callsigns
-    VA1-VA7 XX     - Amateur callsigns (newer series)
-    VY0-VY2 XXX    - Northern Canada
-    VO1-VO2 XX     - Newfoundland/Labrador
-    VE1-VE9 XXXX   - Club or special callsigns
-    CG/CF/CH...    - Special event and reciprocal
-    XM-XO...       - Experimental
-
-General Callsign Format (international):
-    1-3 alphanumeric + digit + 1-4 letters
-    e.g., W1AW, VE3XYZ, G4ABC, JA1ABC
+Qualification Reference (from readme_amat_delim.txt):
+    A  Basic qualification
+    B  5 WPM Morse code
+    C  12 WPM Morse code
+    D  Advanced qualification
+    E  Basic with Honours
 """
 
 import re
-from typing import Optional, Tuple
 
 
 class CallsignValidator:
     """
     Validates amateur radio callsigns.
 
-    Provides format validation via regex and optional
-    database validation against the ISED database.
+    Two-level validation:
+        1. Regex format check (always performed)
+        2. ISED database lookup (Canadian callsigns only,
+           when database is populated and validation enabled)
     """
 
-    # General international callsign regex
-    # Covers most national formats
+    # General international callsign format regex
     CALLSIGN_REGEX = re.compile(
         r'^[A-Z0-9]{1,3}[0-9][A-Z0-9]{0,3}[A-Z]$',
         re.IGNORECASE
     )
 
-    # Canadian callsign prefixes
+    # Canadian callsign prefixes (VE, VA, VY, VO series)
     CANADIAN_PREFIXES = (
         'VE', 'VA', 'VY', 'VO',
-        'VE1', 'VE2', 'VE3', 'VE4', 'VE5',
-        'VE6', 'VE7', 'VE8', 'VE9',
-        'VA2', 'VA3', 'VA4', 'VA5', 'VA6', 'VA7',
-        'VY0', 'VY1', 'VY2',
-        'VO1', 'VO2',
         'CF', 'CG', 'CH', 'CI', 'CJ', 'CK',
         'XM', 'XN', 'XO',
     )
 
+    # Qualification code to label mapping
+    QUAL_LABELS = {
+        'A': 'Basic',
+        'B': '5 WPM Morse',
+        'C': '12 WPM Morse',
+        'D': 'Advanced',
+        'E': 'Basic with Honours',
+    }
+
     @classmethod
     def is_valid_format(cls, callsign):
         """
-        Validate callsign format using regex.
+        Validate callsign against regex format.
 
         Args:
             callsign: Callsign string to validate
@@ -68,26 +61,24 @@ class CallsignValidator:
         if not callsign:
             return False
         return bool(
-            cls.CALLSIGN_REGEX.match(callsign.upper().strip())
+            cls.CALLSIGN_REGEX.match(
+                callsign.upper().strip()
+            )
         )
 
     @classmethod
     def is_canadian(cls, callsign):
         """
-        Check if a callsign appears to be Canadian.
-
-        Uses prefix matching to determine if the callsign
-        is likely a Canadian amateur radio callsign.
+        Check if callsign uses a Canadian prefix.
 
         Args:
             callsign: Callsign to check
 
         Returns:
-            bool: True if callsign starts with Canadian prefix
+            bool: True if callsign is Canadian format
         """
         if not callsign:
             return False
-
         upper = callsign.upper().strip()
         return any(
             upper.startswith(prefix)
@@ -97,23 +88,16 @@ class CallsignValidator:
     @classmethod
     def validate(cls, callsign, check_database=True):
         """
-        Validate a callsign with optional database lookup.
-
-        Performs format validation first. If the callsign
-        is valid and database check is requested, queries
-        the local ISED database.
+        Full callsign validation with optional DB lookup.
 
         Args:
-            callsign: Callsign to validate
-            check_database: Whether to check the database
+            callsign: Callsign string to validate
+            check_database: Whether to query local ISED DB
 
         Returns:
-            tuple: (is_valid, operator_data, error_message)
-                - is_valid: True if callsign is valid
-                - operator_data: Dict from DB or None
-                - error_message: Error string or None
+            tuple: (is_valid, operator_dict_or_None, error_str)
         """
-        # Step 1: Format validation
+        # Level 1: Format check
         if not cls.is_valid_format(callsign):
             return (
                 False,
@@ -121,10 +105,10 @@ class CallsignValidator:
                 'Invalid callsign format'
             )
 
-        upper_callsign = callsign.upper().strip()
+        upper = callsign.upper().strip()
 
-        # Step 2: Database lookup (if enabled and Canadian)
-        if check_database and cls.is_canadian(upper_callsign):
+        # Level 2: Database check for Canadian callsigns
+        if check_database and cls.is_canadian(upper):
             try:
                 from flask import current_app
                 callsign_db = current_app.extensions.get(
@@ -134,33 +118,28 @@ class CallsignValidator:
                 if callsign_db:
                     stats = callsign_db.get_stats()
 
-                    # Only check DB if it has records
                     if stats.get('is_populated'):
-                        operator = callsign_db.lookup(
-                            upper_callsign
-                        )
+                        operator = callsign_db.lookup(upper)
 
                         if operator:
                             return (True, operator, None)
                         else:
-                            # Callsign not in database
                             return (
                                 False,
                                 None,
-                                f'{upper_callsign} not found '
-                                f'in Canadian operator database'
+                                f'{upper} not found in '
+                                f'ISED Canadian database'
                             )
                     else:
-                        # DB empty - skip DB check
+                        # DB not populated - pass through
                         return (True, None, None)
 
             except RuntimeError:
-                # Outside app context - skip DB check
+                # Outside Flask context
                 return (True, None, None)
             except Exception as e:
-                print(f"[Validator] DB error: {e}")
-                # Don't block on DB error
+                print(f"[Validator] DB check error: {e}")
+                # Non-fatal - allow registration
                 return (True, None, None)
 
-        # Valid format, not checking DB
         return (True, None, None)
