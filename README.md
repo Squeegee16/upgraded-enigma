@@ -1,11 +1,11 @@
 <div align="left">
-
-██╗    ██╗    █████╗    ███╗    ███╗    ██████╗    █████╗    ██████╗\
-██║  ██║██╔══██╗████╗ ████║    ██╔══██╗██╔══██╗██╔══██╗\
-███████║███████║██╔████╔██║    ██████╔╝███████║██║  ██║\
-██╔══██║██╔══██║██║╚██╔╝██║    ██╔══██╗██╔══██║██║  ██║\
-██║  ██║██║  ██║██║ ╚═╝ ██║    ██║  ██║██║  ██║██████╔╝\
-╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝    ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝\ 
+ooooo   ooooo       .o.       ooo        ooooo    ooooooooo.         .o.       oooooooooo.   
+`888'   `888'      .888.      `88.       .888'    `888   `Y88.      .888.      `888'   `Y8b  
+ 888     888      .8"888.      888b     d'888      888   .d88'     .8"888.      888      888 
+ 888ooooo888     .8' `888.     8 Y88. .P  888      888ooo88P'     .8' `888.     888      888 
+ 888     888    .88ooo8888.    8  `888'   888      888`88b.      .88ooo8888.    888      888 
+ 888     888   .8'     `888.   8    Y     888      888  `88b.   .8'     `888.   888     d88' 
+o888o   o888o o88o     o8888o o8o        o888o    o888o  o888o o88o     o8888o o888bood8P'   
 
 A modular, web-based ham radio station control and logging application for Linux
 
@@ -64,62 +64,62 @@ Ham Radio App is a Linux-based, web-accessible station control application for a
 
 ## Features
 ### 🔐 User Management
-Secure user registration and login with session management
-Bcrypt password hashing with strength enforcement
-Callsign format validation (international formats)
-Canadian ISED callsign database validation with name and qualification display
-Registration validated against the official ISED amateur radio database
+    Secure user registration and login with session management
+    Bcrypt password hashing with strength enforcement
+    Callsign format validation (international formats)
+    Canadian ISED callsign database validation with name and qualification display
+    Registration validated against the official ISED amateur radio database
 ### 📊 Dashboard
-Real-time UTC clock display
-Live GPS location and Maidenhead grid square
-Connected device status (GPS, Radio, RTL-SDR)
-Plugin status overview with one-click launch buttons
-Operator name and qualification display from ISED database
-Recent contacts summary
+Real-time UTC clock display\
+Live GPS location and Maidenhead grid square\
+Connected device status (GPS, Radio, RTL-SDR)\
+Plugin status overview with one-click launch buttons\
+Operator name and qualification display from ISED database\
+Recent contacts summary\
 ### 📖 Central Logbook
-Log contacts with callsign, mode, band, frequency, grid, RST, and notes
-Filter and search by any field
-Export in ADIF, CSV, and JSON formats
-Contact statistics (by mode, band, unique callsigns)
-Paginated contact list
+Log contacts with callsign, mode, band, frequency, grid, RST, and notes\
+Filter and search by any field\
+Export in ADIF, CSV, and JSON formats\
+Contact statistics (by mode, band, unique callsigns)\
+Paginated contact list\
 ## 🔌 Plugin Architecture
-Automatic plugin discovery on startup
-First-run dependency installation for each plugin
-Each plugin has its own dedicated UI page
-All plugins integrate with the central logbook
-GPS and radio device data shared across all plugins
+Automatic plugin discovery on startup\
+First-run dependency installation for each plugin\
+Each plugin has its own dedicated UI page\
+All plugins integrate with the central logbook\
+GPS and radio device data shared across all plugins\
 ## 🛰️ Device Integration
-RTL-SDR (via rtl-sdr tools and direct USB)
-Serial GPS (NMEA protocol, any USB GPS dongle)
-Yaesu FT-891 (via Hamlib — compatible with 400+ radios)
-Mock device mode for development and testing without hardware
+RTL-SDR (via rtl-sdr tools and direct USB)\
+Serial GPS (NMEA protocol, any USB GPS dongle)\
+Yaesu FT-891 (via Hamlib — compatible with 400+ radios)\
+Mock device mode for development and testing without hardware\
 ## 🔒 Security
-HTTPS with self-signed certificate (generated automatically)
-CSRF protection on all forms
-Session-based authentication
-Input sanitisation throughout
-Non-root Docker container execution
+HTTPS with self-signed certificate (generated automatically)\
+CSRF protection on all forms\
+Session-based authentication\
+Input sanitisation throughout\
+Non-root Docker container execution\
 ## 🐳 Docker Support
-Multi-stage Docker build for minimal image size
-Docker Compose with persistent volumes
-Automated database backup service
-Device passthrough for USB hardware
+Multi-stage Docker build for minimal image size\
+Docker Compose with persistent volumes\
+Automated database backup service\
+Device passthrough for USB hardware\
 ## Hardware Requirements
-Minimum (Software / Testing)
-Component	Requirement
+Minimum (Software / Testing) Component	Requirement
 CPU	1 GHz single-core (x86_64 or ARM)
 RAM	512 MB
 Storage	4 GB free
 Network	WiFi adapter (hotspot capable)
 OS	Any Linux distribution (Debian, Ubuntu, Raspberry Pi OS, etc.)
-Recommended (Full Station)
+## Recommended (Full Station)
 Component	Requirement
 CPU	Quad-core 1.5 GHz+ (Raspberry Pi 4 or better)
 RAM	2 GB+
 Storage	16 GB+ (SSD preferred)
 Network	Dual-band WiFi adapter or dedicated WiFi dongle
 OS	Ubuntu 22.04 LTS / Debian 12 / Raspberry Pi OS (64-bit)
-Optional Hardware (for Plugin Features)
+
+## Optional Hardware (for Plugin Features)
 Device	Purpose	Notes
 RTL-SDR v3 dongle	SDR receiver, satellite, spectrum	~$25 — Required for SDR/satellite plugins
 USB GPS receiver	Position reporting, grid square	Any NMEA-compatible USB GPS (~$15)
@@ -130,15 +130,14 @@ VHF/UHF antenna	137 MHz weather satellites	V-dipole or QFH recommended
 L-Band antenna	1.7 GHz satellite imagery	Patch antenna required
 
 ## Software Requirements
-Operating System
-Linux (any modern distribution)
-Tested on: Ubuntu 22.04, Debian 12, Raspberry Pi OS (64-bit)
-Required Software
-Package	Version	Purpose
-Python	3.8+	Application runtime
-pip	Latest	Python package management
-git	Any	Installation and updates
-openssl	Any	SSL certificate generation
+#### Operating System
+    Linux (any modern distribution)
+    Tested on: Ubuntu 22.04, Debian 12, Raspberry Pi OS (64-bit)
+#### Required Software Package	Version	Purpose
+    Python	3.8+    Application runtime
+    pip	Latest    Python package management
+    git    Any	Installation and updates
+    openssl    Any	SSL certificate generation
 ### Required Python Packages
 #### Installed automatically during setup
     Flask==3.0.0
@@ -274,8 +273,8 @@ To share the application over WiFi:
     sudo systemctl status ham-radio-app
 
 # Docker Installation
-Docker provides an isolated, reproducible environment
-and is the recommended production deployment method.
+Docker provides an isolated, reproducible environment\
+and is the recommended production deployment method.\
 ### Prerequisites
 
 ### Install Docker
@@ -390,16 +389,16 @@ The application runs on Raspberry Pi 4 with Docker:
 
 ### Available Plugins
 Plugins are located in plugins/implementations/. Each plugin provides its own UI page accessible from the Dashboard and navigation menu.
-
-Plugin	Description	External Software Required 
-FLdigi	Digital modes: PSK31, RTTY, Olivia, MT63, CW, WSPR, and 30+ more	FLdigi
-WSJT-X	Weak signal modes: FT8, FT4, JT65, JT9, WSPR, Q65, MSK144	WSJT-X
-Winlink	Email over radio via Pat Winlink client (Telnet, AX.25, VARA)	Pat Winlink
-GrayWolf	Winlink gateway client for Linux	GrayWolf
-OpenWebRX	Multi-user web SDR receiver with waterfall display	OpenWebRX
-QSSTV	Slow Scan Television (SSTV) receive and transmit	QSSTV
-SatDump	Weather satellite and GOES/METEOR/NOAA image reception	SatDump
-SDR Monitor	Real-time spectrum monitoring	sdr-monitor
+\
+| Plugin | Description | External Software Required | 
+| FLdigi | Digital modes: PSK31, RTTY, Olivia, MT63, CW, WSPR, and 30+ more | FLdigi |
+| WSJT-X | Weak signal modes: FT8, FT4, JT65, JT9, WSPR, Q65, MSK144 | WSJT-X |
+| Winlink | Email over radio via Pat Winlink client (Telnet, AX.25, VARA) | Pat Winlink |
+| GrayWolf | Winlink gateway client for Linux | GrayWolf |
+| OpenWebRX | Multi-user web SDR receiver with waterfall display | OpenWebRX |
+| QSSTV | Slow Scan Television (SSTV) receive and transmit | QSSTV |
+| SatDump | Weather satellite and GOES/METEOR/NOAA image reception | SatDump |
+| SDR Monitor | Real-time spectrum monitoring | sdr-monitor |
 
 ### Installing Plugins
 Plugins are installed by copying them to the plugins/implementations/ directory. 
@@ -430,7 +429,6 @@ Or download an individual plugin:
     ls plugins/implementations/
 
 Your plugins/implementations/ directory should look like this:
-
 plugins/implementations//
 ├── __init__.py//
 ├── fldigi//
@@ -447,53 +445,50 @@ plugins/implementations//
     └── .../
 
 #### Step 3 — Restart the Application
-
 ##### Standard installation
     source venv/bin/activate
     python app.py
-
 ##### Or if running as a service
     sudo systemctl restart ham-radio-app
-
 ##### Or Docker
     docker compose restart app
-
 #### Step 4 — First Run (Automatic Dependency Installation)
-When the application starts, each plugin checks for its required dependencies. If they are not installed, the plugin will:
+When the application starts, each plugin checks for its required dependencies.\ 
+If they are not installed, the plugin will:
     - Display an Install button on its page
     - You can also click Install from the plugin page to trigger installation
     - Installation progress is shown in real time
-     -Some plugins (like SatDump) may take 15–30 minutes to build from source
+    - Some plugins (like SatDump) may take 15–30 minutes to build from source
     Note: Installation requires an internet connection. Some plugins require sudo for system package installation.
 
 #### Step 5 — Configure the Plugin
 After installation:
-[ ] Navigate to the plugin page via the Dashboard or Plugins menu
-[ ] Click Settings
-[ ] Configure the plugin for your station
-[ ] Save settings and start the plugin
+-[ ] Navigate to the plugin page via the Dashboard or Plugins menu
+-[ ] Click Settings
+-[ ] Configure the plugin for your station
+-[ ] Save settings and start the plugin
 ##### Plugin-Specific Requirements
 ###### FLdigi
-[ ] FLdigi must have XML-RPC enabled
-[ ] In FLdigi: Configure → XML-RPC
-[ ] Set Host: localhost, Port: 7362
-[ ] Enable: "XML-RPC server"
+-[ ] FLdigi must have XML-RPC enabled
+-[ ] In FLdigi: Configure → XML-RPC
+-[ ] Set Host: localhost, Port: 7362
+-[ ] Enable: "XML-RPC server"
 
 ##### WSJT-X
-[ ] WSJT-X must have UDP enabled
-[ ] In WSJT-X: File → Settings → Reporting
-[ ] Set UDP Server: localhost
-[ ] Set Port: 2237
-[ ]Enable: "Accept UDP requests"
+-[ ] WSJT-X must have UDP enabled
+-[ ] In WSJT-X: File → Settings → Reporting
+-[ ] Set UDP Server: localhost
+-[ ] Set Port: 2237
+-[ ] Enable: "Accept UDP requests"
 
 ##### Winlink (Pat)
-[ ] Pat is installed automatically
-[ ] Configure callsign in plugin settings
-[ ] Supports: Telnet, AX.25, VARA HF, VARA FM, ARDOP
+-[ ] Pat is installed automatically
+-[ ] Configure callsign in plugin settings
+-[ ] Supports: Telnet, AX.25, VARA HF, VARA FM, ARDOP
 
 ##### QSSTV
-[ ] QSSTV requires a display (X11)
-[ ] For headless servers, 
+-[ ] QSSTV requires a display (X11)
+-[ ] For headless servers, 
 ###### use Xvfb:
     sudo apt-get install xvfb
     Xvfb :1 -screen 0 1024x768x24 &
@@ -501,16 +496,16 @@ After installation:
     Set Display=:1 in QSSTV plugin settings
 
 ##### SatDump
-[ ] SatDump build requires ~4 GB disk space
-[ ] Build time: 15-30 minutes on Raspberry Pi 4
+-[ ] SatDump build requires ~4 GB disk space
+-[ ] Build time: 15-30 minutes on Raspberry Pi 4
 ###### Recommended antennas:
-[ ] VHF (137 MHz): V-dipole or QFH for NOAA/METEOR
-[ ] L-Band (1.7 GHz): Patch antenna for GOES/Meteosat
+-[ ] VHF (137 MHz): V-dipole or QFH for NOAA/METEOR
+-[ ] L-Band (1.7 GHz): Patch antenna for GOES/Meteosat
 
 #### OpenWebRX
-[ ] OpenWebRX is installed via Docker (recommended)
-[ ] Requires Docker to be installed
-[ ] Exposes web interface on port 8073
+-[ ] OpenWebRX is installed via Docker (recommended)
+-[ ] Requires Docker to be installed
+-[ ] Exposes web interface on port 8073
 
 #### Canadian Callsign Database
 The application can validate and display information about Canadian amateur radio operators using the official ISED (Innovation, Science and Economic Development Canada) database.
@@ -521,10 +516,10 @@ What It Does:\
     - Quick lookup of any Canadian callsign from the dashboard
 
 ##### Downloading the Database
-[ ] Log in to the application
-[ ] On the Dashboard, click the database icon 🗄️ in the Operator card
-[ ] Click Download / Update Database
-[ ] Wait for the download to complete (~1–2 minutes)
+-[ ] Log in to the application
+-[ ] On the Dashboard, click the database icon 🗄️ in the Operator card
+-[ ] Click Download / Update Database
+-[ ] Wait for the download to complete (~1–2 minutes)
 
 ##### The database contains:
 80,000+ licensed Canadian operators
@@ -563,14 +558,14 @@ Firefox: Click "Advanced" → "Accept the Risk and Continue"\
 Safari: Click "Show Details" → "visit this website"\
 
 ### First Time Setup
-[ ] Browse to https://localhost:5000
-[ ] Register a new account with your callsign
-[ ] Log in with your credentials
+-[ ] Browse to https://localhost:5000
+-[ ] Register a new account with your callsign
+-[ ] Log in with your credentials
 
-####On the Dashboard, verify your callsign is shown
-[ ] Click the database icon to download the Canadian callsign database
-[ ] Navigate to Settings for any plugin you want to use
-[ ] Check the Logbook to start logging contacts
+#### On the Dashboard, verify your callsign is shown
+-[ ] Click the database icon to download the Canadian callsign database
+-[ ] Navigate to Settings for any plugin you want to use
+-[ ] Check the Logbook to start logging contacts
 
 ## Troubleshooting
 ### Application Will Not Start
@@ -597,10 +592,10 @@ Safari: Click "Show Details" → "visit this website"\
     ls -l /dev/ttyUSB*
 #### Check user permissions
     groups $USER
-    [ ] Should include 'dialout'
+    -[ ] Should include 'dialout'
         - Add to dialout group if missing
         - sudo usermod -a -G dialout $USER
-    [ ] Log out and back in
+    -[ ] Log out and back in
 
 ### RTL-SDR Not Working
 #### Check RTL-SDR is detected
@@ -749,8 +744,8 @@ Contributions are welcome! Here is how to get started:
     Add templates to templates/ inside your plugin directory
     Test discovery with python check_plugins.py
 ## Acknowledgements
-This application integrates with many excellent open-source projects:
-
+This application integrates with many excellent open-source projects:\
+\
 Flask — Web framework\
 Hamlib — Radio control library\
 FLdigi — Digital modes modem\
