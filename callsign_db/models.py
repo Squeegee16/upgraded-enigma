@@ -1,14 +1,41 @@
 """
 Callsign Database SQLAlchemy Model
 ====================================
-Defines the SQLAlchemy model for storing Canadian
-amateur radio operator records from the ISED database.
+Stores Canadian amateur radio operator records from
+the ISED amateur_delim.zip database.
 
-The model uses a separate SQLite database file from
-the main application database for performance and
-to allow easy replacement when the ISED data is updated.
+Field Reference (from readme_amat_delim.txt):
+    Each record is semicolon-delimited with fields:
 
-Fields mirror the ISED amateur_delim.zip structure.
+    Position  Field
+    --------  -----
+    0         Callsign
+    1         Given Names
+    2         Surname
+    3         Street Address
+    4         City
+    5         Province
+    6         Postal/ZIP Code
+    7         BASIC Qualification         (A) - True/False
+    8         5WPM Qualification          (B) - True/False
+    9         12WPM Qualification         (C) - True/False
+    10        ADVANCED Qualification      (D) - True/False
+    11        Basic with Honours          (E) - True/False
+    12        Club Name (field 1)
+    13        Club Name (field 2)
+    14        Club Address
+    15        Club City
+    16        Club Province
+    17        Club Postal/ZIP Code
+
+Qualification Letter Codes (stored in fields 7-11):
+    A  =  Basic
+    B  =  5 WPM Morse Code
+    C  =  12 WPM Morse Code
+    D  =  Advanced
+    E  =  Basic with Honours
+
+Source: https://apc-cap.ic.gc.ca/datafiles/amateur_delim.zip
 """
 
 from datetime import datetime
@@ -19,34 +46,24 @@ class CanadianOperator(db.Model):
     """
     Canadian amateur radio operator record.
 
-    Stores data from the ISED amateur radio database
-    (https://apc-cap.ic.gc.ca/datafiles/amateur_delim.zip).
+    Reflects the exact structure of the ISED
+    amateur_delim.zip semicolon-delimited file.
 
-    Attributes:
-        id: Primary key
-        callsign: Amateur radio callsign (indexed, unique)
-        surname: Operator surname
-        given_name: Operator given name(s)
-        city: City of licence
-        province: Province/Territory abbreviation
-        postal_code: Canadian postal code
-        qual_basic: Basic qualification flag
-        qual_advanced: Advanced qualification flag
-        qual_honours: Basic with Honours flag
-        qual_morse_5: Morse code 5 WPM flag
-        qual_morse_12: Morse code 12 WPM flag
-        club_name: Club name (for club callsigns)
-        expiry_date: Licence expiry date string
-        created_at: Record creation timestamp
-        updated_at: Record last update timestamp
+    Qualification fields store True/False based on
+    whether the single letter code (A-E) is present
+    in the corresponding field of the source file.
     """
 
     __tablename__ = 'canadian_operators'
 
-    # Primary key
+    # -----------------------------------------------------------
+    # Primary Key
+    # -----------------------------------------------------------
     id = db.Column(db.Integer, primary_key=True)
 
-    # Callsign - indexed for fast lookup
+    # -----------------------------------------------------------
+    # Callsign - unique, indexed for fast lookup
+    # -----------------------------------------------------------
     callsign = db.Column(
         db.String(20),
         unique=True,
@@ -54,166 +71,288 @@ class CanadianOperator(db.Model):
         index=True
     )
 
-    # Operator name
+    # -----------------------------------------------------------
+    # Operator Identity
+    # Fields 1 and 2 from source file
+    # -----------------------------------------------------------
+    given_names = db.Column(db.String(150), nullable=True)
     surname = db.Column(db.String(100), nullable=True)
-    given_name = db.Column(db.String(100), nullable=True)
 
-    # Location
+    # -----------------------------------------------------------
+    # Address
+    # Fields 3-6 from source file
+    # -----------------------------------------------------------
+    street_address = db.Column(db.String(200), nullable=True)
     city = db.Column(db.String(100), nullable=True)
     province = db.Column(db.String(5), nullable=True)
     postal_code = db.Column(db.String(10), nullable=True)
 
-    # Qualifications (stored as booleans from qualification codes)
-    qual_basic = db.Column(db.Boolean, default=False)
-    qual_advanced = db.Column(db.Boolean, default=False)
-    qual_honours = db.Column(db.Boolean, default=False)
-    qual_morse_5 = db.Column(db.Boolean, default=False)
-    qual_morse_12 = db.Column(db.Boolean, default=False)
+    # -----------------------------------------------------------
+    # Qualifications
+    # Fields 7-11 from source file
+    # Each field contains the letter code if held, or is blank
+    #
+    #   qual_basic        (A) - Basic qualification
+    #   qual_morse_5wpm   (B) - 5 WPM Morse code
+    #   qual_morse_12wpm  (C) - 12 WPM Morse code
+    #   qual_advanced     (D) - Advanced qualification
+    #   qual_honours      (E) - Basic with Honours
+    # -----------------------------------------------------------
+    qual_basic = db.Column(
+        db.Boolean, default=False, nullable=False
+    )
+    qual_morse_5wpm = db.Column(
+        db.Boolean, default=False, nullable=False
+    )
+    qual_morse_12wpm = db.Column(
+        db.Boolean, default=False, nullable=False
+    )
+    qual_advanced = db.Column(
+        db.Boolean, default=False, nullable=False
+    )
+    qual_honours = db.Column(
+        db.Boolean, default=False, nullable=False
+    )
 
-    # Raw qualification string for display
-    qualifications = db.Column(db.String(50), nullable=True)
+    # -----------------------------------------------------------
+    # Club Information
+    # Fields 12-17 from source file
+    # Only populated for club/repeater callsigns
+    # -----------------------------------------------------------
+    club_name_1 = db.Column(db.String(200), nullable=True)
+    club_name_2 = db.Column(db.String(200), nullable=True)
+    club_address = db.Column(db.String(200), nullable=True)
+    club_city = db.Column(db.String(100), nullable=True)
+    club_province = db.Column(db.String(5), nullable=True)
+    club_postal_code = db.Column(db.String(10), nullable=True)
 
-    # Club information
-    club_name = db.Column(db.String(200), nullable=True)
-
-    # Licence details
-    expiry_date = db.Column(db.String(20), nullable=True)
-
-    # Record metadata
+    # -----------------------------------------------------------
+    # Record Metadata
+    # -----------------------------------------------------------
     created_at = db.Column(
         db.DateTime,
-        default=datetime.utcnow
+        default=datetime.utcnow,
+        nullable=False
     )
     updated_at = db.Column(
         db.DateTime,
         default=datetime.utcnow,
-        onupdate=datetime.utcnow
+        onupdate=datetime.utcnow,
+        nullable=False
     )
+
+    # -----------------------------------------------------------
+    # Qualification display label map
+    # Maps field letter -> human readable string
+    # -----------------------------------------------------------
+    QUAL_LABELS = {
+        'A': 'Basic',
+        'B': '5 WPM Morse',
+        'C': '12 WPM Morse',
+        'D': 'Advanced',
+        'E': 'Basic with Honours',
+    }
+
+    # -----------------------------------------------------------
+    # Badge colour map for UI display
+    # -----------------------------------------------------------
+    QUAL_BADGE_COLOURS = {
+        'A': 'primary',    # Basic        -> blue
+        'B': 'info',       # 5 WPM Morse  -> cyan
+        'C': 'success',    # 12 WPM Morse -> green
+        'D': 'danger',     # Advanced     -> red
+        'E': 'warning',    # Honours      -> yellow
+    }
+
+    # Badge icon map
+    QUAL_BADGE_ICONS = {
+        'A': 'certificate',
+        'B': 'dot-circle',
+        'C': 'dot-circle',
+        'D': 'star',
+        'E': 'award',
+    }
 
     def get_full_name(self):
         """
-        Get operator's full name.
+        Get operator's full name in display format.
+
+        For individual operators: Given Names + SURNAME
+        For club callsigns: Club Name (field 1) or field 2
 
         Returns:
-            str: Full name (Given Name + Surname) or
-                 club name for club callsigns
+            str: Full name string or 'Unknown'
         """
-        if self.club_name:
-            return self.club_name
+        # Check for club callsign first
+        club = self.club_name_1 or self.club_name_2
+        if club and club.strip():
+            return club.strip()
 
+        # Individual operator
         parts = []
-        if self.given_name:
-            parts.append(self.given_name.strip())
-        if self.surname:
+        if self.given_names and self.given_names.strip():
+            # Title-case given names
+            parts.append(self.given_names.strip().title())
+        if self.surname and self.surname.strip():
+            # Upper-case surname (Canadian convention)
             parts.append(self.surname.strip().upper())
 
         return ' '.join(parts) if parts else 'Unknown'
 
-    def get_qualification_list(self):
+    def get_held_qualifications(self):
         """
-        Get list of qualification names.
+        Get list of qualification letter codes held.
+
+        Returns codes in the defined order A -> E.
 
         Returns:
-            list: Human-readable qualification strings
+            list: Letter codes for held qualifications
+                  e.g. ['A', 'D'] for Basic + Advanced
         """
-        quals = []
+        held = []
 
+        if self.qual_basic:
+            held.append('A')
+        if self.qual_morse_5wpm:
+            held.append('B')
+        if self.qual_morse_12wpm:
+            held.append('C')
         if self.qual_advanced:
-            quals.append('Advanced')
+            held.append('D')
         if self.qual_honours:
-            quals.append('Basic with Honours')
-        elif self.qual_basic:
-            quals.append('Basic')
-        if self.qual_morse_12:
-            quals.append('Morse 12 WPM')
-        elif self.qual_morse_5:
-            quals.append('Morse 5 WPM')
+            held.append('E')
 
-        return quals
+        return held
+
+    def get_qualification_labels(self):
+        """
+        Get human-readable qualification label strings.
+
+        Returns:
+            list: Qualification name strings
+                  e.g. ['Basic', 'Advanced']
+        """
+        return [
+            self.QUAL_LABELS[code]
+            for code in self.get_held_qualifications()
+        ]
 
     def get_qualification_badges(self):
         """
-        Get qualification badge data for UI display.
+        Get qualification badge data for UI rendering.
+
+        Each badge has label, colour, icon, and code
+        for flexible template rendering.
 
         Returns:
-            list: Dicts with 'label' and 'colour' keys
+            list: Badge dictionaries with display data
         """
         badges = []
-
-        if self.qual_advanced:
+        for code in self.get_held_qualifications():
             badges.append({
-                'label': 'Advanced',
-                'colour': 'danger',
-                'icon': 'star'
+                'code': code,
+                'label': self.QUAL_LABELS[code],
+                'colour': self.QUAL_BADGE_COLOURS[code],
+                'icon': self.QUAL_BADGE_ICONS[code],
             })
-        if self.qual_honours:
-            badges.append({
-                'label': 'Basic Honours',
-                'colour': 'warning',
-                'icon': 'award'
-            })
-        elif self.qual_basic:
-            badges.append({
-                'label': 'Basic',
-                'colour': 'primary',
-                'icon': 'certificate'
-            })
-        if self.qual_morse_12:
-            badges.append({
-                'label': 'Morse 12 WPM',
-                'colour': 'success',
-                'icon': 'dot-circle'
-            })
-        elif self.qual_morse_5:
-            badges.append({
-                'label': 'Morse 5 WPM',
-                'colour': 'info',
-                'icon': 'dot-circle'
-            })
-
         return badges
+
+    def is_club(self):
+        """
+        Determine if this is a club callsign.
+
+        Returns:
+            bool: True if club_name_1 or club_name_2 present
+        """
+        return bool(
+            (self.club_name_1 and self.club_name_1.strip()) or
+            (self.club_name_2 and self.club_name_2.strip())
+        )
+
+    def get_location_display(self):
+        """
+        Get formatted location string for display.
+
+        Returns:
+            str: 'City, Province' or whichever is available
+        """
+        parts = []
+        city = (
+            self.club_city if self.is_club() else self.city
+        )
+        province = (
+            self.club_province
+            if self.is_club() else self.province
+        )
+
+        if city and city.strip():
+            parts.append(city.strip().title())
+        if province and province.strip():
+            parts.append(province.strip().upper())
+
+        return ', '.join(parts) if parts else ''
 
     def to_dict(self):
         """
-        Convert record to dictionary for JSON serialisation.
+        Serialise record to dictionary for JSON responses.
 
         Returns:
-            dict: Operator data
+            dict: Complete operator record
         """
         return {
             'callsign': self.callsign,
             'full_name': self.get_full_name(),
+            'given_names': self.given_names,
             'surname': self.surname,
-            'given_name': self.given_name,
+            'street_address': self.street_address,
             'city': self.city,
             'province': self.province,
             'postal_code': self.postal_code,
-            'qualifications': self.get_qualification_list(),
-            'qualification_badges': self.get_qualification_badges(),
-            'club_name': self.club_name,
-            'expiry_date': self.expiry_date,
-            'is_club': bool(self.club_name),
+            'location': self.get_location_display(),
+            # Qualification codes held (e.g. ['A', 'D'])
+            'qual_codes': self.get_held_qualifications(),
+            # Human readable names
+            'qualifications': self.get_qualification_labels(),
+            # Badge data for UI
+            'qualification_badges': (
+                self.get_qualification_badges()
+            ),
+            # Individual flags
+            'qual_basic': self.qual_basic,
+            'qual_morse_5wpm': self.qual_morse_5wpm,
+            'qual_morse_12wpm': self.qual_morse_12wpm,
+            'qual_advanced': self.qual_advanced,
+            'qual_honours': self.qual_honours,
+            # Club fields
+            'is_club': self.is_club(),
+            'club_name_1': self.club_name_1,
+            'club_name_2': self.club_name_2,
+            'club_address': self.club_address,
+            'club_city': self.club_city,
+            'club_province': self.club_province,
         }
 
     def __repr__(self):
         return (
-            f'<CanadianOperator {self.callsign} - '
+            f'<CanadianOperator {self.callsign} '
             f'{self.get_full_name()}>'
         )
 
 
 class DatabaseMeta(db.Model):
     """
-    Metadata table for tracking database download status.
+    Key/value metadata for the callsign database.
 
-    Stores information about when the ISED database
-    was last downloaded and how many records it contains.
+    Tracks download status, record count, timestamps,
+    and source information.
     """
 
     __tablename__ = 'canadian_db_meta'
 
     id = db.Column(db.Integer, primary_key=True)
-    key = db.Column(db.String(50), unique=True, nullable=False)
+    key = db.Column(
+        db.String(50), unique=True, nullable=False
+    )
     value = db.Column(db.Text, nullable=True)
     updated_at = db.Column(
         db.DateTime,
@@ -224,32 +363,43 @@ class DatabaseMeta(db.Model):
     @staticmethod
     def get(key, default=None):
         """
-        Get a metadata value by key.
+        Get metadata value by key.
 
         Args:
             key: Metadata key string
-            default: Default value if not found
+            default: Default if key not found
 
         Returns:
-            str: Metadata value or default
+            str: Stored value or default
         """
-        record = DatabaseMeta.query.filter_by(key=key).first()
+        record = DatabaseMeta.query.filter_by(
+            key=key
+        ).first()
         return record.value if record else default
 
     @staticmethod
     def set(key, value):
         """
-        Set a metadata value.
+        Set a metadata key/value pair.
 
         Args:
             key: Metadata key string
-            value: Value to store
+            value: Value to store (converted to str)
         """
-        record = DatabaseMeta.query.filter_by(key=key).first()
+        from models import db as _db
+
+        record = DatabaseMeta.query.filter_by(
+            key=key
+        ).first()
+
         if record:
             record.value = str(value)
             record.updated_at = datetime.utcnow()
         else:
-            record = DatabaseMeta(key=key, value=str(value))
-            db.session.add(record)
-        db.session.commit()
+            record = DatabaseMeta(
+                key=key,
+                value=str(value)
+            )
+            _db.session.add(record)
+
+        _db.session.commit()
