@@ -1,11 +1,11 @@
 <div align="left">
-ooooo   ooooo       .o.       ooo        ooooo    ooooooooo.         .o.       oooooooooo.   
-`888'   `888'      .888.      `88.       .888'    `888   `Y88.      .888.      `888'   `Y8b  
- 888     888      .8"888.      888b     d'888      888   .d88'     .8"888.      888      888 
- 888ooooo888     .8' `888.     8 Y88. .P  888      888ooo88P'     .8' `888.     888      888 
- 888     888    .88ooo8888.    8  `888'   888      888`88b.      .88ooo8888.    888      888 
- 888     888   .8'     `888.   8    Y     888      888  `88b.   .8'     `888.   888     d88' 
-o888o   o888o o88o     o8888o o8o        o888o    o888o  o888o o88o     o8888o o888bood8P'   
+ooooo   ooooo       .o.       ooo        ooooo    ooooooooo.         .o.       oooooooooo.\   
+`888'   `888'      .888.      `88.       .888'    `888   `Y88.      .888.      `888'   `Y8b\
+ 888     888      .8"888.      888b     d'888      888   .d88'     .8"888.      888      888\ 
+ 888ooooo888     .8' `888.     8 Y88. .P  888      888ooo88P'     .8' `888.     888      888\
+ 888     888    .88ooo8888.    8  `888'   888      888`88b.      .88ooo8888.    888      888\
+ 888     888   .8'     `888.   8    Y     888      888  `88b.   .8'     `888.   888     d88'\ 
+o888o   o888o o88o     o8888o o8o        o888o    o888o  o888o o88o     o8888o o888bood8P'\   
 
 A modular, web-based ham radio station control and logging application for Linux
 
@@ -17,23 +17,23 @@ Platform
 
 </div>
 
-## Table of Contents
-### Overview
-### Features
-### Hardware Requirements
-### Software Requirements
-### Quick Start
-### Installation
-### Standard Installation
-### Docker Installation
-### Configuration
-### Available Plugins
-### Installing Plugins
-### Canadian Callsign Database
-### Accessing the Application
-### Troubleshooting
-### Contributing
-### License
+### Table of Contents
+#### Overview
+#### Features
+#### Hardware Requirements
+#### Software Requirements
+#### Quick Start
+#### Installation
+#### Standard Installation
+#### Docker Installation
+#### Configuration
+#### Available Plugins
+#### Installing Plugins
+#### Canadian Callsign Database
+#### Accessing the Application
+#### Troubleshooting
+#### Contributing
+#### License
 
 ## Overview
 Ham Radio App is a Linux-based, web-accessible station control application for amateur radio operators. It runs on a local WiFi hotspot and is accessible from any laptop or tablet on the network. The application uses a modular plugin architecture allowing integration with popular ham radio software including FLdigi, WSJT-X, Winlink, QSSTV, SatDump, and more.
@@ -69,65 +69,68 @@ Ham Radio App is a Linux-based, web-accessible station control application for a
     Callsign format validation (international formats)
     Canadian ISED callsign database validation with name and qualification display
     Registration validated against the official ISED amateur radio database
-### 📊 Dashboard
-Real-time UTC clock display\
-Live GPS location and Maidenhead grid square\
-Connected device status (GPS, Radio, RTL-SDR)\
-Plugin status overview with one-click launch buttons\
-Operator name and qualification display from ISED database\
-Recent contacts summary\
+### 📊 DashboardReal-time UTC clock display
+    Live GPS location and Maidenhead grid square
+    Connected device status (GPS, Radio, RTL-SDR)
+    Plugin status overview with one-click launch buttons
+    Operator name and qualification display from ISED database
+    Recent contacts summary
 ### 📖 Central Logbook
-Log contacts with callsign, mode, band, frequency, grid, RST, and notes\
-Filter and search by any field\
-Export in ADIF, CSV, and JSON formats\
-Contact statistics (by mode, band, unique callsigns)\
-Paginated contact list\
+    Log contacts with callsign, mode, band, frequency, grid, RST, and notes
+    Filter and search by any field
+    Export in ADIF, CSV, and JSON formats
+    Contact statistics (by mode, band, unique callsigns)
+    Paginated contact list
 ## 🔌 Plugin Architecture
-Automatic plugin discovery on startup\
-First-run dependency installation for each plugin\
-Each plugin has its own dedicated UI page\
-All plugins integrate with the central logbook\
-GPS and radio device data shared across all plugins\
+    Automatic plugin discovery on startup
+    First-run dependency installation for each plugin
+    Each plugin has its own dedicated UI page
+    All plugins integrate with the central logbook
+    GPS and radio device data shared across all plugins
 ## 🛰️ Device Integration
-RTL-SDR (via rtl-sdr tools and direct USB)\
-Serial GPS (NMEA protocol, any USB GPS dongle)\
-Yaesu FT-891 (via Hamlib — compatible with 400+ radios)\
-Mock device mode for development and testing without hardware\
+    RTL-SDR (via rtl-sdr tools and direct USB)
+    Serial GPS (NMEA protocol, any USB GPS dongle)
+    Yaesu FT-891 (via Hamlib — compatible with 400+ radios)
+    Mock device mode for development and testing without hardware
 ## 🔒 Security
-HTTPS with self-signed certificate (generated automatically)\
-CSRF protection on all forms\
-Session-based authentication\
-Input sanitisation throughout\
-Non-root Docker container execution\
+    HTTPS with self-signed certificate (generated automatically)
+    CSRF protection on all forms
+    Session-based authentication
+    Input sanitisation throughout
+    Non-root Docker container execution
 ## 🐳 Docker Support
-Multi-stage Docker build for minimal image size\
-Docker Compose with persistent volumes\
-Automated database backup service\
-Device passthrough for USB hardware\
+    Multi-stage Docker build for minimal image size
+    Docker Compose with persistent volumes
+    Automated database backup service
+    Device passthrough for USB hardware
 ## Hardware Requirements
-Minimum (Software / Testing) Component	Requirement
-CPU	1 GHz single-core (x86_64 or ARM)
-RAM	512 MB
-Storage	4 GB free
-Network	WiFi adapter (hotspot capable)
-OS	Any Linux distribution (Debian, Ubuntu, Raspberry Pi OS, etc.)
+| Minimum (Software / Testing) | Component | Requirement |
+| ------------------------------------------------------ |
+| CPU | 1 GHz single-core | (x86_64 or ARM) |
+| RAM | 512 MB |
+| Storage | 4 GB free |
+| Network | WiFi adapter | (hotspot capable) |
+| OS | Any Linux distribution | Debian, Ubuntu, Raspberry Pi OS, etc. |
+| ------------------------------------------------------------------- |
+
 ## Recommended (Full Station)
-Component	Requirement
-CPU	Quad-core 1.5 GHz+ (Raspberry Pi 4 or better)
-RAM	2 GB+
-Storage	16 GB+ (SSD preferred)
-Network	Dual-band WiFi adapter or dedicated WiFi dongle
-OS	Ubuntu 22.04 LTS / Debian 12 / Raspberry Pi OS (64-bit)
+| Component | Requirement |
+| ----------------------- |
+| CPU | Quad-core 1.5 GHz+ (Raspberry Pi 4 or better)|
+| RAM | 2 GB+ |
+| Storage |16 GB+ | SSD preferred |
+| Network | Dual-band WiFi adapter or dedicated WiFi dongle |
+| OS | Ubuntu 22.04 LTS / Debian 12 / Raspberry Pi OS | 64-bit |
 
 ## Optional Hardware (for Plugin Features)
-Device	Purpose	Notes
-RTL-SDR v3 dongle	SDR receiver, satellite, spectrum	~$25 — Required for SDR/satellite plugins
-USB GPS receiver	Position reporting, grid square	Any NMEA-compatible USB GPS (~$15)
-Yaesu FT-891	HF radio control	Any Hamlib-compatible radio works
-USB Serial adapter	Radio CAT control	If radio uses RS-232
-SMA antenna	SDR reception	Dipole for VHF, whip for HF
-VHF/UHF antenna	137 MHz weather satellites	V-dipole or QFH recommended
-L-Band antenna	1.7 GHz satellite imagery	Patch antenna required
+| Device | Purpose | Notes |
+| RTL-SDR v3 dongle | SDR receiver | Required for SDR/satellite plugins |
+| USB GPS receiver | Position reporting, grid square | Any NMEA-compatible USB GPS|
+| Yaesu FT-891 | HF radio control | Any Hamlib-compatible radio works |
+| USB Serial adapter | Radio CAT control | If radio uses RS-232 |
+| SMA antenna| SDR reception | Dipole for VHF, whip for HF |
+| VHF/UHF antenna | 137 MHz weather satellites | V-dipole or QFH recommended |
+| L-Band antenna | 1.7 GHz satellite imagery | Patch antenna required |
 
 ## Software Requirements
 #### Operating System
