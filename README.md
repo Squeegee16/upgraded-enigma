@@ -1,11 +1,11 @@
 <div align="left">
-ooooo   ooooo       .o.       ooo        ooooo    ooooooooo.         .o.       oooooooooo.\   
-`888'   `888'      .888.      `88.       .888'    `888   `Y88.      .888.      `888'   `Y8b\
- 888     888      .8"888.      888b     d'888      888   .d88'     .8"888.      888      888\ 
- 888ooooo888     .8' `888.     8 Y88. .P  888      888ooo88P'     .8' `888.     888      888\
- 888     888    .88ooo8888.    8  `888'   888      888`88b.      .88ooo8888.    888      888\
- 888     888   .8'     `888.   8    Y     888      888  `88b.   .8'     `888.   888     d88'\ 
-o888o   o888o o88o     o8888o o8o        o888o    o888o  o888o o88o     o8888o o888bood8P'\   
+ooooo   ooooo       .o.       ooo        ooooo    ooooooooo.         .o.       oooooooooo.
+`888'   `888'      .888.      `88.       .888'    `888   `Y88.      .888.      `888'   `Y8b
+ 888     888      .8"888.      888b     d'888      888   .d88'     .8"888.      888      888
+ 888ooooo888     .8' `888.     8 Y88. .P  888      888ooo88P'     .8' `888.     888      888
+ 888     888    .88ooo8888.    8  `888'   888      888`88b.      .88ooo8888.    888      888
+ 888     888   .8'     `888.   8    Y     888      888  `88b.   .8'     `888.   888     d88'
+o888o   o888o o88o     o8888o o8o        o888o    o888o  o888o o88o     o8888o o888bood8P'
 
 A modular, web-based ham radio station control and logging application for Linux
 
@@ -104,26 +104,30 @@ Ham Radio App is a Linux-based, web-accessible station control application for a
     Automated database backup service
     Device passthrough for USB hardware
 ## Hardware Requirements
+
 | Minimum (Software / Testing) | Component | Requirement |
-| ------------------------------------------------------ |
+| --- | --- | --- |
 | CPU | 1 GHz single-core | (x86_64 or ARM) |
 | RAM | 512 MB |
 | Storage | 4 GB free |
 | Network | WiFi adapter | (hotspot capable) |
 | OS | Any Linux distribution | Debian, Ubuntu, Raspberry Pi OS, etc. |
-| ------------------------------------------------------------------- |
+
 
 ## Recommended (Full Station)
+
 | Component | Requirement |
-| ----------------------- |
+| --- | --- |
 | CPU | Quad-core 1.5 GHz+ (Raspberry Pi 4 or better)|
 | RAM | 2 GB+ |
-| Storage |16 GB+ | SSD preferred |
+| Storage |16 GB+  SSD preferred |
 | Network | Dual-band WiFi adapter or dedicated WiFi dongle |
-| OS | Ubuntu 22.04 LTS / Debian 12 / Raspberry Pi OS | 64-bit |
+| OS | Ubuntu 22.04 LTS / Debian 12 / Raspberry Pi OS 64-bit |
 
 ## Optional Hardware (for Plugin Features)
+
 | Device | Purpose | Notes |
+| --- | --- | --- |
 | RTL-SDR v3 dongle | SDR receiver | Required for SDR/satellite plugins |
 | USB GPS receiver | Position reporting, grid square | Any NMEA-compatible USB GPS|
 | Yaesu FT-891 | HF radio control | Any Hamlib-compatible radio works |
@@ -342,22 +346,22 @@ The application runs on Raspberry Pi 4 with Docker:
 
 ## Configuration
 ### Environment Variables
-    Variable	Default	Description
-    FLASK_ENV	development	development or production
-    SECRET_KEY	Auto-generated	Session encryption key (auto-created on first run)
-    DATABASE_URL	sqlite:///data/db/ham_radio.db	Database connection string
-    USE_MOCK_DEVICES	True	Use simulated devices for testing
-    GPS_SERIAL_PORT	/dev/ttyUSB0	GPS device serial port
-    GPS_BAUD_RATE	9600	GPS baud rate
-    RADIO_MODEL	1035	Hamlib radio model number
-    RADIO_PORT	/dev/ttyUSB1	Radio CAT serial port
-    RADIO_BAUD_RATE	38400	Radio CAT baud rate
-    SDR_DEVICE_INDEX	0	RTL-SDR device index
-    USE_SSL	True	Enable HTTPS
-    VALIDATE_CALLSIGNS	False	Check Canadian callsign database on registration
-    FLASK_HOST	0.0.0.0	Listen address
-    FLASK_PORT	5000	Listen port
-    TZ	UTC	Server timezone
+    Variable  Default  Description
+    FLASK_ENV  development  development or production
+    SECRET_KEY  Auto-generated  Session encryption key (auto-created on first run)
+    DATABASE_URL	  sqlite:///data/db/ham_radio.db  Database connection string
+    USE_MOCK_DEVICES  True  Use simulated devices for testing
+    GPS_SERIAL_PORT  /dev/ttyUSB0  GPS device serial port
+    GPS_BAUD_RATE  9600  GPS baud rate
+    RADIO_MODEL  1035  Hamlib radio model number
+    RADIO_PORT  /dev/ttyUSB1  Radio CAT serial port
+    RADIO_BAUD_RATE  38400  Radio CAT baud rate
+    SDR_DEVICE_INDEX  0  RTL-SDR device index
+    USE_SSL  True  Enable HTTPS
+    VALIDATE_CALLSIGNS  False  Check Canadian callsign database on registration
+    FLASK_HOST  0.0.0.0  Listen address
+    FLASK_PORT  5000  Listen port
+    TZ  UTC	Server  timezone
 
 ### Finding Your Hamlib Radio Model Number
 ##### List all supported radios
@@ -392,8 +396,9 @@ The application runs on Raspberry Pi 4 with Docker:
 
 ### Available Plugins
 Plugins are located in plugins/implementations/. Each plugin provides its own UI page accessible from the Dashboard and navigation menu.
-\
+
 | Plugin | Description | External Software Required | 
+| --- | --- | --- |
 | FLdigi | Digital modes: PSK31, RTTY, Olivia, MT63, CW, WSPR, and 30+ more | FLdigi |
 | WSJT-X | Weak signal modes: FT8, FT4, JT65, JT9, WSPR, Q65, MSK144 | WSJT-X |
 | Winlink | Email over radio via Pat Winlink client (Telnet, AX.25, VARA) | Pat Winlink |
