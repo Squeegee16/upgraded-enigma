@@ -223,7 +223,52 @@ def create_app(config_name='default'):
             </body>
             </html>
             ''', 403
-    
+    @app.route('/debug/plugins')
+    def debug_plugins():
+        """
+        Debug route to check plugin discovery status.
+        Remove in production.
+        """
+        import os
+        from flask_login import current_user
+
+        if not app.debug:
+            return "Debug mode only", 403
+
+        plugin_loader = app.extensions.get('plugin_loader')
+
+        info = {
+            'plugins_dir': app.config.get('PLUGINS_DIR'),
+            'plugins_dir_exists': os.path.exists(
+                app.config.get('PLUGINS_DIR', '')
+            ),
+            'loaded_plugins': [],
+            'plugins_dir_contents': []
+        }
+
+        # List plugins directory
+        plugins_dir = app.config.get('PLUGINS_DIR', '')
+        if os.path.exists(plugins_dir):
+            try:
+                info['plugins_dir_contents'] = (
+                    os.listdir(plugins_dir)
+                )
+            except Exception as e:
+                info['plugins_dir_error'] = str(e)
+
+        # Get loaded plugin info
+        if plugin_loader:
+            info['loaded_plugins'] = (
+                plugin_loader.get_plugin_list()
+            )
+
+        # Return as pretty JSON
+        import json
+        return (
+            f"<pre>{json.dumps(info, indent=2)}</pre>",
+            200,
+            {'Content-Type': 'text/html'}
+        )
     # Cleanup on shutdown
     @app.teardown_appcontext
     def shutdown_session(exception=None):
