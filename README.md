@@ -11,12 +11,10 @@
 <h2>
     <p> A modular, web-based ham radio station control and logging application for Linux</p>
 </h2>
-
-[Python](https://python.org/)
-[Flask](https://flask.palletsprojects.com/)
-[Docker](https://docker.com/)
-[Platform](https://linux.org/)
-
+<img src="https://img.shields.io/badge/Python-3.8%2B-blue?logo=python" alt="Python" class="my-2 rounded-lg max-w-full" loading="lazy">
+<img src="https://img.shields.io/badge/Flask-3.0-green?logo=flask" alt="Flask" class="my-2 rounded-lg max-w-full" loading="lazy">
+<img src="https://img.shields.io/badge/Docker-Supported-blue?logo=docker" alt="Docker" class="my-2 rounded-lg max-w-full" loading="lazy">
+<img src="https://img.shields.io/badge/Platform-Linux-orange?logo=linux" alt="Platform" class="my-2 rounded-lg max-w-full" loading="lazy">
 </div>
 
 ### Table of Contents
@@ -68,6 +66,7 @@ Ham Radio App is a Linux-based, web-accessible station control application for a
 
 ## Features
 <details>
+    
 ### 🔐 User Management
     Secure user registration and login with session management
     Bcrypt password hashing with strength enforcement
@@ -534,7 +533,7 @@ After installation:
 
 #### Canadian Callsign Database
 The application can validate and display information about Canadian amateur radio operators using the official ISED (Innovation, Science and Economic Development Canada) database.
-
+<details>
 What It Does:\
     - Validates callsigns during registration against the official licence database\
     - Displays your name and qualifications on the dashboard\
@@ -562,6 +561,7 @@ To require valid Canadian callsigns during user registration:
 ###### In .env file
     VALIDATE_CALLSIGNS=true
     Note: This only validates Canadian callsigns (VE, VA, VY, VO prefixes). International callsigns pass format validation only.
+</details>
 
 #### Accessing the Application
 ##### Local Access
@@ -796,8 +796,7 @@ MIT License — Free to use, modify, and distribute.\
 Attribution appreciated but not required.\
 
 <div align="center">
-73 de the Ham Radio App Team
-
-Built with ❤️ for the amateur radio community
+73\
+- Ham Radio App Team
 
 </div>
