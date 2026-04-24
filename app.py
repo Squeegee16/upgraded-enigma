@@ -73,7 +73,28 @@ def create_app(config_name='default'):
     with app.app_context():
         db.create_all()
         print("Database tables created successfully")
-    
+    # -------------------------------------------------------
+    # Initialize Canadian callsign database
+    # -------------------------------------------------------
+    with app.app_context():
+        # Create tables for callsign DB models
+        try:
+            from callsign_db.models import (
+                CanadianOperator, DatabaseMeta
+            )
+            db.create_all()
+            print("✓ Callsign database tables created")
+        except Exception as e:
+            print(f"✗ Callsign DB table error: {e}")
+
+    # Initialise CallsignDatabase and attach to app
+    try:
+        from callsign_db.database import CallsignDatabase
+        callsign_db = CallsignDatabase(app)
+        print("✓ Callsign database initialised")
+    except Exception as e:
+        print(f"✗ Callsign DB init error: {e}")
+        
     # Initialize devices
     print("\nInitializing devices...")
     gps_device = get_gps_device(app.config)
