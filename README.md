@@ -42,28 +42,28 @@
 Ham Radio App is a Linux-based, web-accessible station control application for amateur radio operators. It runs on a local WiFi hotspot and is accessible from any laptop or tablet on the network. The application uses a modular plugin architecture allowing integration with popular ham radio software including FLdigi, WSJT-X, Winlink, QSSTV, SatDump, and more.
 
 ```scss
-┌─────────────────────────────────────────────────────────────┐
-│                    WiFi Hotspot Network                     │
-│-------------------------------------------------------------│
-│   ┌──────────┐    ┌──────────┐    ┌──────────────────────┐  │
-│   │ Laptop   │    │  Tablet  │    │   Ham Radio Server   │  │
-│   │          │    │          │    │                      │  │
-│   │ Browser  │◄──►│ Browser  │◄──►│  Flask Web App       │  │
-│   └──────────┘    └──────────┘    │                      │  │
-│                                   │  ┌────────────────┐  │  │
-│                                   │  │    Plugins     │  │  │
-│                                   │  │ FLdigi  WSJTX  │  │  │
-│                                   │  │ Winlink QSSTV  │  │  │
-│                                   │  │ SatDump GrayWolf│ │  │
-│                                   │  └────────────────┘  │  │
-│                                   │                      │  │
-│                                   │  ┌────────────────┐  │  │
-│                                   │  │    Devices     │  │  │
-│                                   │  │ RTL-SDR  GPS   │  │  │
-│                                   │  │ Yaesu FT-891   │  │  │
-│                                   │  └────────────────┘  │  │
-│                                   └──────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                    WiFi Hotspot Network                      │
+│--------------------------------------------------------------│
+│   ┌──────────┐    ┌──────────┐    ┌───────────────────────┐  │
+│   │ Laptop   │    │  Tablet  │    │   Ham Radio Server    │  │
+│   │          │    │          │    │                       │  │
+│   │ Browser  │◄──►│ Browser  │◄──►│  Flask Web App        │  │
+│   └──────────┘    └──────────┘    │                       │  │
+│                                   │  ┌─────────────────┐  │  │
+│                                   │  │    Plugins      │  │  │
+│                                   │  │ FLdigi  WSJTX   │  │  │
+│                                   │  │ Winlink QSSTV   │  │  │
+│                                   │  │ SatDump GrayWolf│  │  │
+│                                   │  └─────────────────┘  │  │
+│                                   │                       │  │
+│                                   │  ┌────────────────┐   │  │
+│                                   │  │    Devices     │   │  │
+│                                   │  │ RTL-SDR  GPS   │   │  │
+│                                   │  │ Yaesu FT-891   │   │  │
+│                                   │  └────────────────┘   │  │
+│                                   └───────────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
 ```
 ## Features
 ### 🔐 User Management
@@ -442,21 +442,22 @@ Or download an individual plugin:
     ls plugins/implementations/
 
 Your plugins/implementations/ directory should look like this:
-plugins/implementations//
-├── __init__.py//
-├── fldigi//
-│   ├── __init__.py/
-│   ├── plugin.py/
-│   ├── installer.py/
-│   ├── forms.py/
-│   └── templates//
-├── wsjtx//
-│   ├── __init__.py/
-│   └── .../
+```scss
+plugins/implementations/
+├── __init__.py/
+├── fldigi/
+│   ├── __init__.py
+│   ├── plugin.py
+│   ├── installer.py
+│   ├── forms.py
+│   └── templates/
+├── wsjtx/
+│   ├── __init__.py
+│   └── ...
 └── winlink//
-    ├── __init__.py/
+    ├── __init__.py
     └── .../
-
+```
 #### Step 3 — Restart the Application
 ##### Standard installation
     source venv/bin/activate
@@ -476,10 +477,10 @@ If they are not installed, the plugin will:
 
 #### Step 5 — Configure the Plugin
 After installation:
--[ ] Navigate to the plugin page via the Dashboard or Plugins menu
--[ ] Click Settings
--[ ] Configure the plugin for your station
--[ ] Save settings and start the plugin
+- [ ] Navigate to the plugin page via the Dashboard or Plugins menu
+- [ ] Click Settings
+- [ ] Configure the plugin for your station
+- [ ] Save settings and start the plugin
 ##### Plugin-Specific Requirements
 ###### FLdigi
 -[ ] FLdigi must have XML-RPC enabled
@@ -509,16 +510,16 @@ After installation:
     Set Display=:1 in QSSTV plugin settings
 
 ##### SatDump
--[ ] SatDump build requires ~4 GB disk space
--[ ] Build time: 15-30 minutes on Raspberry Pi 4
+ -[ ] SatDump build requires ~4 GB disk space
+ -[ ] Build time: 15-30 minutes on Raspberry Pi 4
 ###### Recommended antennas:
--[ ] VHF (137 MHz): V-dipole or QFH for NOAA/METEOR
--[ ] L-Band (1.7 GHz): Patch antenna for GOES/Meteosat
+ -[ ] VHF (137 MHz): V-dipole or QFH for NOAA/METEOR
+ -[ ] L-Band (1.7 GHz): Patch antenna for GOES/Meteosat
 
 #### OpenWebRX
--[ ] OpenWebRX is installed via Docker (recommended)
--[ ] Requires Docker to be installed
--[ ] Exposes web interface on port 8073
+ -[ ] OpenWebRX is installed via Docker (recommended)
+ -[ ] Requires Docker to be installed
+ -[ ] Exposes web interface on port 8073
 
 #### Canadian Callsign Database
 The application can validate and display information about Canadian amateur radio operators using the official ISED (Innovation, Science and Economic Development Canada) database.
@@ -529,10 +530,10 @@ What It Does:\
     - Quick lookup of any Canadian callsign from the dashboard
 
 ##### Downloading the Database
--[ ] Log in to the application
--[ ] On the Dashboard, click the database icon 🗄️ in the Operator card
--[ ] Click Download / Update Database
--[ ] Wait for the download to complete (~1–2 minutes)
+ -[ ] Log in to the application
+ -[ ] On the Dashboard, click the database icon 🗄️ in the Operator card
+ -[ ] Click Download / Update Database
+ -[ ] Wait for the download to complete (~1–2 minutes)
 
 ##### The database contains:
 80,000+ licensed Canadian operators
@@ -571,14 +572,14 @@ Firefox: Click "Advanced" → "Accept the Risk and Continue"\
 Safari: Click "Show Details" → "visit this website"\
 
 ### First Time Setup
--[ ] Browse to https://localhost:5000
--[ ] Register a new account with your callsign
--[ ] Log in with your credentials
+ -[ ] Browse to https://localhost:5000
+ -[ ] Register a new account with your callsign
+ -[ ] Log in with your credentials
 
 #### On the Dashboard, verify your callsign is shown
--[ ] Click the database icon to download the Canadian callsign database
--[ ] Navigate to Settings for any plugin you want to use
--[ ] Check the Logbook to start logging contacts
+ -[ ] Click the database icon to download the Canadian callsign database
+ -[ ] Navigate to Settings for any plugin you want to use
+ -[ ] Check the Logbook to start logging contacts
 
 ## Troubleshooting
 ### Application Will Not Start
@@ -659,77 +660,77 @@ Safari: Click "Show Details" → "visit this website"\
     USE_SSL=false
 
 ## Project Structure
-
-ham-radio-app/\
-├── app.py                    # Application entry point\
-├── config.py                 # Configuration management\
-├── requirements.txt          # Python dependencies\
-├── setup.sh                  # Setup script\
-├── check_plugins.py          # Plugin diagnostic tool\
-├── .env.example              # Example environment file\
-├── Dockerfile                # Docker build file\
-├── docker-compose.yml        # Docker Compose configuration\
-├── ham-radio-app.service     # Systemd service file\
-│\
-├── auth/                     # Authentication module\
-│   ├── forms.py              # Login/registration forms\
-│   └── routes.py             # Auth routes\
-│\
-├── callsign_db/              # Canadian callsign database\
-│   ├── database.py           # Database interface\
-│   ├── downloader.py         # ISED download manager\
-│   ├── models.py             # SQLAlchemy models\
-│   └── validator.py          # Callsign validation\
-│\
-├── dashboard/                # Dashboard module\
-│   └── routes.py             # Dashboard routes and APIs\
-│\
-├── logbook/                  # Contact logging module\
-│   ├── export.py             # ADIF/CSV/JSON export\
-│   ├── forms.py              # Log entry forms\
-│   └── routes.py             # Logbook routes\
-│\
-├── models/                   # Database models\
-│   ├── logbook.py            # Contact log model\
-│   └── user.py               # User model\
-│\
-├── devices/                  # Hardware device interfaces\
-│   ├── base.py               # Base device class + mocks\
-│   ├── gps.py                # GPS (NMEA serial)\
-│   ├── radio.py              # Radio (Hamlib)\
-│   └── sdr.py                # RTL-SDR\
-│\
-├── plugins/                  # Plugin system\
-│   ├── base.py               # BasePlugin abstract class\
-│   ├── loader.py             # Plugin discovery/loading\
-│   ├── routes.py             # Plugin management routes\
-│   └── implementations/      # Plugin packages\
-│       ├── fldigi/           # FLdigi digital modes\
-│       ├── wsjtx/            # WSJT-X weak signal modes\
-│       ├── winlink/          # Winlink email over radio\
+```scss
+ham-radio-app/
+├── app.py                    # Application entry point
+├── config.py                 # Configuration management
+├── requirements.txt          # Python dependencies
+├── setup.sh                  # Setup script
+├── check_plugins.py          # Plugin diagnostic tool
+├── .env.example              # Example environment file
+├── Dockerfile                # Docker build file
+├── docker-compose.yml        # Docker Compose configuration
+├── ham-radio-app.service     # Systemd service file
+│
+├── auth/                     # Authentication module
+│   ├── forms.py              # Login/registration forms
+│   └── routes.py             # Auth routes
+│
+├── callsign_db/              # Canadian callsign database
+│   ├── database.py           # Database interface
+│   ├── downloader.py         # ISED download manager
+│   ├── models.py             # SQLAlchemy models
+│   └── validator.py          # Callsign validation
+│
+├── dashboard/                # Dashboard module
+│   └── routes.py             # Dashboard routes and APIs
+│
+├── logbook/                  # Contact logging module
+│   ├── export.py             # ADIF/CSV/JSON export
+│   ├── forms.py              # Log entry forms
+│   └── routes.py             # Logbook routes
+│
+├── models/                   # Database models
+│   ├── logbook.py            # Contact log model
+│   └── user.py               # User model
+│
+├── devices/                  # Hardware device interfaces
+│   ├── base.py               # Base device class + mocks
+│   ├── gps.py                # GPS (NMEA serial)
+│   ├── radio.py              # Radio (Hamlib)
+│   └── sdr.py                # RTL-SDR
+│
+├── plugins/                  # Plugin system
+│   ├── base.py               # BasePlugin abstract class
+│   ├── loader.py             # Plugin discovery/loading
+│   ├── routes.py             # Plugin management routes
+│   └── implementations/      # Plugin packages
+│       ├── fldigi/           # FLdigi digital modes
+│       ├── wsjtx/            # WSJT-X weak signal modes
+│       ├── winlink/          # Winlink email over radio
 │       ├── graywolf/         # GrayWolf Winlink gateway
-│       ├── openwebrx/        # OpenWebRX SDR receiver\
-│       ├── qsstv/            # QSSTV slow scan TV\
-│       └── satdump/          # SatDump satellite receiver\
-│\
-├── templates/                # Jinja2 HTML templates\
-│   ├── base.html             # Base template + navigation\
-│   ├── auth/                 # Login/register pages\
-│   ├── dashboard/            # Dashboard page\
-│   ├── errors/               # 404/500 error pages\
-│   ├── logbook/              # Logbook pages\
-│   └── plugins/              # Generic plugin templates\
-│\
-├── static/                   # Static web assets\
-│   ├── css/style.css         # Custom styles\
-│   └── js/app.js             # Custom JavaScript\
-│\
-└── data/                     # Persistent data (gitignored)\
-    ├── db/                   # SQLite databases\
-    ├── certs/                # SSL certificates\
-    ├── backups/              # Database backups\
-    └── callsigns/            # Callsign database files\
-
+│       ├── openwebrx/        # OpenWebRX SDR receiver
+│       ├── qsstv/            # QSSTV slow scan TV
+│       └── satdump/          # SatDump satellite receiver
+│
+├── templates/                # Jinja2 HTML templates
+│   ├── base.html             # Base template + navigation
+│   ├── auth/                 # Login/register pages
+│   ├── dashboard/            # Dashboard page
+│   ├── errors/               # 404/500 error pages
+│   ├── logbook/              # Logbook pages
+│   └── plugins/              # Generic plugin templates
+│
+├── static/                   # Static web assets
+│   ├── css/style.css         # Custom styles
+│   └── js/app.js             # Custom JavaScript
+│
+└── data/                     # Persistent data (gitignored)
+    ├── db/                   # SQLite databases
+    ├── certs/                # SSL certificates
+    ├── backups/              # Database backups
+    └── callsigns/            # Callsign database files
+```
 ## Contributing
 Contributions are welcome! Here is how to get started:
 
