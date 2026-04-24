@@ -23,6 +23,7 @@ from flask_login import LoginManager
 from config import config
 from models import db
 from models.user import User
+from datetime import datetime
 
 # Import blueprints
 from auth.routes import auth_bp
@@ -118,20 +119,32 @@ def create_app(config_name='default'):
     plugins = plugin_loader.load_all_plugins()
     app.extensions['plugin_loader'] = plugin_loader
     
-    # Make plugins available to all templates
+# -------------------------------------------------------
+    # Context processor - injects data into ALL templates
+    # -------------------------------------------------------
     @app.context_processor
-    def inject_plugins():
-        """Inject plugins into all template contexts."""
-        return dict(plugins=plugins)
-    
-    # Register blueprints
-    print("\nRegistering blueprints...")
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(dashboard_bp)
-    app.register_blueprint(logbook_bp)
-    app.register_blueprint(plugins_bp)
-    print("✓ Blueprints registered")
-    
+    def inject_globals():
+        """
+        Inject global variables into all template contexts.
+
+        Makes plugins, current time, and other globals
+        available in every template without explicit passing.
+        """
+        from flask_login import current_user
+
+        # Get plugins from loader
+        plugin_list = []
+        plugins = {}
+
+        if plugin_loader:
+            plugins = plugin_loader.get_all_plugins()
+            plugin_list = plugin_loader.get_plugin_list()
+
+        return dict(
+            plugins=plugins,         # Raw dict for nav menu
+            plugin_list=plugin_list, # Structured list for cards
+            utc_now=datetime.utcnow()
+        )
     # Root route
     @app.route('/')
     def index():
