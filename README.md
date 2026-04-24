@@ -1,25 +1,22 @@
 <div align="left">
 
 <code>
-    <Warning>
-        ooooo   ooooo       .o.       ooo        ooooo    ooooooooo.         .o.       oooooooooo.
-        `888'   `888'      .888.      `88.       .888'    `888   `Y88.      .888.      `888'   `Y8b
-         888     888      .8"888.      888b     d'888      888   .d88'     .8"888.      888      888
-         888ooooo888     .8' `888.     8 Y88. .P  888      888ooo88P'     .8' `888.     888      888
-         888     888    .88ooo8888.    8  `888'   888      888`88b.      .88ooo8888.    888      888
-         888     888   .8'     `888.   8    Y     888      888  `88b.   .8'     `888.   888     d88'
-        o888o   o888o o88o     o8888o o8o        o888o    o888o  o888o o88o     o8888o o888bood8P'
-    </Warning>
+    ooooo   ooooo       .o.       ooo        ooooo    ooooooooo.         .o.       oooooooooo.
+    `888'   `888'      .888.      `88.       .888'    `888   `Y88.      .888.      `888'   `Y8b
+     888     888      .8"888.      888b     d'888      888   .d88'     .8"888.      888      888
+     888ooooo888     .8' `888.     8 Y88. .P  888      888ooo88P'     .8' `888.     888      888
+     888     888    .88ooo8888.    8  `888'   888      888`88b.      .88ooo8888.    888      888
+     888     888   .8'     `888.   8    Y     888      888  `88b.   .8'     `888.   888     d88'
+    o888o   o888o o88o     o8888o o8o        o888o    o888o  o888o o88o     o8888o o888bood8P'
 </code>
 <h2>
     <p> A modular, web-based ham radio station control and logging application for Linux</p>
 </h2>
 
-Python
-Flask
-License
-Docker
-Platform
+[Python](https://python.org/)
+[Flask](https://flask.palletsprojects.com/)
+[Docker](https://docker.com/)
+[Platform](https://linux.org/)
 
 </div>
 
@@ -44,30 +41,30 @@ Platform
 ## Overview
 Ham Radio App is a Linux-based, web-accessible station control application for amateur radio operators. It runs on a local WiFi hotspot and is accessible from any laptop or tablet on the network. The application uses a modular plugin architecture allowing integration with popular ham radio software including FLdigi, WSJT-X, Winlink, QSSTV, SatDump, and more.
 
-\
-┌─────────────────────────────────────────────────────────────┐\
-│                    WiFi Hotspot Network                     │\
-│-------------------------------------------------------------│\
-│   ┌──────────┐    ┌──────────┐    ┌──────────────────────┐  │\
-│   │ Laptop   │    │  Tablet  │    │   Ham Radio Server   │  │\
-│   │          │    │          │    │                      │  │\
-│   │ Browser  │◄──►│ Browser  │◄──►│  Flask Web App       │  │\
-│   └──────────┘    └──────────┘    │                      │  │\
-│                                   │  ┌────────────────┐  │  │\
-│                                   │  │    Plugins     │  │  │\
-│                                   │  │ FLdigi  WSJTX  │  │  │\
-│                                   │  │ Winlink QSSTV  │  │  │\
-│                                   │  │ SatDump GrayWolf│ │  │\
-│                                   │  └────────────────┘  │  │\
-│                                   │                      │  │\
-│                                   │  ┌────────────────┐  │  │\
-│                                   │  │    Devices     │  │  │\
-│                                   │  │ RTL-SDR  GPS   │  │  │\
-│                                   │  │ Yaesu FT-891   │  │  │\
+```scss
+┌─────────────────────────────────────────────────────────────┐
+│                    WiFi Hotspot Network                     │
+│-------------------------------------------------------------│
+│   ┌──────────┐    ┌──────────┐    ┌──────────────────────┐  │
+│   │ Laptop   │    │  Tablet  │    │   Ham Radio Server   │  │
+│   │          │    │          │    │                      │  │
+│   │ Browser  │◄──►│ Browser  │◄──►│  Flask Web App       │  │
+│   └──────────┘    └──────────┘    │                      │  │
+│                                   │  ┌────────────────┐  │  │
+│                                   │  │    Plugins     │  │  │
+│                                   │  │ FLdigi  WSJTX  │  │  │
+│                                   │  │ Winlink QSSTV  │  │  │
+│                                   │  │ SatDump GrayWolf│ │  │
 │                                   │  └────────────────┘  │  │
-│                                   └──────────────────────┘  │\
-└─────────────────────────────────────────────────────────────┘\
-
+│                                   │                      │  │
+│                                   │  ┌────────────────┐  │  │
+│                                   │  │    Devices     │  │  │
+│                                   │  │ RTL-SDR  GPS   │  │  │
+│                                   │  │ Yaesu FT-891   │  │  │
+│                                   │  └────────────────┘  │  │
+│                                   └──────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
 ## Features
 ### 🔐 User Management
     Secure user registration and login with session management
@@ -169,7 +166,9 @@ Ham Radio App is a Linux-based, web-accessible station control application for a
     psutil==5.9.5
 
 ## Radio control via Hamlib
+    ```bash
     sudo apt-get install hamlib-utils
+    ```
 ## RTL-SDR support
     sudo apt-get install rtl-sdr
 ## GPS support
