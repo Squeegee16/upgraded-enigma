@@ -17,53 +17,52 @@ Platform
 
 </div>
 
-# Table of Contents
-## Overview
-## Features
-## Hardware Requirements
-## Software Requirements
-## Quick Start
-## Installation
-## Standard Installation
-## Docker Installation
-## Configuration
-## Available Plugins
-## Installing Plugins
-## Canadian Callsign Database
-## Accessing the Application
-## Troubleshooting
-## Contributing
-## License
+## Table of Contents
+### Overview
+### Features
+### Hardware Requirements
+### Software Requirements
+### Quick Start
+### Installation
+### Standard Installation
+### Docker Installation
+### Configuration
+### Available Plugins
+### Installing Plugins
+### Canadian Callsign Database
+### Accessing the Application
+### Troubleshooting
+### Contributing
+### License
 
-# Overview
+## Overview
 Ham Radio App is a Linux-based, web-accessible station control application for amateur radio operators. It runs on a local WiFi hotspot and is accessible from any laptop or tablet on the network. The application uses a modular plugin architecture allowing integration with popular ham radio software including FLdigi, WSJT-X, Winlink, QSSTV, SatDump, and more.
 
-
-┌─────────────────────────────────────────────────────────────┐
-│                    WiFi Hotspot Network                      │
-│                                                              │
-│   ┌──────────┐    ┌──────────┐    ┌──────────────────────┐  │
-│   │ Laptop   │    │  Tablet  │    │   Ham Radio Server   │  │
-│   │          │    │          │    │                      │  │
-│   │ Browser  │◄──►│ Browser  │◄──►│  Flask Web App       │  │
-│   └──────────┘    └──────────┘    │                      │  │
-│                                   │  ┌────────────────┐  │  │
-│                                   │  │    Plugins     │  │  │
-│                                   │  │ FLdigi  WSJTX  │  │  │
-│                                   │  │ Winlink QSSTV  │  │  │
-│                                   │  │ SatDump GrayWolf│ │  │
+\
+┌─────────────────────────────────────────────────────────────┐\
+│                    WiFi Hotspot Network                     │\
+│                                                             │\
+│   ┌──────────┐    ┌──────────┐    ┌──────────────────────┐  │\
+│   │ Laptop   │    │  Tablet  │    │   Ham Radio Server   │  │\
+│   │          │    │          │    │                      │  │\
+│   │ Browser  │◄──►│ Browser  │◄──►│  Flask Web App       │  │\
+│   └──────────┘    └──────────┘    │                      │  │\
+│                                   │  ┌────────────────┐  │  │\
+│                                   │  │    Plugins     │  │  │\
+│                                   │  │ FLdigi  WSJTX  │  │  │\
+│                                   │  │ Winlink QSSTV  │  │  │\
+│                                   │  │ SatDump GrayWolf│ │  │\
+│                                   │  └────────────────┘  │  │\
+│                                   │                      │  │\
+│                                   │  ┌────────────────┐  │  │\
+│                                   │  │    Devices     │  │  │\
+│                                   │  │ RTL-SDR  GPS   │  │  │\
+│                                   │  │ Yaesu FT-891   │  │  │\
 │                                   │  └────────────────┘  │  │
-│                                   │                      │  │
-│                                   │  ┌────────────────┐  │  │
-│                                   │  │    Devices     │  │  │
-│                                   │  │ RTL-SDR  GPS   │  │  │
-│                                   │  │ Yaesu FT-891   │  │  │
-│                                   │  └────────────────┘  │  │
-│                                   └──────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
+│                                   └──────────────────────┘  │\
+└─────────────────────────────────────────────────────────────┘\
 
-
-Features
+## Features
 🔐 User Management
 Secure user registration and login with session management
 Bcrypt password hashing with strength enforcement
