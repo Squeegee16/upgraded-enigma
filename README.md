@@ -1,6 +1,6 @@
 <div align="left">
 
-██╗  ██╗ █████╗ ███╗   ███╗    ██████╗  █████╗ ██████╗\
+██╗    ██╗    █████╗    ███╗    ███╗    ██████╗    █████╗    ██████╗\
 ██║  ██║██╔══██╗████╗ ████║    ██╔══██╗██╔══██╗██╔══██╗\
 ███████║███████║██╔████╔██║    ██████╔╝███████║██║  ██║\
 ██╔══██║██╔══██║██║╚██╔╝██║    ██╔══██╗██╔══██║██║  ██║\
@@ -240,12 +240,12 @@ openssl	Any	SSL certificate generation
     source venv/bin/activate
     python app.py
 
-On first start, the application will:
-✅ Generate a secure secret key automatically
-✅ Create the SQLite database and all tables
-✅ Generate a self-signed SSL certificate
-✅ Connect to configured devices
-✅ Scan and load all plugins
+On first start, the application will:\
+✅ Generate a secure secret key automatically\
+✅ Create the SQLite database and all tables\
+✅ Generate a self-signed SSL certificate\
+✅ Connect to configured devices\
+✅ Scan and load all plugins\
 
 #### Step 8 — Set Up WiFi Hotspot (Optional)
 To share the application over WiFi:
