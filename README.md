@@ -41,7 +41,7 @@ Ham Radio App is a Linux-based, web-accessible station control application for a
 \
 ┌─────────────────────────────────────────────────────────────┐\
 │                    WiFi Hotspot Network                     │\
-│                                                             │\
+│-------------------------------------------------------------│\
 │   ┌──────────┐    ┌──────────┐    ┌──────────────────────┐  │\
 │   │ Laptop   │    │  Tablet  │    │   Ham Radio Server   │  │\
 │   │          │    │          │    │                      │  │\
@@ -63,48 +63,48 @@ Ham Radio App is a Linux-based, web-accessible station control application for a
 └─────────────────────────────────────────────────────────────┘\
 
 ## Features
-🔐 User Management
+### 🔐 User Management
 Secure user registration and login with session management
 Bcrypt password hashing with strength enforcement
 Callsign format validation (international formats)
 Canadian ISED callsign database validation with name and qualification display
 Registration validated against the official ISED amateur radio database
-📊 Dashboard
+### 📊 Dashboard
 Real-time UTC clock display
 Live GPS location and Maidenhead grid square
 Connected device status (GPS, Radio, RTL-SDR)
 Plugin status overview with one-click launch buttons
 Operator name and qualification display from ISED database
 Recent contacts summary
-📖 Central Logbook
+### 📖 Central Logbook
 Log contacts with callsign, mode, band, frequency, grid, RST, and notes
 Filter and search by any field
 Export in ADIF, CSV, and JSON formats
 Contact statistics (by mode, band, unique callsigns)
 Paginated contact list
-🔌 Plugin Architecture
+# 🔌 Plugin Architecture
 Automatic plugin discovery on startup
 First-run dependency installation for each plugin
 Each plugin has its own dedicated UI page
 All plugins integrate with the central logbook
 GPS and radio device data shared across all plugins
-🛰️ Device Integration
+# 🛰️ Device Integration
 RTL-SDR (via rtl-sdr tools and direct USB)
 Serial GPS (NMEA protocol, any USB GPS dongle)
 Yaesu FT-891 (via Hamlib — compatible with 400+ radios)
 Mock device mode for development and testing without hardware
-🔒 Security
+# 🔒 Security
 HTTPS with self-signed certificate (generated automatically)
 CSRF protection on all forms
 Session-based authentication
 Input sanitisation throughout
 Non-root Docker container execution
-🐳 Docker Support
+# 🐳 Docker Support
 Multi-stage Docker build for minimal image size
 Docker Compose with persistent volumes
 Automated database backup service
 Device passthrough for USB hardware
-Hardware Requirements
+## Hardware Requirements
 Minimum (Software / Testing)
 Component	Requirement
 CPU	1 GHz single-core (x86_64 or ARM)
@@ -128,7 +128,8 @@ USB Serial adapter	Radio CAT control	If radio uses RS-232
 SMA antenna	SDR reception	Dipole for VHF, whip for HF
 VHF/UHF antenna	137 MHz weather satellites	V-dipole or QFH recommended
 L-Band antenna	1.7 GHz satellite imagery	Patch antenna required
-Software Requirements
+
+## Software Requirements
 Operating System
 Linux (any modern distribution)
 Tested on: Ubuntu 22.04, Debian 12, Raspberry Pi OS (64-bit)
@@ -140,55 +141,52 @@ git	Any	Installation and updates
 openssl	Any	SSL certificate generation
 Required Python Packages
 Installed automatically during setup
+    Flask==3.0.0
+    Flask-Login==0.6.3
+    Flask-WTF==1.2.1
+    Flask-SQLAlchemy==3.1.1
+    WTForms==3.1.1
+    bcrypt==4.1.2
+    pyserial==3.5
+    pynmea2==1.18.0
+    requests==2.31.0
+    pyopenssl==23.3.0
+    numpy==1.24.3
+    Pillow==10.0.0
+    watchdog==3.0.0
+    psutil==5.9.5
 
-Flask==3.0.0
-Flask-Login==0.6.3
-Flask-WTF==1.2.1
-Flask-SQLAlchemy==3.1.1
-WTForms==3.1.1
-bcrypt==4.1.2
-pyserial==3.5
-pynmea2==1.18.0
-requests==2.31.0
-pyopenssl==23.3.0
-numpy==1.24.3
-Pillow==10.0.0
-watchdog==3.0.0
-psutil==5.9.5
-
-Optional System Packages
+## Optional System Packages
 Required for hardware device support
-# Radio control via Hamlib
+
+## Radio control via Hamlib
 sudo apt-get install hamlib-utils
-
-# RTL-SDR support
+## RTL-SDR support
 sudo apt-get install rtl-sdr
-
-# GPS support
+## GPS support
 sudo apt-get install gpsd gpsd-clients
-
-# For building plugins from source
+## For building plugins from source
 sudo apt-get install build-essential cmake git
 
-Quick Start
+## Quick Start
 
-# 1. Clone the repository
+### 1. Clone the repository
 git clone https://github.com/yourusername/ham-radio-app.git
 cd ham-radio-app
 
-# 2. Run the setup script
+### 2. Run the setup script
 chmod +x setup.sh
 ./setup.sh
 
-# 3. Start the application
+### 3. Start the application
 source venv/bin/activate
 python app.py
 
-# 4. Open your browser to:
-# https://localhost:5000
+### 4. Open your browser to:
+### https://localhost:5000
 
-Installation
-Standard Installation
+## Installation
+## Standard Installation
 Step 1 — Install System Dependencies
 Ubuntu / Debian / Raspberry Pi OS:
 
@@ -199,7 +197,7 @@ sudo apt-get install -y \
     hamlib-utils rtl-sdr gpsd gpsd-clients \
     build-essential cmake
 
-Fedora / RHEL:
+### Fedora / RHEL:
 
 sudo dnf install -y \
     python3 python3-pip \
@@ -207,38 +205,28 @@ sudo dnf install -y \
     hamlib hamlib-utils \
     rtl-sdr
 
-Arch Linux:
-
+### Arch Linux:
 sudo pacman -S python python-pip git openssl hamlib rtl-sdr gpsd
 
-Step 2 — Clone the Repository
-
+### Step 2 — Clone the Repository
 git clone https://github.com/yourusername/ham-radio-app.git
 cd ham-radio-app
 
-Step 3 — Create Python Virtual Environment
-
+### Step 3 — Create Python Virtual Environment
 python3 -m venv venv
 source venv/bin/activate
-
-Step 4 — Install Python Dependencies
-
+### Step 4 — Install Python Dependencies
 pip install --upgrade pip
 pip install -r requirements.txt
-
-Step 5 — Create Data Directories
-
+### Step 5 — Create Data Directories
 mkdir -p data/db data/certs data/backups data/callsigns data/logs
-
-Step 6 — Configure the Application
+### Step 6 — Configure the Application
 Copy the example environment file:
 
-cp .env.example .env
+    cp .env.example .env
 
 Edit .env with your settings:
-
-nano .env
-
+    nano .env
 Key settings to review:
 
 # Flask environment
