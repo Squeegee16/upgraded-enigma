@@ -20,31 +20,182 @@
                     <i class="fas fa-user-circle"></i> Operator
                 </h5>
             </div>
-            <div class="card-body">
-                <dl class="row mb-0">
-                    <dt class="col-5">Callsign:</dt>
-                    <dd class="col-7">
-                        <strong>{{ current_user.callsign }}</strong>
-                    </dd>
-                    <dt class="col-5">Member Since:</dt>
-                    <dd class="col-7">
-                        {{ current_user.created_at.strftime('%Y-%m-%d') }}
-                    </dd>
-                    <dt class="col-5">Total QSOs:</dt>
-                    <dd class="col-7">
-                        <span class="badge bg-primary">
-                            {{ total_contacts }}
-                        </span>
-                    </dd>
-                    {% if current_user.last_login %}
-                    <dt class="col-5">Last Login:</dt>
-                    <dd class="col-7">
-                        <small>
-                            {{ current_user.last_login.strftime('%Y-%m-%d %H:%M') }}
-                        </small>
-                    </dd>
-                    {% endif %}
-                </dl>
+        <!-- Operator Info Card with ISED lookup -->
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-user-circle"></i> Operator
+                        </h5>
+                        <!-- Database update button -->
+                        <button class="btn btn-sm btn-outline-light"
+                                onclick="showDbModal()"
+                                title="Canadian Callsign Database">
+                            <i class="fas fa-database"></i>
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        
+                        <!-- =============================================
+                             ISED Database Operator Info
+                             ============================================= -->
+                        {% if operator_info %}
+                        <!-- Found in ISED database -->
+                        <div class="mb-3 pb-3 border-bottom">
+                            
+                            <!-- Full Name -->
+                            <h5 class="text-primary mb-1">
+                                {{ operator_info.full_name }}
+                            </h5>
+                            
+                            <!-- Callsign -->
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="badge bg-dark fs-6 me-2">
+                                    {{ current_user.callsign }}
+                                </span>
+                                <small class="text-success">
+                                    <i class="fas fa-check-circle"></i>
+                                    Verified
+                                </small>
+                            </div>
+                            
+                            <!-- Location -->
+                            {% if operator_info.city or operator_info.province %}
+                            <div class="text-muted small mb-2">
+                                <i class="fas fa-map-marker-alt me-1"></i>
+                                {{ operator_info.city }}
+                                {% if operator_info.city and operator_info.province %},{% endif %}
+                                {{ operator_info.province }}
+                            </div>
+                            {% endif %}
+                            
+                            <!-- Qualification Badges -->
+                            {% if operator_info.qualification_badges %}
+                            <div class="mb-2">
+                                <small class="text-muted d-block mb-1">
+                                    <i class="fas fa-certificate me-1"></i>
+                                    Qualifications:
+                                </small>
+                                <div class="d-flex flex-wrap gap-1">
+                                    {% for badge in operator_info.qualification_badges %}
+                                    <span class="badge bg-{{ badge.colour }}">
+                                        <i class="fas fa-{{ badge.icon }} me-1"></i>
+                                        {{ badge.label }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            <!-- Licence Expiry -->
+                            {% if operator_info.expiry_date %}
+                            <small class="text-muted">
+                                <i class="fas fa-calendar-alt me-1"></i>
+                                Expires: {{ operator_info.expiry_date }}
+                            </small>
+                            {% endif %}
+                            
+                            <!-- Club Name -->
+                            {% if operator_info.club_name %}
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    <i class="fas fa-users me-1"></i>
+                                    {{ operator_info.club_name }}
+                                </small>
+                            </div>
+                            {% endif %}
+                            
+                        </div>
+                        
+                        {% else %}
+                        <!-- Not found or DB not populated -->
+                        <div class="mb-3 pb-3 border-bottom">
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="badge bg-dark fs-6 me-2">
+                                    {{ current_user.callsign }}
+                                </span>
+                                {% if db_stats and db_stats.is_populated %}
+                                <small class="text-warning">
+                                    <i class="fas fa-question-circle"></i>
+                                    Not in ISED database
+                                </small>
+                                {% else %}
+                                <small class="text-muted">
+                                    <i class="fas fa-database"></i>
+                                    DB not downloaded
+                                </small>
+                                {% endif %}
+                            </div>
+                            
+                            {% if db_stats and not db_stats.is_populated %}
+                            <div class="alert alert-info py-2 px-3 mb-0">
+                                <small>
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Download the ISED database to verify
+                                    your callsign and display your name
+                                    and qualifications.
+                                </small>
+                                <br>
+                                <button class="btn btn-info btn-sm mt-2"
+                                        onclick="showDbModal()">
+                                    <i class="fas fa-download"></i>
+                                    Download Database
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        <!-- =============================================
+                             Standard Operator Fields
+                             ============================================= -->
+                        <dl class="row mb-0 small">
+                            <dt class="col-5">Member Since:</dt>
+                            <dd class="col-7">
+                                {{ current_user.created_at.strftime('%Y-%m-%d') }}
+                            </dd>
+                            <dt class="col-5">Total QSOs:</dt>
+                            <dd class="col-7">
+                                <span class="badge bg-primary">
+                                    {{ total_contacts }}
+                                </span>
+                            </dd>
+                            {% if current_user.last_login %}
+                            <dt class="col-5">Last Login:</dt>
+                            <dd class="col-7">
+                                <small class="text-muted">
+                                    {{ current_user.last_login.strftime('%Y-%m-%d %H:%M') }}
+                                </small>
+                            </dd>
+                            {% endif %}
+                            {% if db_stats %}
+                            <dt class="col-5">DB Status:</dt>
+                            <dd class="col-7">
+                                {% if db_stats.is_populated %}
+                                <small class="text-success">
+                                    <i class="fas fa-check-circle"></i>
+                                    {{ "{:,}".format(db_stats.record_count) }} records
+                                </small>
+                                {% else %}
+                                <small class="text-warning">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                    Not downloaded
+                                </small>
+                                {% endif %}
+                            </dd>
+                            {% if db_stats.last_updated_display != 'Never' %}
+                            <dt class="col-5">DB Updated:</dt>
+                            <dd class="col-7">
+                                <small class="text-muted">
+                                    {{ db_stats.last_updated_display }}
+                                </small>
+                            </dd>
+                            {% endif %}
+                            {% endif %}
+                        </dl>
+                        
+                    </div>
+                </div>
             </div>
         </div>
     </div>
