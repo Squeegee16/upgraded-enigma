@@ -16,6 +16,7 @@ Docker
 Platform
 
 </div>
+
 Table of Contents
 Overview
 Features
@@ -140,9 +141,6 @@ openssl	Any	SSL certificate generation
 Required Python Packages
 Installed automatically during setup
 
-makefile
-Copy code
-Download
 Flask==3.0.0
 Flask-Login==0.6.3
 Flask-WTF==1.2.1
@@ -157,13 +155,9 @@ numpy==1.24.3
 Pillow==10.0.0
 watchdog==3.0.0
 psutil==5.9.5
-makefile
-Copy code
-Download
+
 Optional System Packages
 Required for hardware device support
-
-
 # Radio control via Hamlib
 sudo apt-get install hamlib-utils
 
