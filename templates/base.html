@@ -25,60 +25,108 @@
                 <i class="fas fa-radio"></i> Ham Radio App
             </a>
             
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
+                    
+                    <!-- Dashboard -->
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('dashboard.index') }}">
+                        <a class="nav-link {% if request.endpoint and request.endpoint.startswith('dashboard') %}active{% endif %}"
+                           href="{{ url_for('dashboard.index') }}">
                             <i class="fas fa-home"></i> Dashboard
                         </a>
                     </li>
                     
+                    <!-- Logbook -->
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('logbook.index') }}">
+                        <a class="nav-link {% if request.endpoint and request.endpoint.startswith('logbook') %}active{% endif %}"
+                           href="{{ url_for('logbook.index') }}">
                             <i class="fas fa-book"></i> Logbook
                         </a>
                     </li>
                     
+                    <!-- Plugins Dropdown - built from loaded plugins -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="pluginsDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-plug"></i> Plugins
+                        <a class="nav-link dropdown-toggle"
+                           href="#"
+                           id="pluginsDropdown"
+                           role="button"
+                           data-bs-toggle="dropdown"
+                           aria-expanded="false">
+                            <i class="fas fa-plug"></i>
+                            Plugins
+                            {% if plugin_list %}
+                            <span class="badge bg-success rounded-pill ms-1">
+                                {{ plugin_list|length }}
+                            </span>
+                            {% endif %}
                         </a>
-                        <ul class="dropdown-menu">
-                            {% if plugins %}
-                                {% for plugin_name, plugin in plugins.items() %}
+                        <ul class="dropdown-menu" aria-labelledby="pluginsDropdown">
+                            {% if plugin_list %}
+                                {% for plugin_info in plugin_list %}
                                 <li>
-                                    <a class="dropdown-item" href="{{ url_for(plugin_name + '.index') }}">
-                                        {{ plugin.name }}
+                                    <a class="dropdown-item" 
+                                       href="{{ url_for(plugin_info.endpoint) }}">
+                                        <i class="fas fa-puzzle-piece me-2 text-primary"></i>
+                                        {{ plugin_info.name }}
+                                        <small class="text-muted ms-2">
+                                            v{{ plugin_info.version }}
+                                        </small>
                                     </a>
                                 </li>
                                 {% endfor %}
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <span class="dropdown-item-text text-muted small">
+                                        {{ plugin_list|length }} plugin(s) loaded
+                                    </span>
+                                </li>
                             {% else %}
-                                <li><span class="dropdown-item text-muted">No plugins loaded</span></li>
+                                <li>
+                                    <span class="dropdown-item text-muted">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        No plugins loaded
+                                    </span>
+                                </li>
                             {% endif %}
                         </ul>
                     </li>
+                    
                 </ul>
                 
+                <!-- Right side nav items -->
                 <ul class="navbar-nav">
+                    
+                    <!-- UTC Clock -->
                     <li class="nav-item">
                         <span class="navbar-text me-3">
-                            <i class="fas fa-user"></i> {{ current_user.callsign }}
+                            <i class="far fa-clock"></i>
+                            <span id="utc-clock">
+                                {{ utc_now.strftime('%H:%M:%S') if utc_now else '--:--:--' }} UTC
+                            </span>
                         </span>
                     </li>
+                    
+                    <!-- Callsign -->
                     <li class="nav-item">
-                        <span class="navbar-text me-3" id="utc-clock">
-                            <i class="far fa-clock"></i> <span id="time-display">--:--:-- UTC</span>
+                        <span class="navbar-text me-3">
+                            <i class="fas fa-user"></i>
+                            {{ current_user.callsign }}
                         </span>
                     </li>
+                    
+                    <!-- Logout -->
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('auth.logout') }}">
                             <i class="fas fa-sign-out-alt"></i> Logout
                         </a>
                     </li>
+                    
                 </ul>
             </div>
         </div>
@@ -90,9 +138,13 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                <div class="alert alert-{{ category }} alert-dismissible fade show"
+                     role="alert">
                     {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    <button type="button"
+                            class="btn-close"
+                            data-bs-dismiss="alert">
+                    </button>
                 </div>
                 {% endfor %}
             {% endif %}
@@ -100,26 +152,47 @@
     </div>
     
     <!-- Main Content -->
-    <main class="container mt-4">
+    <main class="container mt-4 mb-5">
         {% block content %}{% endblock %}
     </main>
     
     <!-- Footer -->
-    <footer class="footer mt-5 py-3 bg-light">
+    <footer class="footer py-3 bg-light border-top">
         <div class="container text-center">
-            <span class="text-muted">Ham Radio App v0.1.0 | 73!</span>
+            <span class="text-muted">
+                Ham Radio App v0.1.0
+                {% if plugin_list %}
+                | {{ plugin_list|length }} plugin(s) active
+                {% endif %}
+                | 73!
+            </span>
         </div>
     </footer>
     
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    <!-- jQuery (optional, for easier AJAX) -->
+    <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
     
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     
     {% block extra_js %}{% endblock %}
+    
+    <!-- UTC Clock Updater -->
+    <script>
+    function updateUTCClock() {
+        const now = new Date();
+        const h = String(now.getUTCHours()).padStart(2, '0');
+        const m = String(now.getUTCMinutes()).padStart(2, '0');
+        const s = String(now.getUTCSeconds()).padStart(2, '0');
+        const el = document.getElementById('utc-clock');
+        if (el) el.textContent = `${h}:${m}:${s} UTC`;
+    }
+    setInterval(updateUTCClock, 1000);
+    updateUTCClock();
+    </script>
+    
 </body>
 </html>
