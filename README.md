@@ -1,5 +1,4 @@
 <div align="left">
-
 <code>
     ooooo   ooooo       .o.       ooo        ooooo    ooooooooo.         .o.       oooooooooo.
     `888'   `888'      .888.      `88.       .888'    `888   `Y88.      .888.      `888'   `Y8b
@@ -40,7 +39,7 @@
 
 ## Overview
 Ham Radio App is a Linux-based, web-accessible station control application for amateur radio operators. It runs on a local WiFi hotspot and is accessible from any laptop or tablet on the network. The application uses a modular plugin architecture allowing integration with popular ham radio software including FLdigi, WSJT-X, Winlink, QSSTV, SatDump, and more.
-
+<details>
 ```scss
 ┌──────────────────────────────────────────────────────────────┐
 │                    WiFi Hotspot Network                      │
@@ -65,7 +64,10 @@ Ham Radio App is a Linux-based, web-accessible station control application for a
 │                                   └───────────────────────┘  │
 └──────────────────────────────────────────────────────────────┘
 ```
+</details>
+
 ## Features
+<details>
 ### 🔐 User Management
     Secure user registration and login with session management
     Bcrypt password hashing with strength enforcement
@@ -106,6 +108,8 @@ Ham Radio App is a Linux-based, web-accessible station control application for a
     Docker Compose with persistent volumes
     Automated database backup service
     Device passthrough for USB hardware
+</details>
+
 ## Hardware Requirements
 
 | Minimum (Software / Testing) | Component | Requirement |
@@ -128,7 +132,7 @@ Ham Radio App is a Linux-based, web-accessible station control application for a
 | OS | Ubuntu 22.04 LTS / Debian 12 / Raspberry Pi OS 64-bit |
 
 ## Optional Hardware (for Plugin Features)
-
+<details>
 | Device | Purpose | Notes |
 | --- | --- | --- |
 | RTL-SDR v3 dongle | SDR receiver | Required for SDR/satellite plugins |
@@ -138,6 +142,7 @@ Ham Radio App is a Linux-based, web-accessible station control application for a
 | SMA antenna| SDR reception | Dipole for VHF, whip for HF |
 | VHF/UHF antenna | 137 MHz weather satellites | V-dipole or QFH recommended |
 | L-Band antenna | 1.7 GHz satellite imagery | Patch antenna required |
+</details>
 
 ## Software Requirements
 #### Operating System
@@ -166,9 +171,7 @@ Ham Radio App is a Linux-based, web-accessible station control application for a
     psutil==5.9.5
 
 ## Radio control via Hamlib
-    ```bash
     sudo apt-get install hamlib-utils
-    ```
 ## RTL-SDR support
     sudo apt-get install rtl-sdr
 ## GPS support
@@ -194,6 +197,8 @@ Ham Radio App is a Linux-based, web-accessible station control application for a
 
 ## Installation
 ### Standard Installation
+<details>
+    
 #### Step 1 — Install System Dependencies
 ##### Ubuntu / Debian / Raspberry Pi OS:
     sudo apt-get update
@@ -261,9 +266,9 @@ On first start, the application will:\
 #### Step 8 — Set Up WiFi Hotspot (Optional)
 To share the application over WiFi:
 ###### Using nmcli (NetworkManager)
-    sudo nmcli dev wifi hotspot \
-    ssid "HamRadioApp" \
-    password "yourpassword" \
+    sudo nmcli dev wifi hotspot 
+    ssid "HamRadioApp" 
+    password "yourpassword" 
     ifname wlan0
 
 ###### Clients connect to the hotspot and browse to:
@@ -283,8 +288,10 @@ To share the application over WiFi:
 
 ###### Check status
     sudo systemctl status ham-radio-app
+</details>
 
 # Docker Installation
+<details>
 Docker provides an isolated, reproducible environment\
 and is the recommended production deployment method.\
 ### Prerequisites
@@ -338,8 +345,10 @@ and is the recommended production deployment method.\
     git pull
     docker compose build --no-cache
     docker compose up -d
+</details>
 
 # Raspberry Pi Docker (ARM)
+<details>
 The application runs on Raspberry Pi 4 with Docker:
 
 ### Ensure 64-bit OS (required)
@@ -398,10 +407,11 @@ The application runs on Raspberry Pi 4 with Docker:
 ##### Log out and back in for changes to take effect
 ##### Or use newgrp:
     newgrp dialout
+</details>
 
 ### Available Plugins
 Plugins are located in plugins/implementations/. Each plugin provides its own UI page accessible from the Dashboard and navigation menu.
-
+<details>
 | Plugin | Description | External Software Required | 
 | --- | --- | --- |
 | FLdigi | Digital modes: PSK31, RTTY, Olivia, MT63, CW, WSPR, and 30+ more | FLdigi |
@@ -520,6 +530,7 @@ After installation:
  - [ ] OpenWebRX is installed via Docker (recommended)
  - [ ] Requires Docker to be installed
  - [ ] Exposes web interface on port 8073
+</details>
 
 #### Canadian Callsign Database
 The application can validate and display information about Canadian amateur radio operators using the official ISED (Innovation, Science and Economic Development Canada) database.
@@ -582,6 +593,8 @@ Safari: Click "Show Details" → "visit this website"\
  - [ ] Check the Logbook to start logging contacts
 
 ## Troubleshooting
+<details>
+    
 ### Application Will Not Start
 #### Check Python version (needs 3.8+)
     python3 --version
@@ -658,8 +671,10 @@ Safari: Click "Show Details" → "visit this website"\
 #### Disable SSL temporarily for testing
 #### In .env:
     USE_SSL=false
+</details>
 
 ## Project Structure
+<details>
 ```scss
 ham-radio-app/
 ├── app.py                    # Application entry point
@@ -731,6 +746,8 @@ ham-radio-app/
     ├── backups/              # Database backups
     └── callsigns/            # Callsign database files
 ```
+</details>
+
 ## Contributing
 Contributions are welcome! Here is how to get started:
 
