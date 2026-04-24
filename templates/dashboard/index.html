@@ -40,35 +40,36 @@
                              ISED Database Operator Info
                              ============================================= -->
                         {% if operator_info %}
-                        <!-- Found in ISED database -->
+                        <!-- =====================================================
+                             Operator found in ISED database
+                             Qualifications use letter codes A-E
+                             ===================================================== -->
                         <div class="mb-3 pb-3 border-bottom">
-                            
+                        
                             <!-- Full Name -->
                             <h5 class="text-primary mb-1">
                                 {{ operator_info.full_name }}
                             </h5>
-                            
-                            <!-- Callsign -->
+                        
+                            <!-- Callsign + verified badge -->
                             <div class="d-flex align-items-center mb-2">
                                 <span class="badge bg-dark fs-6 me-2">
                                     {{ current_user.callsign }}
                                 </span>
                                 <small class="text-success">
-                                    <i class="fas fa-check-circle"></i>
-                                    Verified
+                                    <i class="fas fa-check-circle me-1"></i>
+                                    ISED Verified
                                 </small>
                             </div>
-                            
+                        
                             <!-- Location -->
-                            {% if operator_info.city or operator_info.province %}
+                            {% if operator_info.location %}
                             <div class="text-muted small mb-2">
                                 <i class="fas fa-map-marker-alt me-1"></i>
-                                {{ operator_info.city }}
-                                {% if operator_info.city and operator_info.province %},{% endif %}
-                                {{ operator_info.province }}
+                                {{ operator_info.location }}
                             </div>
                             {% endif %}
-                            
+                        
                             <!-- Qualification Badges -->
                             {% if operator_info.qualification_badges %}
                             <div class="mb-2">
@@ -78,37 +79,34 @@
                                 </small>
                                 <div class="d-flex flex-wrap gap-1">
                                     {% for badge in operator_info.qualification_badges %}
-                                    <span class="badge bg-{{ badge.colour }}">
+                                    <span class="badge bg-{{ badge.colour }}"
+                                          title="Code {{ badge.code }}">
                                         <i class="fas fa-{{ badge.icon }} me-1"></i>
                                         {{ badge.label }}
                                     </span>
                                     {% endfor %}
                                 </div>
-                            </div>
-                            {% endif %}
-                            
-                            <!-- Licence Expiry -->
-                            {% if operator_info.expiry_date %}
-                            <small class="text-muted">
-                                <i class="fas fa-calendar-alt me-1"></i>
-                                Expires: {{ operator_info.expiry_date }}
-                            </small>
-                            {% endif %}
-                            
-                            <!-- Club Name -->
-                            {% if operator_info.club_name %}
-                            <div class="mt-1">
-                                <small class="text-muted">
-                                    <i class="fas fa-users me-1"></i>
-                                    {{ operator_info.club_name }}
+                                <!-- Raw qualification codes for reference -->
+                                <small class="text-muted mt-1 d-block">
+                                    Codes: {{ operator_info.qual_codes | join(', ') }}
                                 </small>
                             </div>
                             {% endif %}
-                            
+                        
+                            <!-- Club Name if applicable -->
+                            {% if operator_info.is_club %}
+                            <div class="mt-1">
+                                <small class="text-muted">
+                                    <i class="fas fa-users me-1"></i>
+                                    Club / Organisation
+                                </small>
+                            </div>
+                            {% endif %}
+                        
                         </div>
                         
                         {% else %}
-                        <!-- Not found or DB not populated -->
+                        <!-- Callsign not in DB or DB not downloaded -->
                         <div class="mb-3 pb-3 border-bottom">
                             <div class="d-flex align-items-center mb-2">
                                 <span class="badge bg-dark fs-6 me-2">
@@ -116,36 +114,34 @@
                                 </span>
                                 {% if db_stats and db_stats.is_populated %}
                                 <small class="text-warning">
-                                    <i class="fas fa-question-circle"></i>
+                                    <i class="fas fa-question-circle me-1"></i>
                                     Not in ISED database
                                 </small>
                                 {% else %}
                                 <small class="text-muted">
-                                    <i class="fas fa-database"></i>
-                                    DB not downloaded
+                                    <i class="fas fa-database me-1"></i>
+                                    ISED DB not downloaded
                                 </small>
                                 {% endif %}
                             </div>
-                            
+                        
                             {% if db_stats and not db_stats.is_populated %}
                             <div class="alert alert-info py-2 px-3 mb-0">
                                 <small>
                                     <i class="fas fa-info-circle me-1"></i>
-                                    Download the ISED database to verify
-                                    your callsign and display your name
-                                    and qualifications.
+                                    Download the ISED database to display your
+                                    name and qualifications.
                                 </small>
                                 <br>
                                 <button class="btn btn-info btn-sm mt-2"
                                         onclick="showDbModal()">
-                                    <i class="fas fa-download"></i>
+                                    <i class="fas fa-download me-1"></i>
                                     Download Database
                                 </button>
                             </div>
                             {% endif %}
                         </div>
                         {% endif %}
-                        
                         <!-- =============================================
                              Standard Operator Fields
                              ============================================= -->
