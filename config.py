@@ -76,6 +76,21 @@ class Config:
     PORT = int(os.environ.get('FLASK_PORT', '5000'))
     DEBUG = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
 
+# Callsign Database Configuration
+    CALLSIGN_DB_URL = (
+        'https://apc-cap.ic.gc.ca/datafiles/amateur_delim.zip'
+    )
+
+    # Set to True to enforce Canadian DB validation on register
+    VALIDATE_CALLSIGNS = os.environ.get(
+        'VALIDATE_CALLSIGNS', 'False'
+    ).lower() == 'true'
+
+    # Path to local callsign database (for file-based storage)
+    CALLSIGN_DB_DIR = os.path.join(
+        BASE_DIR, 'data', 'callsign_db'
+    )
+
 class DevelopmentConfig(Config):
     """Development-specific configuration."""
     DEBUG = True
