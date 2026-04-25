@@ -170,6 +170,7 @@ COPY --chown=hamradio:hamradio app.py .
 COPY --chown=hamradio:hamradio requirements.txt .
 COPY --chown=hamradio:hamradio blacklist-rtl.conf /etc/modprobe.d/
 COPY --chown=hamradio:hamradio callsigns.txt ./data/callsigns/
+COPY --chown=hamradio:hamradio callsign_db ./callsign_db/
 
 # Create necessary directories with proper permissions
 RUN mkdir -p \
