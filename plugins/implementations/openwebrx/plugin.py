@@ -93,59 +93,63 @@ class OpenWebRXPlugin(BasePlugin):
         self.install_complete = False
         self.install_error = None
 
-    def initialize(self):
-        """
-        Initialize the plugin on load.
-
-        Handles:
-        1. First-run installation detection
-        2. Dependency installation
-        3. Manager initialization
-        4. GPS data integration
-        5. Auto-start if configured
-
-        Returns:
-            bool: True if initialization successful
-        """
+def initialize(self):
+        """Initialize OpenWebRX plugin for sidecar deployment."""
         print(f"\n[{self.name}] Initializing plugin...")
 
         try:
-            # Run installer (detects first run automatically)
-            print(f"[{self.name}] Checking installation...")
+            # Run installation check
             install_success = self.installer.run()
 
             if not install_success:
-                self.install_error = "OpenWebRX installation failed"
-                print(f"[{self.name}] WARNING: {self.install_error}")
-                # Don't return False - load UI anyway to show error
+                self.install_error = (
+                    "OpenWebRX installation check failed. "
+                    "Ensure the openwebrx Docker service "
+                    "is running."
+                )
 
             self.install_complete = install_success
 
-            # Get install info to determine method
+            # Detect deployment method
+            # Check if running in Docker with sidecar
+            openwebrx_url = os.environ.get(
+                'OPENWEBRX_URL', ''
+            )
             install_info = self.installer.get_install_info()
-            install_method = install_info.get('method', 'docker')
+            install_method = install_info.get(
+                'method', 'sidecar'
+            )
 
-            # Initialize manager
+            if openwebrx_url or os.path.exists('/.dockerenv'):
+                # Docker deployment - use sidecar mode
+                install_method = 'sidecar'
+                print(
+                    f"[{self.name}] Docker sidecar mode: "
+                    f"{openwebrx_url or 'http://openwebrx:8073'}"
+                )
+
+            # Initialise manager
             self.manager = OpenWebRXManager(
                 config_dir=self.plugin_data_dir,
                 install_method=install_method,
                 http_port=8073
             )
 
-            # Integrate GPS position if available
+            # GPS integration
             self._update_gps_position()
 
-            # Handle radio device synchronization
+            # Radio frequency sync
             self._sync_radio_frequency()
 
-            # Auto-start if configured
-            if self.manager.config.get('auto_start') and self.install_complete:
-                print(f"[{self.name}] Auto-starting OpenWebRX...")
-                success, message = self.manager.start()
-                if success:
-                    print(f"[{self.name}] ✓ Auto-start successful")
-                else:
-                    print(f"[{self.name}] Auto-start failed: {message}")
+            # Check if OpenWebRX is already running
+            if self.manager.is_available():
+                self.install_complete = True
+                self.install_error = None
+                print(
+                    f"[{self.name}] ✓ OpenWebRX is "
+                    f"accessible at "
+                    f"{self.manager.base_url}"
+                )
 
             print(f"[{self.name}] ✓ Plugin initialized")
             return True
