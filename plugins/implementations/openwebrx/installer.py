@@ -671,53 +671,74 @@ class OpenWebRXInstaller:
 
         return None
 
-    def run(self):
+def run(self):
         """
-        Execute the complete first-run installation.
+        Execute first-run installation.
 
-        Installation priority:
-            1. Already installed (skip)
-            2. Already in PATH (mark and skip)
-            3. apt-get (with official repo)
-            4. Docker (pull image)
-            5. Flatpak (from Flathub)
-            6. pip (last resort)
+        In Docker: checks package availability only,
+        does not attempt pip or apt installs.
+        Outside Docker: attempts full installation.
 
         Returns:
-            bool: True if installation successful
+            bool: True always (plugin loads regardless)
         """
-        # Already installed — skip
+        # Already installed
         if self.is_installed():
-            print("[OpenWebRX] ✓ Already installed, skipping")
+            print("[OpenWebRX] ✓ Already installed")
             return True
 
-        # Binary already in PATH — just write marker
+        # Binary already available
         if shutil.which('openwebrx'):
             version = self.get_version()
             self.write_install_marker('existing', version)
-            print("[OpenWebRX] ✓ Found existing installation")
             return True
 
         print("[OpenWebRX] ========================================")
-        print("[OpenWebRX] Starting first-run installation")
+        print("[OpenWebRX] First-run installation check")
         print("[OpenWebRX] ========================================")
 
-        # Step 1: Python packages (non-fatal)
+        # Step 1: Python packages
         print("\n[OpenWebRX] Step 1: Python packages...")
-        python_ok = self.install_python_packages()
-        if not python_ok:
-            print(
-                "[OpenWebRX] WARNING: Some Python packages "
-                "failed — continuing"
-            )
+        self.install_python_packages()
+        # Always continue regardless of result
 
-        # Step 2: Install OpenWebRX via best available method
+        # Step 2: OpenWebRX application
         print(
-            f"\n[OpenWebRX] Step 2: Installing OpenWebRX "
-            f"(package manager: "
-            f"{self._package_manager or 'none'})..."
+            f"\n[OpenWebRX] Step 2: Installing OpenWebRX..."
         )
 
+        if self.in_docker and not self.is_root:
+            # In Docker as non-root: cannot install system apps
+            print(
+                "[OpenWebRX] INFO: Running in Docker as "
+                "non-root user."
+            )
+            print(
+                "[OpenWebRX] INFO: OpenWebRX must be installed "
+                "in the Docker image."
+            )
+            print(
+                "[OpenWebRX] INFO: Add to Dockerfile: "
+                "apt-get install openwebrx"
+            )
+            print(
+                "[OpenWebRX] INFO: Or use Docker-in-Docker "
+                "with the OpenWebRX container."
+            )
+            print(
+                "[OpenWebRX] INFO: Plugin UI will load. "
+                "Use the Install button when OpenWebRX "
+                "is available."
+            )
+            # Write marker so we don't retry on every start
+            self.write_install_marker(
+                'docker_pending',
+                {'note': 'Awaiting Docker image rebuild'}
+            )
+            # Return True so plugin still loads
+            return True
+
+        # Outside Docker: attempt installation
         success = False
 
         if self._package_manager in ('apt-get', 'apt'):
@@ -729,28 +750,20 @@ class OpenWebRXInstaller:
         else:
             success = self._install_via_pip()
 
-        if not success:
-            print(
-                "\n[OpenWebRX] ERROR: Installation failed. "
-                "The plugin UI will load but OpenWebRX "
-                "will not function until installed."
+        if success:
+            version = self.get_version()
+            self.write_install_marker(
+                self._package_manager or 'unknown',
+                version
             )
-            return False
+            print("[OpenWebRX] ✓ Installation complete!")
+        else:
+            print(
+                "[OpenWebRX] Installation failed. "
+                "Plugin UI will still load."
+            )
 
-        # Write marker
-        version = self.get_version()
-        method = self._package_manager or 'unknown'
-        self.write_install_marker(method, version)
-
-        print(
-            "\n[OpenWebRX] ========================================"
-        )
-        print("[OpenWebRX] ✓ Installation complete!")
-        if version:
-            print(f"[OpenWebRX]   Version: {version}")
-        print(
-            "[OpenWebRX] ========================================"
-        )
-        print()
+        # Always return True — let the plugin load
+        return True
 
         return True
