@@ -427,33 +427,74 @@ sdrs = {{
         """
         Start OpenWebRX as a direct process.
 
+        Checks for binary availability before attempting
+        to start. Returns a clear error if not found
+        instead of raising FileNotFoundError.
+
         Returns:
             tuple: (success, message)
         """
+        # Check for binary before attempting to start
+        owrx_binary = (
+            shutil.which('openwebrx') or
+            shutil.which('/usr/bin/openwebrx') or
+            shutil.which('/usr/local/bin/openwebrx')
+        )
+
+        if not owrx_binary:
+            msg = (
+                "OpenWebRX binary not found. "
+                "It must be installed in the Docker image. "
+                "Add to Dockerfile: "
+                "RUN apt-get install -y openwebrx "
+                "and rebuild with: "
+                "docker compose build --no-cache"
+            )
+            self._add_log(msg, 'warning')
+            return False, msg
+
         try:
-            owrx_binary = shutil.which('openwebrx') or 'openwebrx'
-            owrx_config = os.path.join(
-                self.config_dir, 'openwebrx', 'config_webrx.py'
+            owrx_config_dir = os.path.join(
+                self.config_dir, 'openwebrx'
             )
 
-            self._add_log(f"Starting OpenWebRX process: {owrx_binary}")
+            self._add_log(
+                f"Starting OpenWebRX: {owrx_binary}"
+            )
 
             self._process = subprocess.Popen(
                 [owrx_binary],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                cwd=os.path.join(self.config_dir, 'openwebrx')
+                cwd=owrx_config_dir
             )
 
             self._status['running'] = True
             self._status['pid'] = self._process.pid
-            self._add_log(f"✓ Process started (PID: {self._process.pid})")
+            self._add_log(
+                f"✓ Process started "
+                f"(PID: {self._process.pid})"
+            )
             self._start_monitor()
-            return True, f"OpenWebRX started (PID: {self._process.pid})"
+
+            return True, (
+                f"OpenWebRX started "
+                f"(PID: {self._process.pid})"
+            )
+
+        except FileNotFoundError:
+            msg = (
+                f"OpenWebRX not found at {owrx_binary}. "
+                "Rebuild Docker image with OpenWebRX installed."
+            )
+            self._add_log(msg, 'error')
+            return False, msg
 
         except Exception as e:
-            return False, f"Error starting process: {str(e)}"
+            msg = f"Error starting OpenWebRX: {str(e)}"
+            self._add_log(msg, 'error')
+            return False, msg
 
     def stop(self):
         """
