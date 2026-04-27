@@ -38,7 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Create application directory
-WORKDIR /builder
+WORKDIR /build
 
 # Copy requirements file first (for better Docker layer caching)
 COPY requirements.txt .
@@ -103,6 +103,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Process utilities (used by plugins)
     procps \
     # Network utilities
+    lsb-release \
+    gnupg \
+    apt-transport-https \
     curl \
     wget \
     usbutils \
@@ -153,27 +156,58 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     golang-go \
     && rm -rf /var/lib/apt/lists/*
 
+# Install OpenWebRX from official repository
+# This installs it system-wide so the runtime user
+# can launch it without elevated permissions
+RUN apt-get update && \
+    # Add OpenWebRX GPG key
+    curl -fsSL https://repo.openwebrx.de/debian/key.gpg.txt \
+        | apt-key add - 2>/dev/null; \
+    # Detect distribution for repository URL
+    DISTRO=$(. /etc/os-release && echo "$VERSION_CODENAME"); \
+    DISTRO=${DISTRO:-bookworm}; \
+    echo "Detected distro: ${DISTRO}"; \
+    # Add repository - fallback to bookworm if not found
+    echo "deb [arch=amd64] https://repo.openwebrx.de/debian/ ${DISTRO} main" \
+        > /etc/apt/sources.list.d/openwebrx.list || \
+    echo "deb [arch=amd64] https://repo.openwebrx.de/debian/ bookworm main" \
+        > /etc/apt/sources.list.d/openwebrx.list; \
+    # Try to install OpenWebRX, ignore if not available
+    # for this distro (plugin will show install button)
+    apt-get update -q && \
+    apt-get install -y openwebrx 2>/dev/null || \
+    echo "OpenWebRX not available via apt for ${DISTRO} - skipping"; \
+    rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for running the application
 # IMPORTANT: Create user with specific UID/GID for volume permissions
 RUN groupadd -r hamradio -g 1000 && \
-    useradd -r -g hamradio -u 1000 -m -s /bin/bash hamradio
+    useradd -r \
+        -g hamradio \
+        -u 1000 \
+        -m \
+        -s /bin/bash \
+        -d /home/hamradio \
+        hamradio
 
 # Create data directories with proper ownership BEFORE switching user
 # This is critical for volume mounts to work correctly
-RUN mkdir -p /data/db /data/certs /data/backups /data/callsigns /data/logs /data/plugins /app && \
+RUN mkdir -p \
+        /data/db \
+        /data/certs \
+        /data/backups \
+        /data/callsigns \
+        /data/logs \
+        /data/plugins \
+        /app \
     chown -R hamradio:hamradio /data /app && \
     chmod -R 755 /data
 
 # Copy Python virtual environment from builder stage
 COPY --from=builder /opt/venv /opt/venv
-
-# Make venv readable by hamradio user
 RUN chmod -R a+rX /opt/venv
 
-# Set working directory and create it
 WORKDIR /app
-RUN chown hamradio:hamradio /app
 
 # Copy application files with proper ownership
 COPY --chown=hamradio:hamradio config.py .
