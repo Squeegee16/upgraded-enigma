@@ -804,9 +804,16 @@ def write_install_marker(self, method, version=None):
 
             # Write marker so we skip this check next time
             # and don't spam logs on every startup
-            self.write_install_marker(
-                'docker_pending',
-                {'note': 'Requires Docker image rebuild'}
+# Write a simple marker via write_marker directly
+            self.write_marker(
+                self.INSTALL_MARKER,
+                extra_data={                 # <-- correct keyword
+                    'method': 'docker_pending',
+                    'note': (
+                        'OpenWebRX requires Docker '
+                        'image rebuild'
+                    ),
+                }
             )
 
             # Return True — let the plugin UI load
