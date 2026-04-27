@@ -1,3 +1,10 @@
+# Ham Radio Operator Web Application - Docker Compose
+# =====================================================
+# Services:
+#   app       - Flask web application
+#   openwebrx - OpenWebRX SDR receiver (sidecar)
+#   backup    - Automated database backup
+
 version: '3.8'
 
 volumes:
@@ -6,6 +13,8 @@ volumes:
   app_certs:
     driver: local
   app_backups:
+    driver: local
+  openwebrx_data:
     driver: local
 
 networks:
@@ -16,6 +25,10 @@ networks:
         - subnet: 172.20.0.0/16
 
 services:
+
+  # ==========================================================
+  # Main Ham Radio Application
+  # ==========================================================
   app:
     build:
       context: .
@@ -25,15 +38,18 @@ services:
     restart: unless-stopped
 
     ports:
-      - "5000:5000"    # Ham Radio App HTTPS
-      - "5443:5443"    # Ham Radio App HTTPS (alt)
-      - "8073:8073"    # OpenWebRX web interface
+      - "5000:5000"
 
     environment:
-      - FLASK_ENV=${FLASK_ENV:-production}
+      # Flask
+      - FLASK_ENV=${FLASK_ENV:-development}
       - FLASK_DEBUG=${FLASK_DEBUG:-1}
+
+      # Database
       - DATABASE_URL=sqlite:////data/db/ham_radio.db
-      # Device configuration
+
+      # Devices - set USE_MOCK_DEVICES=false when
+      # real hardware is connected
       - USE_MOCK_DEVICES=${USE_MOCK_DEVICES:-true}
       - GPS_SERIAL_PORT=${GPS_SERIAL_PORT:-/dev/ttyUSB0}
       - GPS_BAUD_RATE=${GPS_BAUD_RATE:-9600}
@@ -42,29 +58,55 @@ services:
       - RADIO_BAUD_RATE=${RADIO_BAUD_RATE:-38400}
       - SDR_DEVICE_INDEX=${SDR_DEVICE_INDEX:-0}
       - SDR_SAMPLE_RATE=${SDR_SAMPLE_RATE:-2048000}
-      # SSL configuration
+
+      # SSL
       - USE_SSL=${USE_SSL:-true}
       - SSL_CERT=/data/certs/cert.pem
       - SSL_KEY=/data/certs/key.pem
 
-      # Server configuration
+      # Server
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=5000
-      
-      # Callsign validation
+
+      # Callsign database
       - VALIDATE_CALLSIGNS=${VALIDATE_CALLSIGNS:-false}
-      - CALLSIGN_FILE=/data/callsigns/callsigns.txt
-      
+
       # Timezone
       - TZ=${TZ:-UTC}
+
+      # Plugin installer behaviour
+      - PLUGIN_SKIP_PIP_INSTALL=true
+
+      # OpenWebRX sidecar URL (used by the plugin)
+      # Points to the openwebrx service on the internal network
+      - OPENWEBRX_URL=http://openwebrx:8073
 
     volumes:
       - app_data:/data
       - app_certs:/data/certs
       - app_backups:/data/backups
 
+    # USB device passthrough for RTL-SDR and GPS
+    # Uncomment the devices block when running with
+    # real hardware. The privileged flag is required
+    # for USB device access on some Linux hosts.
+    #
+    # To find your device paths on the host:
+    #   lsusb
+    #   ls -l /dev/bus/usb/
+    #   ls -l /dev/ttyUSB*
+    #
+    # devices:
+    #   - /dev/bus/usb:/dev/bus/usb   # All USB (RTL-SDR)
+    #   - /dev/ttyUSB0:/dev/ttyUSB0   # GPS
+    #   - /dev/ttyUSB1:/dev/ttyUSB1   # Radio CAT
+    # privileged: true
+
     networks:
       - hamradio_net
+
+    depends_on:
+      - openwebrx
 
     deploy:
       resources:
@@ -93,9 +135,59 @@ services:
       start_period: 60s
 
     labels:
-      - "com.hamradio.app=main"
+      - "com.hamradio.service=app"
       - "com.hamradio.version=1.0.0"
 
+  # ==========================================================
+  # OpenWebRX SDR Receiver - Official Container
+  # https://github.com/jketterl/openwebrx
+  # ==========================================================
+  openwebrx:
+    image: jketterl/openwebrx:stable
+
+    container_name: hamradio_openwebrx
+    restart: unless-stopped
+
+    ports:
+      # Expose OpenWebRX web interface on host port 8073
+      # Access directly at http://<server-ip>:8073
+      - "8073:8073"
+
+    volumes:
+      # Persistent OpenWebRX configuration
+      - openwebrx_data:/var/lib/openwebrx
+
+    # USB device access for RTL-SDR
+    # Uncomment when RTL-SDR dongle is connected
+    #
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    privileged: true
+
+    networks:
+      - hamradio_net
+
+    # OpenWebRX requires extended privileges for SDR hardware
+    # cap_add provides the minimum required capabilities
+    # without full privileged mode
+    cap_add:
+      - SYS_NICE
+
+    environment:
+      - TZ=${TZ:-UTC}
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    labels:
+      - "com.hamradio.service=openwebrx"
+
+  # ==========================================================
+  # Database Backup Service
+  # ==========================================================
   backup:
     image: alpine:latest
     container_name: hamradio_backup
@@ -118,11 +210,12 @@ services:
           BF="/backups/ham_radio_$${TS}.db";
           cp /data/db/ham_radio.db "$${BF}";
           gzip "$${BF}";
-          echo "[$(date)] Backup: $${BF}.gz";
+          echo "[$(date)] Backup created: $${BF}.gz";
           find /backups -name "ham_radio_*.db.gz" \
             -mtime +$${BACKUP_RETENTION} -delete;
+          echo "[$(date)] Old backups cleaned";
         else
-          echo "[$(date)] DB not found, skipping backup";
+          echo "[$(date)] Database not found, skipping";
         fi;
         sleep $${BACKUP_INTERVAL};
       done
@@ -134,5 +227,11 @@ services:
     depends_on:
       - app
 
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
     labels:
-      - "com.hamradio.app=backup"
+      - "com.hamradio.service=backup"
