@@ -96,11 +96,11 @@ services:
     #   ls -l /dev/bus/usb/
     #   ls -l /dev/ttyUSB*
     #
-    # devices:
-    #   - /dev/bus/usb:/dev/bus/usb   # All USB (RTL-SDR)
+    devices:
+      - /dev/bus/usb:/dev/bus/usb   # All USB (RTL-SDR)
     #   - /dev/ttyUSB0:/dev/ttyUSB0   # GPS
     #   - /dev/ttyUSB1:/dev/ttyUSB1   # Radio CAT
-    # privileged: true
+    privileged: true
 
     networks:
       - hamradio_net
