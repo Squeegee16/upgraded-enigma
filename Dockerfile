@@ -67,7 +67,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     FLASK_APP=app.py \
-    FLASK_ENV=development
+    FLASK_ENV=development \
     # Tell plugins NOT to attempt runtime pip installs
     PLUGIN_SKIP_PIP_INSTALL=true
 
