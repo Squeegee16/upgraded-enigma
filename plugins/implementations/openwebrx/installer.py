@@ -4,20 +4,25 @@ OpenWebRX Dependency Installer
 Handles installation of OpenWebRX and its required
 dependencies on first run.
 
+This class extends BaseInstaller which provides
+Docker-aware pip and apt-get handling.
+
 OpenWebRX Installation Methods (in priority order):
     1. apt-get via official repository (Debian/Ubuntu)
-    2. Flatpak from Flathub (universal Linux)
-    3. pip install (fallback)
+    2. Docker image pull (if Docker is available)
+    3. Flatpak from Flathub (universal Linux)
+    4. pip install (last resort fallback)
 
-All methods handle Docker environments correctly by
-detecting whether sudo is available and whether the
-process is running as root.
+Docker Behaviour:
+    When running inside a Docker container as a non-root
+    user (the standard deployment), system-level installs
+    are not possible. The installer detects this via the
+    PLUGIN_SKIP_PIP_INSTALL environment variable set in
+    the Dockerfile and skips installation attempts.
 
-Python Dependencies:
-    - requests   : HTTP client for API communication
-    - psutil     : Process management and monitoring
-    - websockets : WebSocket client for live data
-    - aiohttp    : Async HTTP client
+    In this case the plugin UI still loads and displays
+    an informational message. OpenWebRX must be added to
+    the Dockerfile and the image rebuilt to use it.
 
 Source:
     https://github.com/jketterl/openwebrx
@@ -33,38 +38,124 @@ import json
 import shutil
 import platform
 import subprocess
-from pathlib import Path
+from datetime import datetime
+
+# Import the shared base installer for Docker-aware
+# pip and apt-get handling
+try:
+    from plugins.implementations.base_installer import BaseInstaller
+except ImportError:
+    # Fallback if base_installer is not yet available
+    # Define a minimal inline base class
+    class BaseInstaller:
+        """Minimal fallback base installer."""
+
+        def __init__(self):
+            try:
+                self.is_root = (os.getuid() == 0)
+            except AttributeError:
+                self.is_root = False
+
+            self.sudo_available = shutil.which('sudo') is not None
+            self._sudo = [] if (
+                self.is_root or not self.sudo_available
+            ) else ['sudo']
+
+            self.in_docker = (
+                os.environ.get(
+                    'PLUGIN_SKIP_PIP_INSTALL', ''
+                ).lower() == 'true' or
+                os.path.exists('/.dockerenv')
+            )
+
+        def pip_install(self, package):
+            """Install package or skip in Docker."""
+            if self.in_docker:
+                return True
+            try:
+                subprocess.run(
+                    [sys.executable, '-m', 'pip',
+                     'install', '--quiet', package],
+                    check=True,
+                    capture_output=True,
+                    timeout=120
+                )
+                return True
+            except Exception:
+                return False
+
+        def install_python_packages(self, packages):
+            """Install list of packages."""
+            failed = []
+            for pkg in packages:
+                if not self.pip_install(pkg):
+                    failed.append(pkg)
+            return len(packages) - len(failed), failed
+
+        def write_marker(self, path, extra=None):
+            """Write installation marker."""
+            data = {
+                'installed': True,
+                'timestamp': datetime.utcnow().isoformat(),
+                'in_docker': self.in_docker,
+            }
+            if extra:
+                data.update(extra)
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, 'w') as f:
+                    json.dump(data, f, indent=2)
+            except Exception as e:
+                print(f"[Installer] Marker write error: {e}")
+
+        def read_marker(self, path):
+            """Read installation marker."""
+            if not os.path.exists(path):
+                return {}
+            try:
+                with open(path, 'r') as f:
+                    return json.load(f)
+            except Exception:
+                return {}
 
 
-class OpenWebRXInstaller:
+class OpenWebRXInstaller(BaseInstaller):
     """
     Manages OpenWebRX installation and verification.
 
-    Supports multiple installation methods with automatic
-    fallback. Detects Docker/root environments and adjusts
-    sudo usage accordingly. Tracks installation state via
-    a JSON marker file.
+    Extends BaseInstaller to add OpenWebRX-specific
+    installation logic including apt repository setup,
+    Docker image pulling, Flatpak, and pip fallback.
+
+    Inherits Docker detection and safe pip/apt wrappers
+    from BaseInstaller.
     """
 
-    # Installation state marker file
+    # ----------------------------------------------------------
+    # Class-level constants
+    # ----------------------------------------------------------
+
+    # Installation state marker file path
+    # Stored inside the plugin directory
     INSTALL_MARKER = os.path.join(
         os.path.dirname(__file__),
         '.installed'
     )
 
-    # OpenWebRX Docker image
+    # OpenWebRX Docker image reference
     DOCKER_IMAGE = 'jketterl/openwebrx:latest'
 
-    # OpenWebRX Debian/Ubuntu repository
+    # Official Debian/Ubuntu repository base URL
     DEBIAN_REPO = 'https://repo.openwebrx.de/debian/'
 
-    # Flathub application ID
+    # Flathub application identifier
     FLATPAK_APP_ID = 'de.openwebrx.OpenWebRX'
 
-    # Default HTTP port for OpenWebRX web interface
+    # Default port for the OpenWebRX web interface
     DEFAULT_HTTP_PORT = 8073
 
-    # Required Python packages for plugin communication
+    # Python packages required by this plugin
+    # These are checked/installed via BaseInstaller
     REQUIRED_PYTHON_PACKAGES = [
         'requests',
         'psutil',
@@ -74,186 +165,170 @@ class OpenWebRXInstaller:
 
     def __init__(self):
         """
-        Initialise installer with environment detection.
+        Initialise the OpenWebRX installer.
 
-        Detects:
-            - Running as root (common in Docker)
-            - sudo availability
-            - Available package managers
-            - System architecture
+        Calls BaseInstaller.__init__() to detect the
+        runtime environment (Docker, root, sudo) then
+        adds OpenWebRX-specific detection.
         """
-        self.plugin_dir = os.path.dirname(__file__)
+        # Call parent init for environment detection
+        super().__init__()
 
-        # -------------------------------------------------------
-        # Environment detection
-        # -------------------------------------------------------
-
-        # Check if running as root
-        # In Docker containers the process often runs as root
-        # or as a non-root user without sudo
-        try:
-            self.is_root = (os.getuid() == 0)
-        except AttributeError:
-            # Windows fallback (not a target platform)
-            self.is_root = False
-
-        # Check if sudo is available
-        self.sudo_available = shutil.which('sudo') is not None
-
-        # Build sudo prefix for system commands
-        # Root: no prefix needed
-        # Non-root with sudo: ['sudo']
-        # Non-root without sudo: [] (will fail for sys installs)
-        if self.is_root:
-            self._sudo = []
-            print(
-                "[OpenWebRX] Running as root "
-                "(Docker/elevated mode)"
-            )
-        elif self.sudo_available:
-            self._sudo = ['sudo']
-        else:
-            self._sudo = []
-            print(
-                "[OpenWebRX] WARNING: sudo not available. "
-                "System package installs may fail."
-            )
-
-        # Detect package manager
+        # Detect available package manager
         self._package_manager = self._detect_package_manager()
 
-        # System architecture for downloads
+        # System architecture for binary downloads
         self._arch = platform.machine()
 
         print(
-            f"[OpenWebRX] Package manager: "
-            f"{self._package_manager or 'none detected'}"
+            f"[OpenWebRX] Installer initialised | "
+            f"Docker: {self.in_docker} | "
+            f"Root: {self.is_root} | "
+            f"sudo: {self.sudo_available} | "
+            f"pkg mgr: {self._package_manager or 'none'}"
         )
+
+    # ----------------------------------------------------------
+    # Private helper methods
+    # ----------------------------------------------------------
 
     def _detect_package_manager(self):
         """
-        Detect available system package manager.
+        Detect the available system package manager.
 
         Returns:
-            str: Package manager name or None
+            str: Package manager name or None if not found
         """
-        managers = ['apt-get', 'dnf', 'yum', 'pacman', 'zypper']
-        for manager in managers:
+        for manager in [
+            'apt-get', 'dnf', 'yum', 'pacman', 'zypper'
+        ]:
             if shutil.which(manager):
                 return manager
         return None
 
-    def _run_command(self, cmd, timeout=300, capture=True):
+    def _run_command(self, cmd, timeout=300):
         """
-        Execute a shell command with error handling.
+        Execute a shell command safely.
 
-        Handles missing binaries gracefully instead of
-        raising FileNotFoundError.
+        Handles FileNotFoundError (missing binary),
+        CalledProcessError (non-zero exit), and
+        TimeoutExpired separately for clear logging.
 
         Args:
             cmd: Command list to execute
-            timeout: Command timeout in seconds
-            capture: Capture stdout/stderr if True
+            timeout: Maximum seconds to wait
 
         Returns:
-            tuple: (success, stdout, stderr)
+            tuple: (success: bool, stdout: str, stderr: str)
         """
         try:
             result = subprocess.run(
                 cmd,
                 check=True,
-                capture_output=capture,
+                capture_output=True,
                 timeout=timeout
             )
-            stdout = result.stdout.decode() \
-                if capture and result.stdout else ''
+            stdout = (
+                result.stdout.decode('utf-8', errors='replace')
+                if result.stdout else ''
+            )
             return True, stdout, ''
 
         except FileNotFoundError as e:
-            # Binary not found (e.g. sudo, apt-get)
-            return False, '', f"Command not found: {cmd[0]}: {e}"
-
+            return (
+                False, '',
+                f"Command not found: {cmd[0]} — {e}"
+            )
         except subprocess.CalledProcessError as e:
-            stderr = e.stderr.decode() \
+            stderr = (
+                e.stderr.decode('utf-8', errors='replace')
                 if e.stderr else str(e)
+            )
             return False, '', stderr
-
         except subprocess.TimeoutExpired:
-            return False, '', f"Command timed out after {timeout}s"
-
+            return (
+                False, '',
+                f"Timed out after {timeout}s"
+            )
         except Exception as e:
             return False, '', str(e)
 
+    # ----------------------------------------------------------
+    # Installation state checks
+    # ----------------------------------------------------------
+
     def is_installed(self):
         """
-        Check if OpenWebRX is installed and marker exists.
+        Check whether OpenWebRX is installed.
+
+        Verifies that both the marker file exists and
+        the actual installation is still present.
 
         Returns:
-            bool: True if installation marker exists and
-                  OpenWebRX is accessible
+            bool: True if OpenWebRX is available
         """
         if not os.path.exists(self.INSTALL_MARKER):
             return False
 
-        # Verify installation based on available method
         info = self.get_install_info()
         method = info.get('method', '')
 
-        if method == 'docker':
-            return self._check_docker_image_exists()
-        elif method in ('apt', 'apt-get'):
-            return shutil.which('openwebrx') is not None
-        elif method == 'flatpak':
-            return self._check_flatpak_installed()
-        elif method == 'pip':
-            return self._check_pip_installed()
-        else:
-            # Marker exists but method unknown
-            # Check all possibilities
-            return (
-                shutil.which('openwebrx') is not None or
-                self._check_docker_image_exists() or
-                self._check_flatpak_installed()
-            )
+        # Docker-pending means we acknowledged we can't
+        # install right now but will try again
+        if method == 'docker_pending':
+            return False
 
-    def _check_docker_image_exists(self):
+        # Check actual presence by method
+        if method == 'docker':
+            return self._check_docker_image()
+        elif method == 'flatpak':
+            return self._check_flatpak()
+        elif method == 'pip':
+            return self._check_pip()
+        else:
+            # apt / existing / unknown — check binary
+            return shutil.which('openwebrx') is not None
+
+    def _check_docker_image(self):
         """
-        Check if the OpenWebRX Docker image is pulled.
+        Verify the OpenWebRX Docker image is available.
 
         Returns:
-            bool: True if Docker image is available locally
+            bool: True if image exists locally
         """
         if not shutil.which('docker'):
             return False
-
-        success, stdout, _ = self._run_command(
+        ok, stdout, _ = self._run_command(
             ['docker', 'images', '-q', self.DOCKER_IMAGE],
             timeout=10
         )
-        return success and bool(stdout.strip())
+        return ok and bool(stdout.strip())
 
-    def _check_flatpak_installed(self):
+    def _check_flatpak(self):
         """
-        Check if OpenWebRX is installed via Flatpak.
+        Verify OpenWebRX is installed via Flatpak.
 
         Returns:
-            bool: True if Flatpak app is installed
+            bool: True if Flatpak app is listed
         """
         if not shutil.which('flatpak'):
             return False
-
-        success, stdout, _ = self._run_command(
-            ['flatpak', 'list', '--app', '--columns=application'],
+        ok, stdout, _ = self._run_command(
+            [
+                'flatpak', 'list',
+                '--app',
+                '--columns=application'
+            ],
             timeout=15
         )
-        return success and self.FLATPAK_APP_ID in stdout
+        return ok and self.FLATPAK_APP_ID in stdout
 
-    def _check_pip_installed(self):
+    def _check_pip(self):
         """
-        Check if OpenWebRX pip package is installed.
+        Verify OpenWebRX pip package is importable.
 
         Returns:
-            bool: True if importable
+            bool: True if import succeeds
         """
         try:
             import openwebrx
@@ -261,55 +336,96 @@ class OpenWebRXInstaller:
         except ImportError:
             return False
 
-    def install_python_packages(self):
+    def get_install_info(self):
         """
-        Install required Python packages via pip.
-
-        Uses the current Python interpreter (sys.executable)
-        to ensure packages land in the active virtual
-        environment.
+        Read installation marker data.
 
         Returns:
-            bool: True if all packages installed successfully
+            dict: Stored marker data or empty dict
         """
-        print("[OpenWebRX] Installing Python packages...")
-        failed = []
+        return self.read_marker(self.INSTALL_MARKER)
 
-        for package in self.REQUIRED_PYTHON_PACKAGES:
-            print(f"[OpenWebRX] Installing {package}...")
-            success, _, stderr = self._run_command(
-                [
-                    sys.executable, '-m', 'pip',
-                    'install', '--quiet', package
-                ],
-                timeout=120
+    def get_version(self):
+        """
+        Attempt to retrieve the installed OpenWebRX version.
+
+        Tries binary --version, Flatpak info, then
+        pip package metadata in order.
+
+        Returns:
+            str: Version string or None
+        """
+        # Try binary
+        binary = shutil.which('openwebrx')
+        if binary:
+            ok, stdout, _ = self._run_command(
+                [binary, '--version'],
+                timeout=10
             )
+            if ok and stdout.strip():
+                return stdout.strip()
 
-            if success:
-                print(f"[OpenWebRX] ✓ {package}")
-            else:
-                print(
-                    f"[OpenWebRX] WARNING: {package} "
-                    f"failed: {stderr[:100]}"
-                )
-                failed.append(package)
-
-        if failed:
-            print(
-                f"[OpenWebRX] WARNING: Failed packages: "
-                f"{failed}"
+        # Try Flatpak metadata
+        if self._check_flatpak():
+            ok, stdout, _ = self._run_command(
+                ['flatpak', 'info', self.FLATPAK_APP_ID],
+                timeout=15
             )
-            return False
+            if ok and stdout:
+                for line in stdout.splitlines():
+                    line_lower = line.lower()
+                    if 'version' in line_lower:
+                        parts = line.split(':')
+                        if len(parts) > 1:
+                            return parts[1].strip()
 
-        return True
+        # Try pip package
+        try:
+            import openwebrx
+            return getattr(openwebrx, '__version__', 'pip')
+        except ImportError:
+            pass
+
+        return None
+
+    def write_install_marker(self, method, version=None):
+        """
+        Write the installation marker via BaseInstaller.
+
+        Args:
+            method: Installation method string used
+            version: Version string if available
+        """
+        self.write_marker(
+            self.INSTALL_MARKER,
+            extra={
+                'method': method,
+                'version': version,
+                'platform': platform.platform(),
+                'arch': self._arch,
+                'docker_image': (
+                    self.DOCKER_IMAGE
+                    if method == 'docker' else None
+                ),
+            }
+        )
+
+    # ----------------------------------------------------------
+    # Installation methods
+    # ----------------------------------------------------------
 
     def _install_via_apt(self):
         """
-        Install OpenWebRX via apt-get.
+        Install OpenWebRX via the official apt repository.
 
-        Attempts to add the official OpenWebRX Debian
-        repository and install. Falls back to Flatpak
-        if apt installation fails.
+        Steps:
+            1. Install apt prerequisites
+            2. Add OpenWebRX GPG key
+            3. Add OpenWebRX apt repository
+            4. Run apt-get update
+            5. Install openwebrx package
+
+        Falls back to _install_via_flatpak() on failure.
 
         Returns:
             bool: True if installation successful
@@ -317,43 +433,42 @@ class OpenWebRXInstaller:
         print("[OpenWebRX] Installing via apt-get...")
 
         if not shutil.which('apt-get'):
-            print("[OpenWebRX] apt-get not available")
+            print("[OpenWebRX] apt-get not found — skipping")
             return self._install_via_flatpak()
 
-        try:
-            # Install prerequisite tools
-            print("[OpenWebRX] Installing prerequisites...")
-            success, _, stderr = self._run_command(
-                self._sudo + [
-                    'apt-get', 'install', '-y',
-                    'apt-transport-https',
-                    'curl',
-                    'gnupg',
-                    'lsb-release'
-                ],
-                timeout=120
+        # Step 1: Install prerequisites
+        print("[OpenWebRX] Installing apt prerequisites...")
+        ok, _, stderr = self._run_command(
+            self._sudo + [
+                'apt-get', 'install', '-y',
+                'apt-transport-https',
+                'curl',
+                'gnupg',
+                'lsb-release',
+            ],
+            timeout=120
+        )
+        if not ok:
+            print(
+                f"[OpenWebRX] Prerequisites failed: "
+                f"{stderr[:120]}"
             )
-            if not success:
-                print(
-                    f"[OpenWebRX] Prerequisites failed: "
-                    f"{stderr[:100]}"
-                )
-                return self._install_via_flatpak()
+            return self._install_via_flatpak()
 
-            # Add OpenWebRX GPG key
-            print("[OpenWebRX] Adding repository key...")
-            if shutil.which('curl'):
-                key_success, key_data, _ = self._run_command(
-                    [
-                        'curl', '-fsSL',
-                        'https://repo.openwebrx.de/debian/'
-                        'key.gpg.txt'
-                    ],
-                    timeout=30
-                )
+        # Step 2: Add GPG key
+        print("[OpenWebRX] Adding OpenWebRX GPG key...")
+        if shutil.which('curl'):
+            key_ok, key_data, _ = self._run_command(
+                [
+                    'curl', '-fsSL',
+                    'https://repo.openwebrx.de/debian/'
+                    'key.gpg.txt'
+                ],
+                timeout=30
+            )
 
-                if key_success and key_data:
-                    # Add key via apt-key
+            if key_ok and key_data:
+                try:
                     key_proc = subprocess.Popen(
                         self._sudo + ['apt-key', 'add', '-'],
                         stdin=subprocess.PIPE,
@@ -361,82 +476,89 @@ class OpenWebRXInstaller:
                         stderr=subprocess.PIPE
                     )
                     key_proc.communicate(
-                        input=key_data.encode()
+                        input=key_data.encode(),
+                        timeout=15
+                    )
+                except Exception as e:
+                    print(
+                        f"[OpenWebRX] GPG key warning: {e}"
                     )
 
-            # Detect distribution codename
-            distro_success, distro, _ = self._run_command(
-                ['lsb_release', '-cs'],
-                timeout=5
-            )
-            distro_name = distro.strip() if distro_success \
-                else 'bullseye'
+        # Step 3: Get distro codename and add repository
+        distro_ok, distro_name, _ = self._run_command(
+            ['lsb_release', '-cs'],
+            timeout=5
+        )
+        distro = distro_name.strip() \
+            if distro_ok else 'bullseye'
 
-            # Add repository
-            print(
-                f"[OpenWebRX] Adding repository "
-                f"for {distro_name}..."
-            )
-            repo_line = (
-                f"deb [arch=amd64] "
-                f"{self.DEBIAN_REPO} "
-                f"{distro_name} main\n"
-            )
+        print(
+            f"[OpenWebRX] Adding repository "
+            f"for {distro}..."
+        )
 
-            list_path = '/tmp/openwebrx.list'
-            with open(list_path, 'w') as f:
-                f.write(repo_line)
+        repo_content = (
+            f"deb [arch=amd64] "
+            f"{self.DEBIAN_REPO} {distro} main\n"
+        )
+
+        try:
+            list_file = '/tmp/openwebrx.list'
+            with open(list_file, 'w') as f:
+                f.write(repo_content)
 
             self._run_command(
                 self._sudo + [
-                    'cp', list_path,
+                    'cp', list_file,
                     '/etc/apt/sources.list.d/openwebrx.list'
                 ],
                 timeout=10
             )
-
-            # Update package list
-            print("[OpenWebRX] Updating package list...")
-            success, _, stderr = self._run_command(
-                self._sudo + ['apt-get', 'update', '-q'],
-                timeout=120
-            )
-            if not success:
-                print(
-                    f"[OpenWebRX] apt-get update failed: "
-                    f"{stderr[:100]}"
-                )
-                return self._install_via_flatpak()
-
-            # Install OpenWebRX
-            print("[OpenWebRX] Installing openwebrx package...")
-            success, _, stderr = self._run_command(
-                self._sudo + [
-                    'apt-get', 'install', '-y', 'openwebrx'
-                ],
-                timeout=300
-            )
-
-            if success:
-                print("[OpenWebRX] ✓ Installed via apt-get")
-                return True
-            else:
-                print(
-                    f"[OpenWebRX] apt install failed: "
-                    f"{stderr[:200]}"
-                )
-                return self._install_via_flatpak()
-
         except Exception as e:
-            print(f"[OpenWebRX] apt installation error: {e}")
+            print(
+                f"[OpenWebRX] Repository add warning: {e}"
+            )
+
+        # Step 4: Update package list
+        print("[OpenWebRX] Running apt-get update...")
+        ok, _, stderr = self._run_command(
+            self._sudo + ['apt-get', 'update', '-q'],
+            timeout=120
+        )
+        if not ok:
+            print(
+                f"[OpenWebRX] apt-get update failed: "
+                f"{stderr[:120]}"
+            )
             return self._install_via_flatpak()
+
+        # Step 5: Install OpenWebRX
+        print("[OpenWebRX] Installing openwebrx package...")
+        ok, _, stderr = self._run_command(
+            self._sudo + [
+                'apt-get', 'install', '-y', 'openwebrx'
+            ],
+            timeout=300
+        )
+
+        if ok:
+            print("[OpenWebRX] ✓ Installed via apt-get")
+            return True
+
+        print(
+            f"[OpenWebRX] apt-get install failed: "
+            f"{stderr[:200]}"
+        )
+        return self._install_via_flatpak()
 
     def _install_via_docker(self):
         """
-        Pull and set up OpenWebRX Docker image.
+        Pull the OpenWebRX Docker image.
 
         Creates a wrapper script so the plugin can
         manage the container lifecycle.
+
+        Falls back to _install_via_flatpak() on failure.
 
         Returns:
             bool: True if image pulled successfully
@@ -447,31 +569,33 @@ class OpenWebRXInstaller:
             print("[OpenWebRX] Docker not available")
             return self._install_via_flatpak()
 
-        # Pull the Docker image
         print(
             f"[OpenWebRX] Pulling {self.DOCKER_IMAGE}..."
         )
-        success, _, stderr = self._run_command(
+        ok, _, stderr = self._run_command(
             ['docker', 'pull', self.DOCKER_IMAGE],
             timeout=300
         )
 
-        if success:
+        if ok:
             print("[OpenWebRX] ✓ Docker image pulled")
             return True
-        else:
-            print(
-                f"[OpenWebRX] Docker pull failed: "
-                f"{stderr[:200]}"
-            )
-            return self._install_via_flatpak()
+
+        print(
+            f"[OpenWebRX] Docker pull failed: "
+            f"{stderr[:200]}"
+        )
+        return self._install_via_flatpak()
 
     def _install_via_flatpak(self):
         """
         Install OpenWebRX via Flatpak from Flathub.
 
-        Creates a wrapper script at ~/.local/bin/openwebrx
-        so the plugin can launch OpenWebRX normally.
+        Creates a CLI wrapper script at
+        ~/.local/bin/openwebrx so the plugin can
+        interact with the Flatpak installation normally.
+
+        Falls back to _install_via_pip() on failure.
 
         Returns:
             bool: True if installation successful
@@ -482,23 +606,25 @@ class OpenWebRXInstaller:
             print("[OpenWebRX] Flatpak not available")
             return self._install_via_pip()
 
-        # Add Flathub remote if not already added
+        # Add Flathub remote
         print("[OpenWebRX] Adding Flathub remote...")
         self._run_command(
             [
                 'flatpak', 'remote-add',
-                '--if-not-exists', 'flathub',
-                'https://flathub.org/repo/flathub.flatpakrepo'
+                '--if-not-exists',
+                'flathub',
+                'https://flathub.org/repo/'
+                'flathub.flatpakrepo'
             ],
             timeout=30
         )
 
-        # Install from Flathub
+        # Install application
         print(
             f"[OpenWebRX] Installing "
             f"{self.FLATPAK_APP_ID}..."
         )
-        success, _, stderr = self._run_command(
+        ok, _, stderr = self._run_command(
             [
                 'flatpak', 'install',
                 '-y', 'flathub',
@@ -507,9 +633,9 @@ class OpenWebRXInstaller:
             timeout=300
         )
 
-        if not success:
+        if not ok:
             print(
-                f"[OpenWebRX] Flatpak install failed: "
+                f"[OpenWebRX] Flatpak failed: "
                 f"{stderr[:200]}"
             )
             return self._install_via_pip()
@@ -517,24 +643,23 @@ class OpenWebRXInstaller:
         # Create CLI wrapper script
         wrapper_dir = os.path.expanduser('~/.local/bin')
         os.makedirs(wrapper_dir, exist_ok=True)
-
         wrapper_path = os.path.join(wrapper_dir, 'openwebrx')
-        wrapper_content = (
-            '#!/bin/bash\n'
-            f'exec flatpak run {self.FLATPAK_APP_ID} "$@"\n'
-        )
 
         try:
             with open(wrapper_path, 'w') as f:
-                f.write(wrapper_content)
+                f.write(
+                    '#!/bin/bash\n'
+                    f'exec flatpak run '
+                    f'{self.FLATPAK_APP_ID} "$@"\n'
+                )
             os.chmod(wrapper_path, 0o755)
             print(
-                f"[OpenWebRX] ✓ Flatpak wrapper: "
-                f"{wrapper_path}"
+                f"[OpenWebRX] ✓ Wrapper: {wrapper_path}"
             )
         except Exception as e:
             print(
-                f"[OpenWebRX] Wrapper creation error: {e}"
+                f"[OpenWebRX] Wrapper error (non-fatal): "
+                f"{e}"
             )
 
         print("[OpenWebRX] ✓ Installed via Flatpak")
@@ -542,17 +667,18 @@ class OpenWebRXInstaller:
 
     def _install_via_pip(self):
         """
-        Install OpenWebRX via pip as a last resort.
+        Attempt pip install of OpenWebRX as last resort.
 
-        Note: The pip package may not include all features
-        of a full OpenWebRX installation.
+        Note: openwebrx may not be on PyPI. This method
+        will fail gracefully and log a manual install
+        instruction.
 
         Returns:
-            bool: True if installation successful
+            bool: True if pip install succeeded
         """
-        print("[OpenWebRX] Installing via pip (fallback)...")
+        print("[OpenWebRX] Trying pip (last resort)...")
 
-        success, _, stderr = self._run_command(
+        ok, _, stderr = self._run_command(
             [
                 sys.executable, '-m', 'pip',
                 'install', '--quiet', 'openwebrx'
@@ -560,185 +686,144 @@ class OpenWebRXInstaller:
             timeout=120
         )
 
-        if success:
+        if ok:
             print("[OpenWebRX] ✓ Installed via pip")
             return True
-        else:
+
+        print(
+            f"[OpenWebRX] pip failed: {stderr[:200]}"
+        )
+        print(
+            "[OpenWebRX] All methods failed. "
+            "Install manually: https://openwebrx.de/"
+        )
+        return False
+
+    # ----------------------------------------------------------
+    # Public install_python_packages override
+    # ----------------------------------------------------------
+
+    def install_python_packages(self):
+        """
+        Install required Python packages.
+
+        Delegates to BaseInstaller.install_python_packages()
+        which handles Docker environments correctly.
+
+        Returns:
+            bool: True if all packages available
+        """
+        print("[OpenWebRX] Installing Python packages...")
+
+        available, failed = super().install_python_packages(
+            self.REQUIRED_PYTHON_PACKAGES
+        )
+
+        if failed and not self.in_docker:
             print(
-                f"[OpenWebRX] pip install failed: "
-                f"{stderr[:200]}"
-            )
-            print(
-                "[OpenWebRX] All installation methods failed."
-            )
-            print(
-                "[OpenWebRX] Please install manually: "
-                "https://openwebrx.de/"
+                f"[OpenWebRX] WARNING: "
+                f"Failed packages: {failed}"
             )
             return False
 
-    def write_install_marker(self, method, version=None):
-        """
-        Write installation marker with metadata.
+        return True
 
-        Args:
-            method: Installation method string
-            version: Version string if available
-        """
-        marker_data = {
-            'installed': True,
-            'method': method,
-            'version': version,
-            'platform': platform.platform(),
-            'arch': self._arch,
-            'python_version': sys.version,
-            'docker_image': (
-                self.DOCKER_IMAGE
-                if method == 'docker' else None
-            ),
-            'timestamp': str(
-                __import__('datetime').datetime.utcnow()
-            )
-        }
+    # ----------------------------------------------------------
+    # Main entry point — called by the plugin on first run
+    # ----------------------------------------------------------
 
-        try:
-            os.makedirs(
-                os.path.dirname(self.INSTALL_MARKER),
-                exist_ok=True
-            )
-            with open(self.INSTALL_MARKER, 'w') as f:
-                json.dump(marker_data, f, indent=2)
-            print("[OpenWebRX] ✓ Installation marker written")
-        except Exception as e:
-            print(
-                f"[OpenWebRX] WARNING: Marker write "
-                f"failed: {e}"
-            )
-
-    def get_install_info(self):
+    def run(self):
         """
-        Read installation marker data.
+        Execute the complete first-run installation process.
+
+        This is the primary public method called by the
+        plugin's initialize() method. It:
+
+            1. Checks if already installed (skip if so)
+            2. Checks if binary is already in PATH
+            3. Checks if running in Docker as non-root
+               (cannot install — logs guidance and returns)
+            4. Installs Python packages
+            5. Installs OpenWebRX via best available method:
+               apt-get → Docker → Flatpak → pip
+
+        Always returns True so the plugin UI loads even
+        when OpenWebRX itself cannot be installed. The UI
+        will show an appropriate status message.
 
         Returns:
-            dict: Marker contents or empty dict
+            bool: True always (plugin UI always loads)
         """
-        if not os.path.exists(self.INSTALL_MARKER):
-            return {}
-        try:
-            with open(self.INSTALL_MARKER, 'r') as f:
-                return json.load(f)
-        except Exception:
-            return {}
-
-    def get_version(self):
-        """
-        Attempt to get installed OpenWebRX version.
-
-        Returns:
-            str: Version string or None
-        """
-        # Try binary
-        binary = shutil.which('openwebrx')
-        if binary:
-            success, stdout, _ = self._run_command(
-                [binary, '--version'],
-                timeout=10
-            )
-            if success and stdout:
-                return stdout.strip()
-
-        # Try Flatpak
-        if self._check_flatpak_installed():
-            success, stdout, _ = self._run_command(
-                [
-                    'flatpak', 'info',
-                    '--show-metadata',
-                    self.FLATPAK_APP_ID
-                ],
-                timeout=15
-            )
-            if success and stdout:
-                for line in stdout.split('\n'):
-                    if 'version' in line.lower():
-                        return line.split('=')[-1].strip()
-
-        # Try pip
-        try:
-            import openwebrx
-            return getattr(openwebrx, '__version__', 'pip')
-        except ImportError:
-            pass
-
-        return None
-
-def run(self):
-        """
-        Execute first-run installation.
-
-        In Docker: checks package availability only,
-        does not attempt pip or apt installs.
-        Outside Docker: attempts full installation.
-
-        Returns:
-            bool: True always (plugin loads regardless)
-        """
-        # Already installed
+        # Already installed — nothing to do
         if self.is_installed():
             print("[OpenWebRX] ✓ Already installed")
             return True
 
-        # Binary already available
+        # Binary found in PATH but no marker — write marker
         if shutil.which('openwebrx'):
             version = self.get_version()
             self.write_install_marker('existing', version)
+            print(
+                "[OpenWebRX] ✓ Found existing installation"
+            )
             return True
 
-        print("[OpenWebRX] ========================================")
-        print("[OpenWebRX] First-run installation check")
-        print("[OpenWebRX] ========================================")
-
-        # Step 1: Python packages
-        print("\n[OpenWebRX] Step 1: Python packages...")
-        self.install_python_packages()
-        # Always continue regardless of result
-
-        # Step 2: OpenWebRX application
         print(
-            f"\n[OpenWebRX] Step 2: Installing OpenWebRX..."
+            "[OpenWebRX] "
+            "========================================"
+        )
+        print("[OpenWebRX] First-run installation")
+        print(
+            "[OpenWebRX] "
+            "========================================"
         )
 
+        # -------------------------------------------------------
+        # Docker non-root: cannot install system packages
+        # -------------------------------------------------------
         if self.in_docker and not self.is_root:
-            # In Docker as non-root: cannot install system apps
             print(
                 "[OpenWebRX] INFO: Running in Docker as "
                 "non-root user."
             )
             print(
-                "[OpenWebRX] INFO: OpenWebRX must be installed "
-                "in the Docker image."
+                "[OpenWebRX] INFO: System installs require "
+                "root. Add to Dockerfile:"
             )
             print(
-                "[OpenWebRX] INFO: Add to Dockerfile: "
-                "apt-get install openwebrx"
+                "[OpenWebRX] INFO:   RUN apt-get install "
+                "-y openwebrx"
             )
             print(
-                "[OpenWebRX] INFO: Or use Docker-in-Docker "
-                "with the OpenWebRX container."
+                "[OpenWebRX] INFO: Then rebuild: "
+                "docker compose build --no-cache"
             )
-            print(
-                "[OpenWebRX] INFO: Plugin UI will load. "
-                "Use the Install button when OpenWebRX "
-                "is available."
-            )
-            # Write marker so we don't retry on every start
+
+            # Write marker so we skip this check next time
+            # and don't spam logs on every startup
             self.write_install_marker(
                 'docker_pending',
-                {'note': 'Awaiting Docker image rebuild'}
+                {'note': 'Requires Docker image rebuild'}
             )
-            # Return True so plugin still loads
+
+            # Return True — let the plugin UI load
             return True
 
-        # Outside Docker: attempt installation
+        # -------------------------------------------------------
+        # Step 1: Python packages
+        # -------------------------------------------------------
+        print("\n[OpenWebRX] Step 1: Python packages...")
+        self.install_python_packages()
+        # Always continue — non-fatal
+
+        # -------------------------------------------------------
+        # Step 2: Install OpenWebRX application
+        # -------------------------------------------------------
+        print(
+            f"\n[OpenWebRX] Step 2: Installing OpenWebRX | "
+            f"pkg mgr: {self._package_manager or 'none'}..."
+        )
+
         success = False
 
         if self._package_manager in ('apt-get', 'apt'):
@@ -748,22 +833,38 @@ def run(self):
         elif shutil.which('flatpak'):
             success = self._install_via_flatpak()
         else:
+            # Last resort
             success = self._install_via_pip()
 
+        # -------------------------------------------------------
+        # Post-install
+        # -------------------------------------------------------
         if success:
             version = self.get_version()
             self.write_install_marker(
                 self._package_manager or 'unknown',
                 version
             )
+            print(
+                "\n[OpenWebRX] "
+                "========================================"
+            )
             print("[OpenWebRX] ✓ Installation complete!")
+            if version:
+                print(f"[OpenWebRX]   Version: {version}")
+            print(
+                "[OpenWebRX] "
+                "========================================"
+            )
         else:
             print(
-                "[OpenWebRX] Installation failed. "
-                "Plugin UI will still load."
+                "\n[OpenWebRX] Installation failed. "
+                "The plugin UI will still load."
+            )
+            print(
+                "[OpenWebRX] Manual install: "
+                "https://openwebrx.de/"
             )
 
-        # Always return True — let the plugin load
-        return True
-
+        # Always return True so the plugin loads
         return True
