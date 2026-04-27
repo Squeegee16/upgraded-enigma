@@ -7,11 +7,10 @@ operators database from ISED.
 Source:
     https://apc-cap.ic.gc.ca/datafiles/amateur_delim.zip
 
-File Format (from readme_amat_delim.txt):
+File format (from readme_amat_delim.txt):
     Delimiter: semicolon (;)
-    Encoding: UTF-8 or Latin-1
 
-    Field order:
+    Field positions:
         0  Callsign
         1  Given Names
         2  Surname
@@ -19,11 +18,11 @@ File Format (from readme_amat_delim.txt):
         4  City
         5  Province
         6  Postal/ZIP Code
-        7  BASIC Qualification        (A) - contains 'A' if held
-        8  5WPM Qualification         (B) - contains 'B' if held
-        9  12WPM Qualification        (C) - contains 'C' if held
-        10 ADVANCED Qualification     (D) - contains 'D' if held
-        11 Basic with Honours         (E) - contains 'E' if held
+        7  BASIC Qualification         (A if held, else blank)
+        8  5WPM Qualification          (B if held, else blank)
+        9  12WPM Qualification         (C if held, else blank)
+        10 ADVANCED Qualification      (D if held, else blank)
+        11 Basic with Honours          (E if held, else blank)
         12 Club Name (field 1)
         13 Club Name (field 2)
         14 Club Address
@@ -31,28 +30,20 @@ File Format (from readme_amat_delim.txt):
         16 Club Province
         17 Club Postal/ZIP Code
 
-Qualification presence:
-    The qualification fields (positions 7-11) contain the
-    single letter code (A, B, C, D, or E) if the operator
-    holds that qualification, or are empty/blank if not held.
-
-    Example record (individual):
-        VE3ABC;John;SMITH;123 Main St;Toronto;ON;M5V1A1;A;;D;;;;;;;
-
-    Example record (club):
-        VE3XYZ;;;123 Club St;Ottawa;ON;K1A0A1;A;;D;;A;Toronto Radio Club;TARC;
-        123 Club St;Ottawa;ON;K1A0A1
-
 Threading:
-    Download runs in a background thread to avoid
-    blocking the Flask request handler. Progress is
-    tracked in _download_state and polled via API.
+    Download runs in a background thread started by
+    start_download(). The Flask app is passed to the
+    thread and an application context is pushed inside
+    the thread so SQLAlchemy sessions work correctly.
+
+    Progress is polled via the /api/db_status endpoint.
 """
 
 import io
 import os
-import csv
-import time
+import re
+import sys
+import json
 import zipfile
 import hashlib
 import threading
@@ -66,10 +57,9 @@ except ImportError:
     import urllib.request
     REQUESTS_AVAILABLE = False
 
-
-# -------------------------------------------------------------------
-# Field position constants (matching readme_amat_delim.txt)
-# -------------------------------------------------------------------
+# ------------------------------------------------------------------
+# Field index constants from readme_amat_delim.txt
+# ------------------------------------------------------------------
 FIELD_CALLSIGN = 0
 FIELD_GIVEN_NAMES = 1
 FIELD_SURNAME = 2
@@ -77,11 +67,11 @@ FIELD_STREET = 3
 FIELD_CITY = 4
 FIELD_PROVINCE = 5
 FIELD_POSTAL = 6
-FIELD_QUAL_A = 7      # Basic
-FIELD_QUAL_B = 8      # 5 WPM Morse
-FIELD_QUAL_C = 9      # 12 WPM Morse
-FIELD_QUAL_D = 10     # Advanced
-FIELD_QUAL_E = 11     # Basic with Honours
+FIELD_QUAL_A = 7       # Basic
+FIELD_QUAL_B = 8       # 5 WPM Morse
+FIELD_QUAL_C = 9       # 12 WPM Morse
+FIELD_QUAL_D = 10      # Advanced
+FIELD_QUAL_E = 11      # Basic with Honours
 FIELD_CLUB_NAME_1 = 12
 FIELD_CLUB_NAME_2 = 13
 FIELD_CLUB_ADDRESS = 14
@@ -89,20 +79,25 @@ FIELD_CLUB_CITY = 15
 FIELD_CLUB_PROVINCE = 16
 FIELD_CLUB_POSTAL = 17
 
-# Minimum number of fields expected per record
-MIN_FIELDS = 12
+# Minimum fields expected per data record
+MIN_FIELDS = 7
 
-# Semicolon delimiter as defined in readme_amat_delim.txt
+# Semicolon delimiter as per ISED specification
 DELIMITER = ';'
+
+# Canadian callsign format for header-row detection
+CALLSIGN_PATTERN = re.compile(
+    r'^[A-Z0-9]{2,3}[0-9][A-Z]+$',
+    re.IGNORECASE
+)
 
 
 class CallsignDatabaseDownloader:
     """
     Downloads and imports the ISED amateur radio database.
 
-    Uses the exact semicolon-delimited format described
-    in readme_amat_delim.txt with qualification codes
-    A through E.
+    Runs in a background thread. Progress is available
+    via get_state() which is polled by the dashboard API.
     """
 
     # Official ISED download URL
@@ -110,15 +105,12 @@ class CallsignDatabaseDownloader:
         'https://apc-cap.ic.gc.ca/datafiles/amateur_delim.zip'
     )
 
-    # ZIP internal filename
-    DATA_FILENAME = 'amateur_delim.txt'
-
-    # Database insert batch size for performance
+    # Batch size for SQLAlchemy bulk inserts
     BATCH_SIZE = 500
 
     def __init__(self):
-        """Initialise downloader with progress state."""
-        self._download_state = {
+        """Initialise downloader with idle state."""
+        self._state = {
             'status': 'idle',
             'progress': 0,
             'message': '',
@@ -131,111 +123,145 @@ class CallsignDatabaseDownloader:
         self._lock = threading.Lock()
         self._thread = None
 
+    # ----------------------------------------------------------
+    # State management (thread-safe)
+    # ----------------------------------------------------------
+
     def get_state(self):
         """
-        Get current download state (thread-safe).
+        Get a copy of the current download state.
+
+        Thread-safe. Called by the dashboard API to
+        report progress to the browser.
 
         Returns:
-            dict: Copy of current download state
+            dict: Copy of current state dictionary
         """
         with self._lock:
-            return dict(self._download_state)
+            return dict(self._state)
 
-    def _set_state(self, **kwargs):
+    def _update_state(self, **kwargs):
         """
-        Update download state (thread-safe).
+        Update one or more state fields (thread-safe).
 
         Args:
-            **kwargs: State fields to update
+            **kwargs: State field names and new values
         """
         with self._lock:
-            self._download_state.update(kwargs)
+            self._state.update(kwargs)
 
     def is_running(self):
         """
-        Check if a download is in progress.
+        Check if a download thread is active.
 
         Returns:
-            bool: True if download thread is alive
+            bool: True if thread is alive
         """
         return (
             self._thread is not None and
             self._thread.is_alive()
         )
 
+    # ----------------------------------------------------------
+    # Thread management
+    # ----------------------------------------------------------
+
     def start_download(self, app):
         """
-        Start database download in a background thread.
+        Start the database download in a background thread.
+
+        The Flask app instance is passed to the thread
+        so it can push an application context and use
+        SQLAlchemy inside the thread.
 
         Args:
-            app: Flask app instance (for app context)
+            app: Flask application instance
 
         Returns:
-            bool: True if started, False if already running
+            bool: True if thread started,
+                  False if already running
         """
         if self.is_running():
+            print("[CallsignDB] Download already running")
             return False
 
-        self._set_state(
+        # Reset state for new download
+        self._update_state(
             status='starting',
             progress=0,
-            message='Starting download...',
+            message='Preparing download...',
             records_imported=0,
             total_records=0,
             started_at=datetime.utcnow().isoformat(),
             completed_at=None,
-            error=None
+            error=None,
         )
 
+        # Use _get_current_object() to get the real app
+        # instance rather than a proxy when inside a
+        # request context
+        try:
+            real_app = app._get_current_object()
+        except AttributeError:
+            real_app = app
+
         self._thread = threading.Thread(
-            target=self._worker,
-            args=(app,),
+            target=self._thread_worker,
+            args=(real_app,),
             daemon=True,
             name='ised-db-downloader'
         )
         self._thread.start()
+        print("[CallsignDB] Download thread started")
         return True
 
-    def _worker(self, app):
+    def _thread_worker(self, app):
         """
-        Background worker with Flask application context.
+        Background thread worker function.
+
+        Pushes a Flask application context so that
+        SQLAlchemy models and sessions work correctly
+        inside the thread.
 
         Args:
-            app: Flask application instance
+            app: Real Flask application instance
         """
+        # Push application context for this thread
+        # This is required for all SQLAlchemy operations
         with app.app_context():
             try:
                 self._run_download()
             except Exception as e:
-                print(f"[CallsignDB] Worker error: {e}")
+                error_msg = str(e)
+                print(f"[CallsignDB] Thread error: {e}")
                 traceback.print_exc()
-                self._set_state(
+                self._update_state(
                     status='error',
-                    error=str(e),
-                    message=f'Unexpected error: {e}'
+                    error=error_msg,
+                    message=f'Download failed: {error_msg}'
                 )
+
+    # ----------------------------------------------------------
+    # Download pipeline
+    # ----------------------------------------------------------
 
     def _run_download(self):
         """
-        Execute the full download-parse-import cycle.
+        Execute the complete download-parse-import pipeline.
 
         Steps:
             1. Download ZIP file from ISED
-            2. Extract and decode text file
-            3. Parse semicolon-delimited records
-            4. Validate and import to SQLite in batches
+            2. Extract and decode semicolon-delimited text
+            3. Parse records from text
+            4. Import records to SQLite in batches
             5. Update DatabaseMeta with statistics
         """
-        from callsign_db.models import DatabaseMeta
-        from models import db
-
-        # -----------------------------------------------------------
+        # -------------------------------------------------------
         # Step 1: Download the ZIP archive
-        # -----------------------------------------------------------
-        print(
-            f"[CallsignDB] Downloading: {self.DOWNLOAD_URL}"
-        )
-        self._set_state(
+        # -------------------------------------------------------
+        print(f"[CallsignDB] Downloading: {self.DOWNLOAD_URL}")
+
+        self._update_state(
             status='downloading',
             progress=5,
             message='Connecting to ISED Canada...'
@@ -244,59 +270,64 @@ class CallsignDatabaseDownloader:
         zip_bytes = self._download_zip()
 
         if not zip_bytes:
-            self._set_state(
+            self._update_state(
                 status='error',
                 error='Download failed',
                 message=(
-                    'Could not download database. '
-                    'Check network connection.'
+                    'Could not download from ISED. '
+                    'Check network connection and retry.'
                 )
             )
             return
 
         size_kb = len(zip_bytes) / 1024
         print(f"[CallsignDB] Downloaded {size_kb:.0f} KB")
-
-        self._set_state(
+        self._update_state(
             progress=25,
             message=f'Downloaded {size_kb:.0f} KB. Extracting...'
         )
 
-        # -----------------------------------------------------------
-        # Step 2: Extract semicolon-delimited text from ZIP
-        # -----------------------------------------------------------
-        self._set_state(
-            status='parsing',
-            progress=30,
-            message='Extracting archive...'
+        # -------------------------------------------------------
+        # Step 2: Extract text from ZIP
+        # -------------------------------------------------------
+        self._update_state(
+            status='extracting',
+            progress=28,
+            message='Extracting ZIP archive...'
         )
 
         try:
             raw_text = self._extract_text(zip_bytes)
         except Exception as e:
-            self._set_state(
+            self._update_state(
                 status='error',
                 error=str(e),
                 message=f'Extraction failed: {e}'
             )
             return
 
-        # -----------------------------------------------------------
+        print(
+            f"[CallsignDB] Extracted "
+            f"{len(raw_text):,} characters"
+        )
+
+        # -------------------------------------------------------
         # Step 3: Parse semicolon-delimited records
-        # -----------------------------------------------------------
-        self._set_state(
-            progress=35,
+        # -------------------------------------------------------
+        self._update_state(
+            status='parsing',
+            progress=32,
             message='Parsing operator records...'
         )
 
-        records = self._parse_semicolon_file(raw_text)
+        records = self._parse_records(raw_text)
 
         if not records:
-            self._set_state(
+            self._update_state(
                 status='error',
                 error='No records parsed',
                 message=(
-                    'No valid records found. '
+                    'No valid records found in download. '
                     'File format may have changed.'
                 )
             )
@@ -305,56 +336,79 @@ class CallsignDatabaseDownloader:
         total = len(records)
         print(f"[CallsignDB] Parsed {total:,} records")
 
-        self._set_state(
+        self._update_state(
             status='importing',
-            progress=45,
+            progress=40,
             total_records=total,
             message=f'Importing {total:,} operators...'
         )
 
-        # -----------------------------------------------------------
-        # Step 4: Import records to database
-        # -----------------------------------------------------------
-        imported = self._import_to_database(records, db)
+        # -------------------------------------------------------
+        # Step 4: Import to database in batches
+        # -------------------------------------------------------
+        imported = self._import_records(records)
 
-        # -----------------------------------------------------------
+        # -------------------------------------------------------
         # Step 5: Update metadata
-        # -----------------------------------------------------------
-        checksum = hashlib.md5(zip_bytes).hexdigest()
-        now = datetime.utcnow().isoformat()
+        # -------------------------------------------------------
+        try:
+            from callsign_db.models import DatabaseMeta
 
-        DatabaseMeta.set('last_updated', now)
-        DatabaseMeta.set('record_count', str(imported))
-        DatabaseMeta.set('checksum', checksum)
-        DatabaseMeta.set('source_url', self.DOWNLOAD_URL)
-        DatabaseMeta.set('format', 'semicolon_delimited_v1')
+            checksum = hashlib.md5(zip_bytes).hexdigest()
+            now = datetime.utcnow().isoformat()
 
-        self._set_state(
+            DatabaseMeta.set('last_updated', now)
+            DatabaseMeta.set('record_count', str(imported))
+            DatabaseMeta.set('checksum', checksum)
+            DatabaseMeta.set('source_url', self.DOWNLOAD_URL)
+            DatabaseMeta.set('delimiter', 'semicolon')
+
+            print(f"[CallsignDB] Metadata updated")
+
+        except Exception as e:
+            print(f"[CallsignDB] Metadata error: {e}")
+            traceback.print_exc()
+
+        # Mark complete
+        self._update_state(
             status='complete',
             progress=100,
             records_imported=imported,
-            completed_at=now,
-            message=f'Successfully imported {imported:,} operators'
+            completed_at=datetime.utcnow().isoformat(),
+            message=(
+                f'Successfully imported '
+                f'{imported:,} operators'
+            )
         )
 
         print(
-            f"[CallsignDB] ✓ Import complete: {imported:,} records"
+            f"[CallsignDB] ✓ Import complete: "
+            f"{imported:,} records"
         )
+
+    # ----------------------------------------------------------
+    # Download helper
+    # ----------------------------------------------------------
 
     def _download_zip(self):
         """
         Download the ISED ZIP file.
 
+        Uses requests if available, otherwise urllib.
+        Updates progress state during streaming download.
+
         Returns:
             bytes: ZIP file content or None on error
         """
+        headers = {'User-Agent': 'HamRadioApp/1.0 (Linux)'}
+
         try:
             if REQUESTS_AVAILABLE:
                 response = requests.get(
                     self.DOWNLOAD_URL,
                     timeout=120,
                     stream=True,
-                    headers={'User-Agent': 'HamRadioApp/1.0'}
+                    headers=headers
                 )
                 response.raise_for_status()
 
@@ -367,46 +421,51 @@ class CallsignDatabaseDownloader:
                     if chunk:
                         chunks.append(chunk)
                         downloaded += len(chunk)
-                        # Scale progress 5% -> 25%
+
+                        # Scale progress 5% -> 24%
                         pct = min(
                             24,
-                            5 + int(downloaded / 40000)
+                            5 + int(downloaded / 50000)
                         )
-                        self._set_state(
+                        self._update_state(
                             progress=pct,
                             message=(
                                 f'Downloading... '
-                                f'{downloaded / 1024:.0f} KB'
+                                f'{downloaded/1024:.0f} KB'
                             )
                         )
 
                 return b''.join(chunks)
 
             else:
-                # Fallback: urllib
+                # Fallback to urllib
                 import urllib.request
                 req = urllib.request.Request(
                     self.DOWNLOAD_URL,
-                    headers={'User-Agent': 'HamRadioApp/1.0'}
+                    headers=headers
                 )
                 with urllib.request.urlopen(
                     req, timeout=120
-                ) as resp:
-                    return resp.read()
+                ) as response:
+                    return response.read()
 
         except Exception as e:
             print(f"[CallsignDB] Download error: {e}")
             return None
 
+    # ----------------------------------------------------------
+    # Extraction helper
+    # ----------------------------------------------------------
+
     def _extract_text(self, zip_bytes):
         """
-        Extract and decode the text file from the ZIP archive.
+        Extract and decode the text file from the ZIP.
 
-        Handles varying filenames inside the ZIP.
-        Tries UTF-8 encoding first, then Latin-1 fallback.
+        Handles varying filenames inside the ZIP and
+        tries multiple encodings (UTF-8, Latin-1, CP1252).
 
         Args:
-            zip_bytes: Raw ZIP file bytes
+            zip_bytes: Raw bytes of the ZIP archive
 
         Returns:
             str: Decoded text content
@@ -416,19 +475,21 @@ class CallsignDatabaseDownloader:
         """
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             names = zf.namelist()
-            print(f"[CallsignDB] ZIP contains: {names}")
+            print(f"[CallsignDB] ZIP contents: {names}")
 
             # Find the data file
+            # Exclude readme files
             target = None
             for name in names:
                 lower = name.lower()
-                if (lower.endswith('.txt') or
-                        lower.endswith('.csv')) and \
-                        'readme' not in lower:
+                if ('readme' not in lower and
+                        'read_me' not in lower and
+                        (lower.endswith('.txt') or
+                         lower.endswith('.csv'))):
                     target = name
                     break
 
-            # Last resort: any .txt file
+            # Fallback: any .txt file
             if not target:
                 for name in names:
                     if name.lower().endswith('.txt'):
@@ -437,150 +498,126 @@ class CallsignDatabaseDownloader:
 
             if not target:
                 raise ValueError(
-                    f"No data file found in ZIP. "
+                    f"No data file in ZIP. "
                     f"Contents: {names}"
                 )
 
             print(f"[CallsignDB] Extracting: {target}")
             raw_bytes = zf.read(target)
 
-        # Try multiple encodings
+        # Try encodings in order
         for encoding in ('utf-8', 'latin-1', 'cp1252'):
             try:
                 text = raw_bytes.decode(encoding)
                 print(
-                    f"[CallsignDB] Decoded with {encoding}. "
-                    f"Size: {len(text):,} chars"
+                    f"[CallsignDB] Decoded "
+                    f"({encoding}): "
+                    f"{len(text):,} chars"
                 )
                 return text
             except UnicodeDecodeError:
                 continue
 
-        # Final fallback with error replacement
+        # Last resort
         return raw_bytes.decode('utf-8', errors='replace')
 
-    def _parse_semicolon_file(self, text):
+    # ----------------------------------------------------------
+    # Parsing helper
+    # ----------------------------------------------------------
+
+    def _parse_records(self, text):
         """
-        Parse the ISED semicolon-delimited operator file.
+        Parse semicolon-delimited ISED operator records.
 
-        The file uses semicolons (;) as field separators.
-        The first line may or may not be a header row.
-
-        Qualification fields (positions 7-11) contain the
-        single letter code if the qualification is held,
-        or are empty/blank if not held:
-            Position 7  -> 'A' if Basic held, else blank
-            Position 8  -> 'B' if 5WPM Morse held, else blank
-            Position 9  -> 'C' if 12WPM Morse held, else blank
-            Position 10 -> 'D' if Advanced held, else blank
-            Position 11 -> 'E' if Basic Honours held, else blank
+        Detects and skips any header row. Validates that
+        each record's first field looks like a callsign.
+        Pads short records to the expected field count.
 
         Args:
-            text: Full text content of the data file
+            text: Full decoded text of the data file
 
         Returns:
-            list: List of raw field lists (one per operator)
+            list: List of field-value lists,
+                  one per valid operator record
         """
         records = []
         lines = text.splitlines()
 
         if not lines:
-            print("[CallsignDB] ERROR: Empty file")
+            print("[CallsignDB] ERROR: Empty file content")
             return records
 
         print(f"[CallsignDB] Total lines: {len(lines):,}")
 
-        # -----------------------------------------------------------
-        # Detect and skip header row
-        # The first line may be a header. We detect this by
-        # checking if the first field looks like a callsign
-        # (starts with a letter/digit, not 'callsign' text).
-        # -----------------------------------------------------------
+        # Detect header row
         start_line = 0
-        first_line = lines[0].strip()
-        first_fields = first_line.split(DELIMITER)
-
-        if first_fields:
-            first_field = first_fields[0].strip().upper()
-            # Skip header if first field is not a callsign format
-            if first_field in (
-                'CALLSIGN', 'CALL', 'INDICATIF', 'CALL SIGN'
-            ):
+        first = lines[0].strip()
+        if first:
+            first_field = first.split(DELIMITER)[0].strip()
+            # Header row will not look like a callsign
+            if not CALLSIGN_PATTERN.match(first_field):
                 print(
-                    f"[CallsignDB] Skipping header: {first_line[:80]}"
+                    f"[CallsignDB] Skipping header: "
+                    f"{first[:60]}"
                 )
                 start_line = 1
-            else:
-                # Validate it looks like a callsign
-                import re
-                callsign_pattern = re.compile(
-                    r'^[A-Z0-9]{2,}[0-9][A-Z]+$',
-                    re.IGNORECASE
-                )
-                if not callsign_pattern.match(first_field):
-                    print(
-                        f"[CallsignDB] Skipping possible header: "
-                        f"{first_line[:80]}"
-                    )
-                    start_line = 1
 
-        # -----------------------------------------------------------
         # Parse data lines
-        # -----------------------------------------------------------
         skipped = 0
-        for line_num, line in enumerate(
-            lines[start_line:], start=start_line + 1
-        ):
+        for line in lines[start_line:]:
             line = line.strip()
-
-            # Skip blank lines
             if not line:
                 continue
 
             # Split on semicolon
             fields = line.split(DELIMITER)
 
-            # Pad to expected length to avoid index errors
+            # Pad to expected width
             while len(fields) < 18:
                 fields.append('')
 
             # Validate callsign field
             callsign = fields[FIELD_CALLSIGN].strip().upper()
-            if not callsign:
+            if not callsign or not CALLSIGN_PATTERN.match(
+                callsign
+            ):
                 skipped += 1
                 continue
 
             records.append(fields)
 
         print(
-            f"[CallsignDB] Parsed {len(records):,} records "
-            f"({skipped} skipped)"
+            f"[CallsignDB] Valid records: {len(records):,} "
+            f"(skipped {skipped})"
         )
         return records
 
-    def _import_to_database(self, records, db):
-        """
-        Import parsed records to the SQLite database.
+    # ----------------------------------------------------------
+    # Import helper
+    # ----------------------------------------------------------
 
-        Clears existing data and bulk-inserts new records
-        in batches for performance.
+    def _import_records(self, records):
+        """
+        Import parsed records into the SQLite database.
+
+        Clears the existing table and bulk-inserts new
+        records in batches. Updates progress state
+        throughout for the polling endpoint.
 
         Args:
-            records: List of field lists from parser
-            db: Flask-SQLAlchemy db instance
+            records: List of field-value lists
 
         Returns:
             int: Number of records successfully imported
         """
         from callsign_db.models import CanadianOperator
+        from models import db
 
         total = len(records)
         imported = 0
         batch = []
 
-        # -----------------------------------------------------------
-        # Clear existing operator records
-        # -----------------------------------------------------------
+        # Clear existing data
         print("[CallsignDB] Clearing existing records...")
         try:
             CanadianOperator.query.delete()
@@ -590,18 +627,22 @@ class CallsignDatabaseDownloader:
             print(f"[CallsignDB] Clear error: {e}")
             db.session.rollback()
 
-        # -----------------------------------------------------------
-        # Import in batches
-        # -----------------------------------------------------------
-        for i, fields in enumerate(records):
-            operator = self._fields_to_operator(fields)
+        # Bulk insert in batches
+        print("[CallsignDB] Importing records...")
 
-            if operator is None:
+        for i, fields in enumerate(records):
+            try:
+                operator = self._build_operator(fields)
+                if operator is not None:
+                    batch.append(operator)
+            except Exception as e:
+                print(
+                    f"[CallsignDB] Build error at "
+                    f"record {i}: {e}"
+                )
                 continue
 
-            batch.append(operator)
-
-            # Commit batch when full
+            # Commit when batch is full
             if len(batch) >= self.BATCH_SIZE:
                 try:
                     db.session.bulk_save_objects(batch)
@@ -609,11 +650,11 @@ class CallsignDatabaseDownloader:
                     imported += len(batch)
                     batch = []
 
-                    # Update progress: 45% -> 95%
-                    progress = 45 + int(
-                        (imported / total) * 50
+                    # Update progress: 40% -> 95%
+                    progress = 40 + int(
+                        (imported / total) * 55
                     )
-                    self._set_state(
+                    self._update_state(
                         progress=min(progress, 95),
                         records_imported=imported,
                         message=(
@@ -624,22 +665,26 @@ class CallsignDatabaseDownloader:
 
                 except Exception as e:
                     print(
-                        f"[CallsignDB] Batch error at "
-                        f"{imported}: {e}"
+                        f"[CallsignDB] Batch error "
+                        f"at {imported}: {e}"
                     )
+                    traceback.print_exc()
                     db.session.rollback()
                     batch = []
 
-        # Commit any remaining records
+        # Commit remaining records
         if batch:
             try:
                 db.session.bulk_save_objects(batch)
                 db.session.commit()
                 imported += len(batch)
-            except Exception as e:
                 print(
-                    f"[CallsignDB] Final batch error: {e}"
+                    f"[CallsignDB] Final batch: "
+                    f"{len(batch)} records"
                 )
+            except Exception as e:
+                print(f"[CallsignDB] Final batch error: {e}")
+                traceback.print_exc()
                 db.session.rollback()
 
         print(
@@ -648,102 +693,74 @@ class CallsignDatabaseDownloader:
         )
         return imported
 
-    def _fields_to_operator(self, fields):
+    def _build_operator(self, fields):
         """
-        Convert a parsed field list to a CanadianOperator model.
-
-        Maps field positions to model attributes according
-        to the readme_amat_delim.txt specification.
+        Build a CanadianOperator model from a field list.
 
         Qualification detection:
-            Each qualification field (positions 7-11)
-            contains the single letter code if the
-            qualification is held, or is blank/empty.
-
-            field[7] contains 'A' -> Basic held
-            field[8] contains 'B' -> 5WPM Morse held
-            field[9] contains 'C' -> 12WPM Morse held
-            field[10] contains 'D' -> Advanced held
-            field[11] contains 'E' -> Honours held
+            Field position 7  contains 'A' if Basic held
+            Field position 8  contains 'B' if 5WPM held
+            Field position 9  contains 'C' if 12WPM held
+            Field position 10 contains 'D' if Advanced held
+            Field position 11 contains 'E' if Honours held
 
         Args:
-            fields: List of string field values
+            fields: List of string field values,
+                    padded to at least 18 elements
 
         Returns:
-            CanadianOperator: Model instance or None
+            CanadianOperator: Model instance or None if
+                              callsign field is empty
         """
         from callsign_db.models import CanadianOperator
 
-        # Validate callsign
         callsign = fields[FIELD_CALLSIGN].strip().upper()
         if not callsign:
             return None
 
-        # -----------------------------------------------------------
-        # Parse qualification flags from letter codes
-        #
-        # The field contains the letter if the qualification
-        # is held, or is blank/empty if not held.
-        # We use strip().upper() to normalise and then check
-        # for the expected letter code.
-        # -----------------------------------------------------------
-        def has_qual(position, expected_letter):
-            """
-            Check if qualification letter is present in field.
-
-            Args:
-                position: Field index in records
-                expected_letter: Expected letter code (A-E)
-
-            Returns:
-                bool: True if the qualification is held
-            """
-            if position >= len(fields):
-                return False
-            value = fields[position].strip().upper()
-            # Field contains the letter code if qualification held
-            return value == expected_letter
-
-        qual_basic = has_qual(FIELD_QUAL_A, 'A')
-        qual_morse_5 = has_qual(FIELD_QUAL_B, 'B')
-        qual_morse_12 = has_qual(FIELD_QUAL_C, 'C')
-        qual_advanced = has_qual(FIELD_QUAL_D, 'D')
-        qual_honours = has_qual(FIELD_QUAL_E, 'E')
-
-        def safe_field(position):
-            """
-            Safely get a field value or None if empty.
-
-            Args:
-                position: Field index
-
-            Returns:
-                str or None: Field value or None
-            """
-            if position >= len(fields):
+        def safe(pos):
+            """Return stripped field value or None."""
+            if pos >= len(fields):
                 return None
-            val = fields[position].strip()
+            val = fields[pos].strip()
             return val if val else None
+
+        def has_qual(pos, letter):
+            """
+            Check qualification field for expected letter.
+
+            Returns True if the field at position pos
+            contains the single letter code that indicates
+            the qualification is held.
+
+            Args:
+                pos: Field position index
+                letter: Expected letter code (A-E)
+
+            Returns:
+                bool: True if qualification is held
+            """
+            if pos >= len(fields):
+                return False
+            return fields[pos].strip().upper() == letter
 
         return CanadianOperator(
             callsign=callsign,
-            given_names=safe_field(FIELD_GIVEN_NAMES),
-            surname=safe_field(FIELD_SURNAME),
-            street_address=safe_field(FIELD_STREET),
-            city=safe_field(FIELD_CITY),
-            province=safe_field(FIELD_PROVINCE),
-            postal_code=safe_field(FIELD_POSTAL),
-            # Qualification booleans
-            qual_basic=qual_basic,
-            qual_morse_5wpm=qual_morse_5,
-            qual_morse_12wpm=qual_morse_12,
-            qual_advanced=qual_advanced,
-            qual_honours=qual_honours,
-            # Club information
-            club_name_1=safe_field(FIELD_CLUB_NAME_1),
-            club_name_2=safe_field(FIELD_CLUB_NAME_2),
-            club_address=safe_field(FIELD_CLUB_ADDRESS),
-            club_city=safe_field(FIELD_CLUB_CITY),
-            club_province=safe_field(FIELD_CLUB_PROVINCE),
-            club_postal_code=safe_field(FIELD_CLUB_POSTAL),
+            given_names=safe(FIELD_GIVEN_NAMES),
+            surname=safe(FIELD_SURNAME),
+            street_address=safe(FIELD_STREET),
+            city=safe(FIELD_CITY),
+            province=safe(FIELD_PROVINCE),
+            postal_code=safe(FIELD_POSTAL),
+            qual_basic=has_qual(FIELD_QUAL_A, 'A'),
+            qual_morse_5wpm=has_qual(FIELD_QUAL_B, 'B'),
+            qual_morse_12wpm=has_qual(FIELD_QUAL_C, 'C'),
+            qual_advanced=has_qual(FIELD_QUAL_D, 'D'),
+            qual_honours=has_qual(FIELD_QUAL_E, 'E'),
+            club_name_1=safe(FIELD_CLUB_NAME_1),
+            club_name_2=safe(FIELD_CLUB_NAME_2),
+            club_address=safe(FIELD_CLUB_ADDRESS),
+            club_city=safe(FIELD_CLUB_CITY),
+            club_province=safe(FIELD_CLUB_PROVINCE),
+            club_postal_code=safe(FIELD_CLUB_POSTAL),
         )
