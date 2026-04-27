@@ -93,7 +93,7 @@ class OpenWebRXPlugin(BasePlugin):
         self.install_complete = False
         self.install_error = None
 
-def initialize(self):
+    def initialize(self):
         """Initialize OpenWebRX plugin for sidecar deployment."""
         print(f"\n[{self.name}] Initializing plugin...")
 
