@@ -3,36 +3,36 @@ version: '3.8'
 volumes:
   app_data:
     driver: local
+  app_certs:
+    driver: local
+  app_backups:
+    driver: local
 
 networks:
   hamradio_net:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    
+
     container_name: hamradio_app
     restart: unless-stopped
-    
+
     ports:
-      - "5000:5000"
-      - "5443:5443"
-    
+      - "5000:5000"    # Ham Radio App HTTPS
+      - "5443:5443"    # Ham Radio App HTTPS (alt)
+      - "8073:8073"    # OpenWebRX web interface
+
     environment:
-      # Flask configuration
       - FLASK_ENV=${FLASK_ENV:-production}
-      - FLASK_DEBUG=${FLASK_DEBUG:-0}
-      
-      # SECRET_KEY is now optional - will be auto-generated if not provided
-      # Uncomment to provide your own key:
-      # - SECRET_KEY=${SECRET_KEY}
-      
-      # Database configuration
+      - FLASK_DEBUG=${FLASK_DEBUG:-1}
       - DATABASE_URL=sqlite:////data/db/ham_radio.db
-      
       # Device configuration
       - USE_MOCK_DEVICES=${USE_MOCK_DEVICES:-true}
       - GPS_SERIAL_PORT=${GPS_SERIAL_PORT:-/dev/ttyUSB0}
@@ -42,12 +42,11 @@ services:
       - RADIO_BAUD_RATE=${RADIO_BAUD_RATE:-38400}
       - SDR_DEVICE_INDEX=${SDR_DEVICE_INDEX:-0}
       - SDR_SAMPLE_RATE=${SDR_SAMPLE_RATE:-2048000}
-      
       # SSL configuration
       - USE_SSL=${USE_SSL:-true}
       - SSL_CERT=/data/certs/cert.pem
       - SSL_KEY=/data/certs/key.pem
-      
+
       # Server configuration
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=5000
@@ -58,13 +57,15 @@ services:
       
       # Timezone
       - TZ=${TZ:-UTC}
-    
+
     volumes:
       - app_data:/data
-    
+      - app_certs:/data/certs
+      - app_backups:/data/backups
+
     networks:
       - hamradio_net
-    
+
     deploy:
       resources:
         limits:
@@ -73,19 +74,65 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
-    
+
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
-    
+
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/').read()"]
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
-    
+      start_period: 60s
+
     labels:
       - "com.hamradio.app=main"
+      - "com.hamradio.version=1.0.0"
+
+  backup:
+    image: alpine:latest
+    container_name: hamradio_backup
+    restart: unless-stopped
+
+    environment:
+      - BACKUP_INTERVAL=${BACKUP_INTERVAL:-86400}
+      - BACKUP_RETENTION=${BACKUP_RETENTION:-7}
+
+    volumes:
+      - app_data:/data:ro
+      - app_backups:/backups
+
+    command: >
+      sh -c '
+      echo "Backup service starting...";
+      while true; do
+        if [ -f /data/db/ham_radio.db ]; then
+          TS=$$(date +%Y%m%d_%H%M%S);
+          BF="/backups/ham_radio_$${TS}.db";
+          cp /data/db/ham_radio.db "$${BF}";
+          gzip "$${BF}";
+          echo "[$(date)] Backup: $${BF}.gz";
+          find /backups -name "ham_radio_*.db.gz" \
+            -mtime +$${BACKUP_RETENTION} -delete;
+        else
+          echo "[$(date)] DB not found, skipping backup";
+        fi;
+        sleep $${BACKUP_INTERVAL};
+      done
+      '
+
+    networks:
+      - hamradio_net
+
+    depends_on:
+      - app
+
+    labels:
+      - "com.hamradio.app=backup"
