@@ -1,16 +1,44 @@
-### 35. requirements.txt (Updated with all dependencies)
+# ============================================================
+# Ham Radio App - Python Requirements
+# All packages installed at Docker build time as root.
+# Plugin installers will skip pip installs at runtime.
+# ============================================================
+
+# Core Flask framework
 Flask==3.0.0
 Flask-Login==0.6.3
 Flask-WTF==1.2.1
 email_validator==1.1.1
 Flask-SQLAlchemy==3.1.1
 WTForms==3.1.1
+
+# Security
 bcrypt==4.1.2
+pyopenssl==23.3.0
+
+# Database
+SQLAlchemy==2.0.23
+
+# Hardware interfaces
 pyserial==3.5
 pynmea2==1.18.0
-adif-io==0.6.0
+
+# HTTP and networking
 requests==2.31.0
-pyopenssl==23.3.0
-numpy==1.24.3
-watchdog==3.0.0
-Pillow==10.0.0
+urllib3==2.1.0
+websockets==12.0
+aiohttp==3.9.1
+
+adif-io==0.6.0
+
+# System monitoring (used by plugins)
+psutil==5.9.8
+
+# Image processing (QSSTV, SatDump plugins)
+Pillow==10.2.0
+
+# File monitoring (QSSTV, SatDump plugins)
+watchdog==4.0.0
+
+# Numerical computing (SDR, SatDump)
+numpy==1.26.4
