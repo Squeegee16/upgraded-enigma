@@ -3,24 +3,31 @@ Plugin Base Installer
 ======================
 Shared base class for all plugin installers.
 
-Key Design Decisions for Docker:
-    1. All Python packages are pre-installed in the Docker
-       image via requirements.txt at build time.
-    2. At runtime the container user (hamradio, UID 1000)
-       has NO write access to /opt/venv.
-    3. Plugin installers must NEVER attempt pip installs
-       at runtime in Docker — they will always fail with
-       Permission denied.
-    4. System packages (apt-get) also cannot be installed
-       at runtime without sudo/root.
-    5. The PLUGIN_SKIP_PIP_INSTALL env var signals that
-       we are in a Docker environment and should skip
-       pip operations.
+Provides Docker-aware package management that correctly
+handles the case where the runtime user cannot install
+packages into the virtual environment.
 
-Correct approach:
-    - Add all dependencies to requirements.txt
-    - Rebuild the Docker image when deps change
-    - At runtime: only check if packages are importable
+Docker Deployment Model:
+    - All Python packages are pre-installed at image
+      build time via requirements.txt (running as root)
+    - The runtime user (hamradio, UID 1000) has READ
+      access to /opt/venv but cannot WRITE to it
+    - The env var PLUGIN_SKIP_PIP_INSTALL=true signals
+      that we are in Docker and should skip pip installs
+    - apt-get installs are also skipped for non-root users
+
+Usage:
+    class MyInstaller(BaseInstaller):
+        INSTALL_MARKER = '/path/to/.installed'
+        REQUIRED_PACKAGES = ['requests', 'psutil']
+
+        def run(self):
+            if self.is_installed():
+                return True
+            available, failed = self.install_python_packages(
+                self.REQUIRED_PACKAGES
+            )
+            ...
 
 Author: Ham Radio App Team
 Version: 1.0.0
@@ -39,28 +46,35 @@ class BaseInstaller:
     """
     Base installer with Docker-aware package management.
 
-    Provides safe wrappers around pip and system package
-    managers that correctly handle Docker environments
+    Provides safe wrappers for pip install and apt-get
+    that correctly detect and handle Docker environments
     where the runtime user cannot install packages.
     """
 
     def __init__(self):
         """
-        Detect runtime environment.
+        Detect runtime environment on initialisation.
 
-        Sets flags for Docker mode, root status,
-        and sudo availability.
+        Sets the following instance attributes:
+            is_root       - True if running as UID 0
+            sudo_available - True if sudo binary exists
+            _sudo         - Prefix list for system commands
+            in_docker     - True if Docker environment detected
         """
-        # Running as root?
+        # Check if running as root (UID 0)
         try:
             self.is_root = (os.getuid() == 0)
         except AttributeError:
+            # Windows - not a supported platform
             self.is_root = False
 
-        # sudo available?
+        # Check for sudo availability
         self.sudo_available = shutil.which('sudo') is not None
 
-        # Build sudo prefix
+        # Build prefix for system commands
+        # Root:             no prefix needed
+        # Non-root + sudo:  ['sudo']
+        # Non-root, no sudo: [] (system installs will fail)
         if self.is_root:
             self._sudo = []
         elif self.sudo_available:
@@ -68,95 +82,96 @@ class BaseInstaller:
         else:
             self._sudo = []
 
-        # Are we in Docker with pre-installed packages?
-        # The Dockerfile sets PLUGIN_SKIP_PIP_INSTALL=true
-        self.in_docker = (
-            os.environ.get('PLUGIN_SKIP_PIP_INSTALL', '')
-            .lower() == 'true'
-        )
+        # Detect Docker environment via two methods:
+        # 1. Environment variable set in Dockerfile
+        # 2. Presence of /.dockerenv file
+        env_flag = os.environ.get(
+            'PLUGIN_SKIP_PIP_INSTALL', ''
+        ).lower() == 'true'
 
-        # Also detect Docker by checking for /.dockerenv
-        if not self.in_docker:
-            self.in_docker = os.path.exists('/.dockerenv')
+        dockerenv_exists = os.path.exists('/.dockerenv')
 
-        if self.in_docker:
-            print(
-                f"[{self.__class__.__name__}] "
-                f"Docker environment detected — "
-                f"pip installs will be skipped"
-            )
+        self.in_docker = env_flag or dockerenv_exists
 
     def pip_install(self, package):
         """
-        Install a Python package if not already installed.
+        Install a Python package if not already available.
 
-        In Docker environments, skips installation and
-        only checks if the package is importable.
-        If not importable in Docker, logs a warning
-        directing the user to add it to requirements.txt.
+        In Docker environments this method only checks
+        whether the package is importable. If it is not
+        importable in Docker, a warning is logged
+        directing the operator to add it to requirements.txt
+        and rebuild the image.
+
+        Outside Docker, pip install is attempted normally.
 
         Args:
-            package: Package name to install
+            package: Package name string, may include
+                     version specifier (e.g. 'requests==2.31')
 
         Returns:
-            bool: True if package is available
+            bool: True if package is available or
+                  installation succeeded
         """
-        # First check if package is already importable
-        # Strip version specifiers for import check
-        import_name = package.split('==')[0] \
+        # Normalise package name for import checking
+        # Strip version specifiers: requests==2.31 -> requests
+        import_name = package \
+            .split('==')[0] \
             .split('>=')[0] \
             .split('<=')[0] \
+            .split('[')[0] \
             .strip()
 
-        # Handle packages with different import names
+        # Some packages have different import names
         import_name_map = {
             'pillow': 'PIL',
             'Pillow': 'PIL',
             'pyopenssl': 'OpenSSL',
             'PyOpenSSL': 'OpenSSL',
             'python-dotenv': 'dotenv',
-            'pynmea2': 'pynmea2',
+            'scikit-learn': 'sklearn',
+            'beautifulsoup4': 'bs4',
         }
         actual_import = import_name_map.get(
             import_name, import_name
         )
 
-        # Check importability
+        # Check if already importable
         if self._is_importable(actual_import):
-            print(
-                f"[{self.__class__.__name__}] "
-                f"✓ {package} already available"
-            )
             return True
 
-        # In Docker, we cannot install — report and skip
+        # Docker environment: skip install, log guidance
         if self.in_docker:
             print(
                 f"[{self.__class__.__name__}] "
-                f"WARNING: {package} not available in Docker. "
-                f"Add to requirements.txt and rebuild image."
+                f"INFO: {package} not in Docker image. "
+                f"Add to requirements.txt and rebuild."
             )
-            # Return True to not block plugin loading
-            # The plugin will handle missing deps gracefully
+            # Return True so plugin loading is not blocked
             return True
 
-        # Outside Docker — attempt pip install
+        # Outside Docker: attempt pip install
         try:
             result = subprocess.run(
-                [sys.executable, '-m', 'pip',
-                 'install', '--quiet', package],
+                [
+                    sys.executable, '-m', 'pip',
+                    'install', '--quiet', package
+                ],
                 check=True,
                 capture_output=True,
                 timeout=120
             )
             print(
                 f"[{self.__class__.__name__}] "
-                f"✓ Installed: {package}"
+                f"✓ pip installed: {package}"
             )
             return True
 
         except subprocess.CalledProcessError as e:
-            stderr = e.stderr.decode() if e.stderr else ''
+            stderr = e.stderr.decode(
+                'utf-8', errors='replace'
+            ) if e.stderr else ''
+
             if 'Permission denied' in stderr:
                 print(
                     f"[{self.__class__.__name__}] "
@@ -166,17 +181,27 @@ class BaseInstaller:
             else:
                 print(
                     f"[{self.__class__.__name__}] "
-                    f"WARNING: {package} install failed: "
-                    f"{stderr[:80]}"
+                    f"WARNING: pip {package} failed: "
+                    f"{stderr[:100]}"
                 )
+            return False
+
+        except Exception as e:
+            print(
+                f"[{self.__class__.__name__}] "
+                f"WARNING: pip {package} error: {e}"
+            )
             return False
 
     def _is_importable(self, module_name):
         """
-        Check if a Python module can be imported.
+        Check whether a Python module can be imported.
+
+        Uses importlib.util.find_spec() which does not
+        actually execute the module.
 
         Args:
-            module_name: Module name to test
+            module_name: Module name to check
 
         Returns:
             bool: True if module is importable
@@ -192,14 +217,15 @@ class BaseInstaller:
         """
         Install a list of Python packages.
 
-        In Docker, only checks availability.
-        Outside Docker, attempts pip install for each.
+        Calls pip_install() for each package and
+        collects results. In Docker, only availability
+        is checked rather than actual installation.
 
         Args:
             packages: List of package name strings
 
         Returns:
-            tuple: (available_count, unavailable_list)
+            tuple: (available_count: int, failed_list: list)
         """
         if self.in_docker:
             print(
@@ -209,66 +235,133 @@ class BaseInstaller:
         else:
             print(
                 f"[{self.__class__.__name__}] "
-                f"Installing Python packages..."
+                f"Installing {len(packages)} package(s)..."
             )
 
-        unavailable = []
-
+        failed = []
         for package in packages:
             ok = self.pip_install(package)
             if not ok:
-                unavailable.append(package)
+                failed.append(package)
 
-        available = len(packages) - len(unavailable)
+        available = len(packages) - len(failed)
 
-        if unavailable and self.in_docker:
+        if failed and self.in_docker:
             print(
                 f"[{self.__class__.__name__}] "
-                f"INFO: Add these to requirements.txt and "
-                f"rebuild: {unavailable}"
+                f"INFO: Add to requirements.txt: "
+                f"{', '.join(failed)}"
             )
 
-        return available, unavailable
+        return available, failed
+
+    def write_marker(self, marker_path, extra_data=None):
+        """
+        Write an installation marker JSON file.
+
+        Stores installation metadata including timestamp,
+        platform information, and any extra data provided
+        by the calling installer.
+
+        Args:
+            marker_path: Absolute path for the marker file
+            extra_data:  Optional dict of additional fields
+                         to include in the marker file.
+                         Defaults to None.
+
+        Note:
+            The parameter is named extra_data (not extra)
+            to avoid confusion with Python's **kwargs syntax.
+        """
+        data = {
+            'installed': True,
+            'timestamp': datetime.utcnow().isoformat(),
+            'platform': platform.platform(),
+            'python': sys.version,
+            'in_docker': self.in_docker,
+        }
+
+        # Merge in any additional data from the subclass
+        if extra_data and isinstance(extra_data, dict):
+            data.update(extra_data)
+
+        try:
+            # Create parent directory if it does not exist
+            marker_dir = os.path.dirname(marker_path)
+            if marker_dir:
+                os.makedirs(marker_dir, exist_ok=True)
+
+            with open(marker_path, 'w') as f:
+                json.dump(data, f, indent=2)
+
+        except Exception as e:
+            print(
+                f"[{self.__class__.__name__}] "
+                f"WARNING: Marker write failed: {e}"
+            )
+
+    def read_marker(self, marker_path):
+        """
+        Read an installation marker JSON file.
+
+        Args:
+            marker_path: Absolute path to the marker file
+
+        Returns:
+            dict: Parsed marker contents, or empty dict
+                  if file does not exist or is unreadable
+        """
+        if not os.path.exists(marker_path):
+            return {}
+
+        try:
+            with open(marker_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(
+                f"[{self.__class__.__name__}] "
+                f"WARNING: Marker read failed: {e}"
+            )
+            return {}
 
     def apt_install(self, *packages):
         """
         Install system packages via apt-get.
 
-        In Docker without root/sudo, this will fail.
-        Packages that need apt-get should be added to
-        the Dockerfile RUN apt-get block.
+        Skips installation in Docker as non-root since
+        the container user cannot run apt-get. Logs
+        the Dockerfile RUN instruction needed instead.
 
         Args:
-            *packages: Package names to install
+            *packages: Package name strings to install
 
         Returns:
-            bool: True if installed successfully
+            bool: True if packages installed successfully
         """
         if not shutil.which('apt-get'):
             print(
                 f"[{self.__class__.__name__}] "
-                f"apt-get not available"
+                f"apt-get not available on this system"
             )
             return False
 
         if self.in_docker and not self.is_root:
             print(
                 f"[{self.__class__.__name__}] "
-                f"INFO: Cannot apt-get in Docker as non-root. "
-                f"Add to Dockerfile: apt-get install "
+                f"INFO: Cannot apt-get in Docker as non-root."
+                f" Add to Dockerfile: "
+                f"RUN apt-get install -y "
                 f"{' '.join(packages)}"
             )
             return False
 
         try:
-            # Update
             subprocess.run(
                 self._sudo + ['apt-get', 'update', '-q'],
                 check=True,
                 capture_output=True,
                 timeout=60
             )
-            # Install
             subprocess.run(
                 self._sudo + [
                     'apt-get', 'install', '-y'
@@ -284,50 +377,18 @@ class BaseInstaller:
             return True
 
         except subprocess.CalledProcessError as e:
-            stderr = e.stderr.decode() if e.stderr else ''
+            stderr = e.stderr.decode(
+                'utf-8', errors='replace'
+            ) if e.stderr else str(e)
             print(
                 f"[{self.__class__.__name__}] "
                 f"apt-get failed: {stderr[:150]}"
             )
             return False
+
         except FileNotFoundError as e:
             print(
                 f"[{self.__class__.__name__}] "
                 f"Command not found: {e}"
             )
             return False
-
-    def write_marker(self, marker_path, extra_data=None):
-        """Write installation marker file."""
-        data = {
-            'installed': True,
-            'timestamp': datetime.utcnow().isoformat(),
-            'platform': platform.platform(),
-            'python': sys.version,
-            'in_docker': self.in_docker,
-        }
-        if extra_data:
-            data.update(extra_data)
-
-        try:
-            os.makedirs(
-                os.path.dirname(marker_path),
-                exist_ok=True
-            )
-            with open(marker_path, 'w') as f:
-                json.dump(data, f, indent=2)
-        except Exception as e:
-            print(
-                f"[{self.__class__.__name__}] "
-                f"Marker write error: {e}"
-            )
-
-    def read_marker(self, marker_path):
-        """Read installation marker file."""
-        if not os.path.exists(marker_path):
-            return {}
-        try:
-            with open(marker_path, 'r') as f:
-                return json.load(f)
-        except Exception:
-            return {}
