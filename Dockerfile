@@ -199,9 +199,10 @@ RUN mkdir -p \
         /data/callsigns \
         /data/logs \
         /data/plugins \
-        /app \
-    chown -R hamradio:hamradio /data /app && \
-    chmod -R 755 /data
+        /app 
+        
+RUN chown -R hamradio:hamradio /data /app 
+RUN chmod -R 755 /data
 
 # Copy Python virtual environment from builder stage
 COPY --from=builder /opt/venv /opt/venv
