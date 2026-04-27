@@ -161,7 +161,7 @@ RUN groupadd -r hamradio -g 1000 && \
 
 # Create data directories with proper ownership BEFORE switching user
 # This is critical for volume mounts to work correctly
-RUN mkdir -p /data/db /data/certs /data/backups /data/callsigns /data/logs /data/plugins \ /app \ && \
+RUN mkdir -p /data/db /data/certs /data/backups /data/callsigns /data/logs /data/plugins /app && \
     chown -R hamradio:hamradio /data /app && \
     chmod -R 755 /data
 
