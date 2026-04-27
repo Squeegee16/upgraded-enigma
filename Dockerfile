@@ -2,14 +2,16 @@
 # =============================================
 # Multi-stage build for optimized image size and security
 # Base image: Python 3.11 on Debian Bookworm (slim variant)
-
+# ============================================================
+# Stage 1: Builder
+# ============================================================
 # Build stage - Install dependencies and compile Python packages
 FROM python:3.11-slim-bookworm AS builder
 
 # Set build-time metadata
 LABEL maintainer="Ham Radio App Team"
-LABEL description="Ham Radio Operator Web Application - Builder Stage"
-LABEL version="1.0.0"
+LABEL description="Ham Radio App - Dependency Builder Stage"
+LABEL version="0.2.0"
 
 # Set environment variables for Python
 ENV PYTHONUNBUFFERED=1 \
@@ -28,6 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libusb-1.0-0-dev \
     python3-dev \
+    libpq-dev \
     libpython3-dev \
     python3-numpy \
     swig \
@@ -48,13 +51,16 @@ RUN python -m venv /opt/venv && \
     pip install wheel && \
     pip install -r requirements.txt
 
+# ============================================================
+# Stage 2: Runtime
+# ============================================================
 # Runtime stage - Minimal image with only runtime dependencies
 FROM python:3.11-slim-bookworm
 
 # Set runtime metadata
 LABEL maintainer="Ham Radio App Team"
 LABEL description="Ham Radio Operator Web Application"
-LABEL version="0.1.0"
+LABEL version="0.2.0"
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -62,6 +68,8 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH" \
     FLASK_APP=app.py \
     FLASK_ENV=development
+    # Tell plugins NOT to attempt runtime pip installs
+    PLUGIN_SKIP_PIP_INSTALL=true
 
 # Install runtime dependencies (including build tools for compilation)
 # - wget: For downloading packages
@@ -86,12 +94,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libusb-1.0-0-dev \
     libhamlib-dev \
     gnuradio \
+    # GPS support
     gpsd \
     gpsd-clients \
     ca-certificates \
+    # SSL certificate generation
+    openssl \
+    # Process utilities (used by plugins)
+    procps \
+    # Network utilities
+    curl \
+    wget \
+    usbutils \
     && rm -rf /var/lib/apt/lists/*
 
-# Build SoapySDR from source
+# Build SoapySDR from source # Radio control
 RUN cd /tmp && \
     git clone https://github.com/pothosware/SoapySDR.git && \
     cd SoapySDR && \
@@ -144,12 +161,15 @@ RUN groupadd -r hamradio -g 1000 && \
 
 # Create data directories with proper ownership BEFORE switching user
 # This is critical for volume mounts to work correctly
-RUN mkdir -p /data/db /data/certs /data/backups /data/callsigns /data/logs && \
-    chown -R hamradio:hamradio /data && \
+RUN mkdir -p /data/db /data/certs /data/backups /data/callsigns /data/logs /data/plugins \ /app \ && \
+    chown -R hamradio:hamradio /data /app && \
     chmod -R 755 /data
 
 # Copy Python virtual environment from builder stage
 COPY --from=builder /opt/venv /opt/venv
+
+# Make venv readable by hamradio user
+RUN chmod -R a+rX /opt/venv
 
 # Set working directory and create it
 WORKDIR /app
@@ -169,17 +189,17 @@ COPY --chown=hamradio:hamradio static ./static/
 COPY --chown=hamradio:hamradio app.py .
 COPY --chown=hamradio:hamradio requirements.txt .
 COPY --chown=hamradio:hamradio blacklist-rtl.conf /etc/modprobe.d/
-COPY --chown=hamradio:hamradio callsigns.txt ./data/callsigns/
+#COPY --chown=hamradio:hamradio callsigns.txt ./data/callsigns/
 COPY --chown=hamradio:hamradio callsign_db ./callsign_db/
 
 # Create necessary directories with proper permissions
-RUN mkdir -p \
-    /data/db \
-    /data/certs \
-    /data/callsigns \
-    /data/backups \
-    /app/plugins/implementations \
-    && chown -R hamradio:hamradio /data /app
+#RUN mkdir -p \
+#    /data/db \
+#    /data/certs \
+#    /data/callsigns \
+#    /data/backups \
+#    /app/plugins/implementations \
+#    && chown -R hamradio:hamradio /data /app
     
 
 # Copy and set permissions for entrypoint script
@@ -196,12 +216,16 @@ USER hamradio
 # Expose application port
 EXPOSE 5000
 
-# Health check to ensure container is functioning properly
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/').read()" || exit 1
+# Health check
+HEALTHCHECK \
+    --interval=30s \
+    --timeout=10s \
+    --start-period=60s \
+    --retries=3 \
+    CMD python -c \
+    "import urllib.request; \
+     urllib.request.urlopen('http://localhost:5000/').read()" \
+    || exit 1
 
-# Use entrypoint script
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-
-# Default command to run the application
 CMD ["python", "app.py"]
