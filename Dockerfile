@@ -38,7 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Create application directory
-WORKDIR /app
+WORKDIR /builder
 
 # Copy requirements file first (for better Docker layer caching)
 COPY requirements.txt .
