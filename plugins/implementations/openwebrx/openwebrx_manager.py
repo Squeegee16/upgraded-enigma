@@ -1,31 +1,21 @@
 """
-OpenWebRX Process Manager
-==========================
-Manages the OpenWebRX process lifecycle, configuration,
-and communication.
+OpenWebRX Manager - Updated for sidecar Docker deployment.
 
-OpenWebRX can run as:
-    - Docker container (recommended)
-    - System service (apt installation)
-    - Direct Python process (pip installation)
+OpenWebRX runs as a separate container (openwebrx service)
+accessible via http://openwebrx:8073 within the Docker
+network, or http://localhost:8073 from the host.
 
-Communication:
-    - HTTP API for status and control
-    - WebSocket for real-time data
-    - Config file management
-
-Reference: https://github.com/jketterl/openwebrx/wiki
+The OPENWEBRX_URL environment variable controls the URL.
 """
 
 import os
 import json
-import time
 import shutil
 import threading
 import subprocess
+import time
 from datetime import datetime
 
-# Handle optional imports gracefully
 try:
     import requests
     REQUESTS_AVAILABLE = True
@@ -41,38 +31,48 @@ except ImportError:
 
 class OpenWebRXManager:
     """
-    Manages OpenWebRX instance lifecycle and configuration.
+    Manages OpenWebRX communication and configuration.
 
-    Supports Docker, system service, and direct process modes.
-    Provides unified interface regardless of installation method.
+    In Docker deployment, OpenWebRX runs as a sidecar
+    container. This manager communicates with it via
+    HTTP rather than launching a local process.
     """
 
-    # OpenWebRX API endpoints
+    # API endpoints
     API_STATUS = '/api/status'
     API_FEATURES = '/api/features'
     API_RECEIVERS = '/api/receivers'
-    API_BANDS = '/api/bands'
 
-    # Docker container name
+    # Container name for Docker management
     CONTAINER_NAME = 'hamradio_openwebrx'
 
-    def __init__(self, config_dir, install_method='docker',
+    def __init__(self, config_dir, install_method='sidecar',
                  http_port=8073):
         """
-        Initialize the OpenWebRX manager.
+        Initialise OpenWebRX manager.
 
         Args:
-            config_dir: Directory for OpenWebRX configuration
-            install_method: How OpenWebRX was installed
-                           ('docker', 'apt', 'pip')
-            http_port: HTTP port for OpenWebRX web interface
+            config_dir: Plugin configuration directory
+            install_method: How OpenWebRX is deployed
+            http_port: OpenWebRX HTTP port
         """
         self.config_dir = config_dir
         self.install_method = install_method
         self.http_port = http_port
-        self.base_url = f'http://localhost:{http_port}'
 
-        # Process/container reference
+        # Determine OpenWebRX base URL
+        # Use OPENWEBRX_URL env var if set (Docker network)
+        # otherwise fall back to localhost
+        self.base_url = os.environ.get(
+            'OPENWEBRX_URL',
+            f'http://localhost:{http_port}'
+        )
+
+        print(
+            f"[OpenWebRX] Manager URL: {self.base_url}"
+        )
+
+        # Process handle (only used in direct-process mode)
         self._process = None
         self._process_lock = threading.Lock()
 
@@ -95,57 +95,41 @@ class OpenWebRXManager:
             'container_id': None
         }
 
-        # Detected signals for logbook integration
+        # Detected signals
         self._detected_signals = []
         self._signal_lock = threading.Lock()
 
-        # Load configuration
+        # Load config
         self.config = self._load_config()
-
-        # Ensure directories exist
         os.makedirs(config_dir, exist_ok=True)
-        os.makedirs(os.path.join(config_dir, 'openwebrx'), exist_ok=True)
 
     def _load_config(self):
-        """
-        Load OpenWebRX plugin configuration.
-
-        Returns:
-            dict: Configuration with defaults applied
-        """
-        config_file = os.path.join(self.config_dir, 'openwebrx_config.json')
+        """Load plugin configuration with defaults."""
+        config_file = os.path.join(
+            self.config_dir, 'openwebrx_config.json'
+        )
 
         defaults = {
-            # Server settings
-            'http_port': 8073,
+            'http_port': self.http_port,
+            'openwebrx_url': self.base_url,
             'allow_anonymous': True,
-
-            # SDR Device settings
             'sdr_type': 'rtlsdr',
             'sdr_device_index': 0,
-            'center_frequency': 145000000,  # 145 MHz
+            'center_frequency': 145000000,
             'sample_rate': 2048000,
             'gain': 30,
             'ppm': 0,
-
-            # Profile settings
             'receiver_name': 'Ham Radio SDR',
             'receiver_location': '',
             'receiver_asl': 0,
             'receiver_admin': '',
             'receiver_gps': {'lat': 0.0, 'lon': 0.0},
             'photo_title': 'Ham Radio Station',
-
-            # Bands to monitor
             'initial_frequency': 145000000,
             'initial_modulation': 'nfm',
-
-            # Auto-start setting
             'auto_start': False,
-
-            # Signal logging settings
             'log_signals': True,
-            'min_signal_strength': -70,  # dBm threshold for logging
+            'min_signal_strength': -70,
         }
 
         if os.path.exists(config_file):
@@ -153,288 +137,173 @@ class OpenWebRXManager:
                 with open(config_file, 'r') as f:
                     loaded = json.load(f)
                     defaults.update(loaded)
+                    # Update URL from config
+                    self.base_url = defaults.get(
+                        'openwebrx_url', self.base_url
+                    )
             except Exception as e:
-                print(f"[OpenWebRX] Warning: Could not load config: {e}")
+                print(
+                    f"[OpenWebRX] Config load error: {e}"
+                )
 
         return defaults
 
     def save_config(self, config_data):
-        """
-        Save plugin configuration to file.
-
-        Args:
-            config_data: Dictionary of configuration values
-
-        Returns:
-            bool: True if saved successfully
-        """
-        config_file = os.path.join(self.config_dir, 'openwebrx_config.json')
-
+        """Save plugin configuration."""
+        config_file = os.path.join(
+            self.config_dir, 'openwebrx_config.json'
+        )
         try:
             self.config.update(config_data)
+            # Update URL if changed
+            if 'openwebrx_url' in config_data:
+                self.base_url = config_data['openwebrx_url']
             with open(config_file, 'w') as f:
                 json.dump(self.config, f, indent=2)
-            print("[OpenWebRX] ✓ Configuration saved")
             return True
         except Exception as e:
-            print(f"[OpenWebRX] ERROR: Could not save config: {e}")
-            return False
-
-    def generate_openwebrx_config(self):
-        """
-        Generate OpenWebRX configuration files.
-
-        Creates the config_webrx.py and bands.json files
-        required by OpenWebRX.
-
-        Returns:
-            bool: True if generated successfully
-        """
-        owrx_config_dir = os.path.join(self.config_dir, 'openwebrx')
-        os.makedirs(owrx_config_dir, exist_ok=True)
-
-        # Generate config_webrx.py
-        config_content = f'''# OpenWebRX Configuration
-# Generated by Ham Radio App Plugin
-# Reference: https://github.com/jketterl/openwebrx/wiki/Configuration-guide
-
-# ==============================================================
-# Server Configuration
-# ==============================================================
-web_port = {self.config.get('http_port', 8073)}
-
-# ==============================================================
-# Receiver Information
-# ==============================================================
-receiver_name = "{self.config.get('receiver_name', 'Ham Radio SDR')}"
-receiver_location = "{self.config.get('receiver_location', '')}"
-receiver_asl = {self.config.get('receiver_asl', 0)}
-receiver_admin = "{self.config.get('receiver_admin', '')}"
-receiver_gps = {self.config.get('receiver_gps', {'lat': 0.0, 'lon': 0.0})}
-photo_title = "{self.config.get('photo_title', 'Ham Radio Station')}"
-
-# ==============================================================
-# SDR Device Configuration
-# ==============================================================
-sdrs = {{
-    "rtlsdr": {{
-        "name": "RTL-SDR",
-        "type": "{self.config.get('sdr_type', 'rtlsdr')}",
-        "device_index": {self.config.get('sdr_device_index', 0)},
-        "ppm": {self.config.get('ppm', 0)},
-        "gain": {self.config.get('gain', 30)},
-        "rf_gain": {self.config.get('gain', 30)},
-        "profiles": {{
-            "2m": {{
-                "name": "2m Band",
-                "center_freq": 145000000,
-                "samp_rate": {self.config.get('sample_rate', 2048000)},
-                "start_freq": {self.config.get('initial_frequency', 145000000)},
-                "start_mod": "{self.config.get('initial_modulation', 'nfm')}",
-            }},
-            "airband": {{
-                "name": "Airband",
-                "center_freq": 118000000,
-                "samp_rate": 2048000,
-                "start_freq": 121500000,
-                "start_mod": "am",
-            }},
-            "hf": {{
-                "name": "HF 20m",
-                "center_freq": 14100000,
-                "samp_rate": 2048000,
-                "start_freq": 14074000,
-                "start_mod": "usb",
-            }},
-            "weather": {{
-                "name": "NOAA Weather",
-                "center_freq": 162500000,
-                "samp_rate": 1024000,
-                "start_freq": 162550000,
-                "start_mod": "wfm",
-            }},
-        }},
-    }},
-}}
-'''
-
-        try:
-            config_path = os.path.join(owrx_config_dir, 'config_webrx.py')
-            with open(config_path, 'w') as f:
-                f.write(config_content)
-            print(f"[OpenWebRX] ✓ Config generated: {config_path}")
-            return True
-        except Exception as e:
-            print(f"[OpenWebRX] ERROR: Config generation failed: {e}")
+            print(f"[OpenWebRX] Config save error: {e}")
             return False
 
     def _add_log(self, message, level='info'):
-        """
-        Add entry to in-memory log buffer.
-
-        Args:
-            message: Log message
-            level: Log level (info, warning, error)
-        """
+        """Add entry to log buffer."""
         with self._log_lock:
             self._logs.append({
                 'timestamp': datetime.utcnow().isoformat(),
                 'level': level,
-                'message': message
+                'message': str(message)
             })
-
-            # Trim buffer
             if len(self._logs) > self._max_logs:
                 self._logs = self._logs[-self._max_logs:]
 
     def get_logs(self, limit=100):
-        """
-        Get recent log entries.
-
-        Args:
-            limit: Maximum entries to return
-
-        Returns:
-            list: Recent log entries newest first
-        """
+        """Get recent log entries."""
         with self._log_lock:
             return list(reversed(self._logs[-limit:]))
 
     def start(self):
         """
-        Start OpenWebRX using the appropriate method.
+        Start OpenWebRX.
+
+        In sidecar mode, checks if the container is
+        already running and accessible. If not, attempts
+        to start the Docker container.
+
+        In direct process mode, launches the binary.
 
         Returns:
             tuple: (success, message)
         """
-        with self._process_lock:
-            # Check if already running
-            if self._status['running']:
-                return False, "OpenWebRX is already running"
+        # Check if already accessible
+        if self.is_available():
+            self._status['running'] = True
+            self._status['connected'] = True
+            self._add_log(
+                "✓ OpenWebRX is already running and accessible"
+            )
+            return True, "OpenWebRX is running"
 
-            # Generate configuration
-            self.generate_openwebrx_config()
+        # Sidecar / Docker mode
+        if self.install_method in ('sidecar', 'docker'):
+            return self._start_sidecar()
 
-            # Start based on installation method
-            if self.install_method == 'docker':
-                return self._start_docker()
-            elif self.install_method == 'apt':
-                return self._start_service()
-            else:
-                return self._start_process()
+        # Direct process mode
+        return self._start_direct_process()
 
-    def _start_docker(self):
+    def _start_sidecar(self):
         """
-        Start OpenWebRX as a Docker container.
+        Start/restart the OpenWebRX Docker container.
 
-        Mounts the config directory and exposes the web port.
+        Uses docker commands to start the container
+        defined in docker-compose.yml.
 
         Returns:
             tuple: (success, message)
         """
-        owrx_config_dir = os.path.join(self.config_dir, 'openwebrx')
+        if not shutil.which('docker'):
+            msg = (
+                "OpenWebRX runs as a Docker sidecar. "
+                "It should start automatically with "
+                "docker compose up. "
+                f"Check container status: "
+                f"docker compose ps"
+            )
+            self._add_log(msg, 'warning')
+            return False, msg
+
+        self._add_log(
+            "Attempting to start OpenWebRX container..."
+        )
 
         try:
-            self._add_log("Starting OpenWebRX Docker container...")
-
-            # Build docker run command
-            cmd = [
-                'docker', 'run', '-d',
-                '--name', self.CONTAINER_NAME,
-                '--rm',  # Remove on stop
-                '-p', f'{self.http_port}:{self.http_port}',
-                '-v', f'{owrx_config_dir}:/etc/openwebrx',
-                # Add RTL-SDR device if available
-                '--device=/dev/bus/usb',
-                # Set privileged for USB device access
-                '--privileged',
-                'jketterl/openwebrx:latest'
-            ]
-
+            # Try docker compose start
             result = subprocess.run(
-                cmd,
+                ['docker', 'compose', 'start', 'openwebrx'],
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=15,
+                cwd='/app'
             )
 
             if result.returncode == 0:
-                container_id = result.stdout.strip()
-                self._status['running'] = True
-                self._status['container_id'] = container_id
-                self._status['error'] = None
-
                 self._add_log(
-                    f"✓ Container started: {container_id[:12]}"
+                    "✓ OpenWebRX container started"
+                )
+                # Wait for it to become available
+                for i in range(10):
+                    time.sleep(2)
+                    if self.is_available():
+                        self._status['running'] = True
+                        self._status['connected'] = True
+                        return True, "OpenWebRX started"
+
+                return True, (
+                    "OpenWebRX container started. "
+                    "Waiting for service to be ready..."
                 )
 
-                # Start monitoring thread
-                self._start_monitor()
-
-                return True, f"OpenWebRX started (container: {container_id[:12]})"
-            else:
-                # Check if container already exists
-                if 'already in use' in result.stderr:
-                    # Remove existing container and retry
-                    subprocess.run(
-                        ['docker', 'rm', '-f', self.CONTAINER_NAME],
-                        capture_output=True
-                    )
-                    return self._start_docker()
-
-                error = result.stderr.strip()
-                self._status['error'] = error
-                self._add_log(f"ERROR: {error}", 'error')
-                return False, f"Docker start failed: {error}"
-
-        except Exception as e:
-            error = str(e)
-            self._status['error'] = error
-            self._add_log(f"ERROR: {error}", 'error')
-            return False, f"Error starting container: {error}"
-
-    def _start_service(self):
-        """
-        Start OpenWebRX as a system service.
-
-        Returns:
-            tuple: (success, message)
-        """
-        try:
-            self._add_log("Starting OpenWebRX system service...")
-
-            result = subprocess.run(
-                ['sudo', 'systemctl', 'start', 'openwebrx'],
+            # Try docker start directly
+            result2 = subprocess.run(
+                ['docker', 'start', self.CONTAINER_NAME],
                 capture_output=True,
                 text=True,
                 timeout=15
             )
 
-            if result.returncode == 0:
-                self._status['running'] = True
-                self._add_log("✓ Service started")
-                self._start_monitor()
-                return True, "OpenWebRX service started"
-            else:
-                error = result.stderr.strip()
-                self._status['error'] = error
-                return False, f"Service start failed: {error}"
+            if result2.returncode == 0:
+                self._add_log(
+                    "✓ OpenWebRX container started"
+                )
+                return True, "OpenWebRX container started"
+
+            # Container not found - it needs to be started
+            # via docker compose from the project directory
+            msg = (
+                "OpenWebRX container not running. "
+                "Run: docker compose up -d openwebrx"
+            )
+            self._add_log(msg, 'warning')
+            return False, msg
 
         except Exception as e:
-            return False, f"Error starting service: {str(e)}"
+            msg = (
+                f"OpenWebRX sidecar start error: {e}. "
+                "Ensure docker compose is running."
+            )
+            self._add_log(msg, 'error')
+            return False, msg
 
-    def _start_process(self):
+    def _start_direct_process(self):
         """
-        Start OpenWebRX as a direct process.
+        Launch OpenWebRX as a direct process.
 
-        Checks for binary availability before attempting
-        to start. Returns a clear error if not found
-        instead of raising FileNotFoundError.
+        Only used outside Docker. Checks for binary
+        before attempting to start.
 
         Returns:
             tuple: (success, message)
         """
-        # Check for binary before attempting to start
+        # Locate binary
         owrx_binary = (
             shutil.which('openwebrx') or
             shutil.which('/usr/bin/openwebrx') or
@@ -444,20 +313,17 @@ sdrs = {{
         if not owrx_binary:
             msg = (
                 "OpenWebRX binary not found. "
-                "It must be installed in the Docker image. "
-                "Add to Dockerfile: "
-                "RUN apt-get install -y openwebrx "
-                "and rebuild with: "
-                "docker compose build --no-cache"
+                "When using Docker, OpenWebRX runs as a "
+                "sidecar container (openwebrx service). "
+                "Ensure docker-compose.yml includes the "
+                "openwebrx service and run: "
+                "docker compose up -d"
             )
             self._add_log(msg, 'warning')
             return False, msg
 
         try:
-            owrx_config_dir = os.path.join(
-                self.config_dir, 'openwebrx'
-            )
-
+            self.generate_openwebrx_config()
             self._add_log(
                 f"Starting OpenWebRX: {owrx_binary}"
             )
@@ -466,8 +332,7 @@ sdrs = {{
                 [owrx_binary],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True,
-                cwd=owrx_config_dir
+                text=True
             )
 
             self._status['running'] = True
@@ -485,154 +350,98 @@ sdrs = {{
 
         except FileNotFoundError:
             msg = (
-                f"OpenWebRX not found at {owrx_binary}. "
-                "Rebuild Docker image with OpenWebRX installed."
+                "OpenWebRX binary not executable. "
+                "Use docker compose to deploy OpenWebRX."
             )
             self._add_log(msg, 'error')
             return False, msg
-
         except Exception as e:
-            msg = f"Error starting OpenWebRX: {str(e)}"
+            msg = f"OpenWebRX start error: {e}"
             self._add_log(msg, 'error')
             return False, msg
 
     def stop(self):
-        """
-        Stop OpenWebRX using the appropriate method.
+        """Stop OpenWebRX."""
+        if self.install_method in ('sidecar', 'docker'):
+            return self._stop_sidecar()
 
-        Returns:
-            tuple: (success, message)
-        """
-        with self._process_lock:
-            if not self._status['running']:
-                return False, "OpenWebRX is not running"
-
-            if self.install_method == 'docker':
-                return self._stop_docker()
-            elif self.install_method == 'apt':
-                return self._stop_service()
-            else:
-                return self._stop_process()
-
-    def _stop_docker(self):
-        """
-        Stop and remove the OpenWebRX Docker container.
-
-        Returns:
-            tuple: (success, message)
-        """
-        try:
-            self._add_log("Stopping OpenWebRX container...")
-
-            result = subprocess.run(
-                ['docker', 'stop', self.CONTAINER_NAME],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-
-            self._status['running'] = False
-            self._status['connected'] = False
-            self._status['container_id'] = None
-
-            self._add_log("✓ Container stopped")
-            return True, "OpenWebRX container stopped"
-
-        except Exception as e:
-            return False, f"Error stopping container: {str(e)}"
-
-    def _stop_service(self):
-        """
-        Stop OpenWebRX system service.
-
-        Returns:
-            tuple: (success, message)
-        """
-        try:
-            subprocess.run(
-                ['sudo', 'systemctl', 'stop', 'openwebrx'],
-                capture_output=True,
-                text=True,
-                timeout=15
-            )
-
-            self._status['running'] = False
-            self._status['connected'] = False
-            self._add_log("✓ Service stopped")
-            return True, "OpenWebRX service stopped"
-
-        except Exception as e:
-            return False, f"Error stopping service: {str(e)}"
-
-    def _stop_process(self):
-        """
-        Stop the OpenWebRX direct process.
-
-        Returns:
-            tuple: (success, message)
-        """
-        try:
-            if self._process:
+        if self._process:
+            try:
                 self._process.terminate()
                 try:
                     self._process.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     self._process.kill()
-                    self._process.wait()
-
                 self._process = None
+                self._status['running'] = False
+                return True, "OpenWebRX stopped"
+            except Exception as e:
+                return False, str(e)
 
-            self._status['running'] = False
-            self._status['connected'] = False
-            self._add_log("✓ Process stopped")
-            return True, "OpenWebRX process stopped"
+        return False, "OpenWebRX not running"
 
+    def _stop_sidecar(self):
+        """Stop the OpenWebRX Docker sidecar."""
+        if not shutil.which('docker'):
+            return False, "Docker not available"
+
+        try:
+            result = subprocess.run(
+                ['docker', 'stop', self.CONTAINER_NAME],
+                capture_output=True,
+                text=True,
+                timeout=15
+            )
+
+            if result.returncode == 0:
+                self._status['running'] = False
+                self._status['connected'] = False
+                return True, "OpenWebRX container stopped"
+
+            return False, result.stderr.strip()
         except Exception as e:
-            return False, f"Error stopping process: {str(e)}"
+            return False, str(e)
 
     def get_status(self):
-        """
-        Get current OpenWebRX status.
+        """Get current OpenWebRX status."""
+        self._status['last_check'] = (
+            datetime.utcnow().isoformat()
+        )
 
-        Queries the OpenWebRX API for detailed status
-        when the service is running.
-
-        Returns:
-            dict: Current status information
-        """
-        self._status['last_check'] = datetime.utcnow().isoformat()
-
-        # Check if running via API ping
-        if self._status['running']:
-            api_status = self._query_api(self.API_STATUS)
-            if api_status:
-                self._status['connected'] = True
-                self._status['users'] = api_status.get('users', 0)
+        # Probe HTTP API
+        api_data = self._query_api(self.API_STATUS)
+        if api_data:
+            self._status['running'] = True
+            self._status['connected'] = True
+            self._status['users'] = api_data.get('users', 0)
+            self._status['error'] = None
+        else:
+            # Not reachable - check if container exists
+            self._status['connected'] = False
+            if self.install_method in ('sidecar', 'docker'):
+                self._status['running'] = (
+                    self._check_container_exists()
+                )
+            elif self._process:
+                self._status['running'] = (
+                    self._process.poll() is None
+                )
             else:
-                self._status['connected'] = False
-
-            # Verify Docker container is still running
-            if self.install_method == 'docker':
-                if not self._check_container_running():
-                    self._status['running'] = False
-                    self._status['connected'] = False
-                    self._add_log(
-                        "Container stopped unexpectedly", 'warning'
-                    )
+                self._status['running'] = False
 
         return dict(self._status)
 
-    def _check_container_running(self):
-        """
-        Check if the OpenWebRX Docker container is running.
-
-        Returns:
-            bool: True if container is running
-        """
+    def _check_container_exists(self):
+        """Check if the OpenWebRX container exists."""
+        if not shutil.which('docker'):
+            return False
         try:
             result = subprocess.run(
-                ['docker', 'inspect', '-f', '{{.State.Running}}',
-                 self.CONTAINER_NAME],
+                [
+                    'docker', 'inspect',
+                    '-f', '{{.State.Running}}',
+                    self.CONTAINER_NAME
+                ],
                 capture_output=True,
                 text=True,
                 timeout=5
@@ -641,19 +450,28 @@ sdrs = {{
         except Exception:
             return False
 
-    def _query_api(self, endpoint):
+    def is_available(self):
         """
-        Query the OpenWebRX HTTP API.
-
-        Args:
-            endpoint: API endpoint path
+        Check if OpenWebRX HTTP interface is accessible.
 
         Returns:
-            dict: API response or None on error
+            bool: True if web interface responds
         """
         if not REQUESTS_AVAILABLE:
-            return None
+            return False
+        try:
+            response = requests.get(
+                self.base_url,
+                timeout=3
+            )
+            return response.status_code in (200, 301, 302)
+        except Exception:
+            return False
 
+    def _query_api(self, endpoint):
+        """Query OpenWebRX HTTP API."""
+        if not REQUESTS_AVAILABLE:
+            return None
         try:
             response = requests.get(
                 f"{self.base_url}{endpoint}",
@@ -665,28 +483,93 @@ sdrs = {{
             pass
         return None
 
+    def generate_openwebrx_config(self):
+        """Generate OpenWebRX config_webrx.py file."""
+        owrx_config_dir = os.path.join(
+            self.config_dir, 'openwebrx'
+        )
+        os.makedirs(owrx_config_dir, exist_ok=True)
+
+        config_content = f'''# OpenWebRX Configuration
+# Generated by Ham Radio App Plugin
+
+web_port = {self.config.get('http_port', 8073)}
+
+receiver_name = "{self.config.get('receiver_name', 'Ham Radio SDR')}"
+receiver_location = "{self.config.get('receiver_location', '')}"
+receiver_asl = {self.config.get('receiver_asl', 0)}
+receiver_admin = "{self.config.get('receiver_admin', '')}"
+receiver_gps = {self.config.get('receiver_gps', {'lat': 0.0, 'lon': 0.0})}
+photo_title = "{self.config.get('photo_title', 'Ham Radio Station')}"
+
+sdrs = {{
+    "rtlsdr": {{
+        "name": "RTL-SDR",
+        "type": "{self.config.get('sdr_type', 'rtlsdr')}",
+        "device_index": {self.config.get('sdr_device_index', 0)},
+        "ppm": {self.config.get('ppm', 0)},
+        "gain": {self.config.get('gain', 30)},
+        "profiles": {{
+            "2m": {{
+                "name": "2m Band",
+                "center_freq": 145000000,
+                "samp_rate": {self.config.get('sample_rate', 2048000)},
+                "start_freq": {self.config.get('initial_frequency', 145000000)},
+                "start_mod": "{self.config.get('initial_modulation', 'nfm')}",
+            }},
+            "hf": {{
+                "name": "HF 20m",
+                "center_freq": 14100000,
+                "samp_rate": 2048000,
+                "start_freq": 14074000,
+                "start_mod": "usb",
+            }},
+        }},
+    }},
+}}
+'''
+        try:
+            config_path = os.path.join(
+                owrx_config_dir, 'config_webrx.py'
+            )
+            with open(config_path, 'w') as f:
+                f.write(config_content)
+            print(
+                f"[OpenWebRX] ✓ Config generated: "
+                f"{config_path}"
+            )
+            return True
+        except Exception as e:
+            print(
+                f"[OpenWebRX] Config error: {e}"
+            )
+            return False
+
+    def get_web_url(self):
+        """Get the OpenWebRX web interface URL."""
+        # Return the host-accessible URL
+        return (
+            f"http://localhost:"
+            f"{self.config.get('http_port', 8073)}"
+        )
+
+    def get_detected_signals(self, limit=50):
+        """Get recently detected signals."""
+        with self._signal_lock:
+            return list(
+                reversed(self._detected_signals[-limit:])
+            )
+
     def _start_monitor(self):
-        """
-        Start background monitoring thread.
-
-        Periodically checks OpenWebRX status and
-        monitors for detected signals.
-        """
+        """Start background status monitor."""
         def monitor():
-            """Background monitoring function."""
-            while self._status['running']:
+            while (self._process and
+                   self._process.poll() is None):
                 try:
-                    # Update status
                     self.get_status()
-
-                    # Check for signals if logging enabled
-                    if self.config.get('log_signals', True):
-                        self._check_for_signals()
-
-                except Exception as e:
-                    self._add_log(f"Monitor error: {e}", 'error')
-
-                time.sleep(30)  # Check every 30 seconds
+                except Exception:
+                    pass
+                time.sleep(30)
 
         thread = threading.Thread(
             target=monitor,
@@ -694,88 +577,3 @@ sdrs = {{
             name='openwebrx-monitor'
         )
         thread.start()
-
-    def _check_for_signals(self):
-        """
-        Query OpenWebRX for detected digital mode signals.
-
-        Retrieves decoded signals from digital modes
-        for potential logbook entries.
-        """
-        # Query for receiver data
-        receiver_data = self._query_api(self.API_RECEIVERS)
-
-        if not receiver_data:
-            return
-
-        # Look for decoded digital mode data
-        with self._signal_lock:
-            # Process any spots or decoded transmissions
-            if isinstance(receiver_data, dict):
-                spots = receiver_data.get('spots', [])
-                for spot in spots:
-                    # Build signal entry
-                    signal = {
-                        'callsign': spot.get('callsign', 'UNKNOWN'),
-                        'frequency': spot.get('freq'),
-                        'mode': spot.get('mode', 'DIGITAL'),
-                        'snr': spot.get('snr'),
-                        'timestamp': datetime.utcnow().isoformat()
-                    }
-
-                    # Add to detected signals
-                    self._detected_signals.append(signal)
-
-                    # Keep last 100 signals
-                    if len(self._detected_signals) > 100:
-                        self._detected_signals = self._detected_signals[-100:]
-
-    def get_detected_signals(self, limit=50):
-        """
-        Get recently detected signals.
-
-        Args:
-            limit: Maximum signals to return
-
-        Returns:
-            list: Recently detected signals
-        """
-        with self._signal_lock:
-            return list(reversed(self._detected_signals[-limit:]))
-
-    def get_web_url(self):
-        """
-        Get the OpenWebRX web interface URL.
-
-        Returns:
-            str: Full URL to OpenWebRX interface
-        """
-        return f"http://localhost:{self.config.get('http_port', 8073)}"
-
-    def is_available(self):
-        """
-        Check if OpenWebRX is accessible via HTTP.
-
-        Returns:
-            bool: True if web interface responds
-        """
-        if not REQUESTS_AVAILABLE:
-            return False
-
-        try:
-            response = requests.get(
-                self.base_url,
-                timeout=3
-            )
-            return response.status_code == 200
-        except Exception:
-            return False
-
-    def get_band_plan(self):
-        """
-        Get the configured band plan from OpenWebRX.
-
-        Returns:
-            list: Band plan entries
-        """
-        return self._query_api(self.API_BANDS) or []
