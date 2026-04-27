@@ -208,82 +208,64 @@ class OpenWebRXInstaller:
 
     def install_via_apt(self):
         """
-        Install OpenWebRX via Debian/Ubuntu package repository.
+        Install OpenWebRX via apt-get.
 
-        Adds the official OpenWebRX repository and installs
-        via apt-get.
+        Detects Docker environment and adjusts sudo usage.
+        In Docker containers running as root, sudo is not
+        needed or available.
 
         Returns:
-            bool: True if installation was successful
+            bool: True if installation successful
         """
         print("[OpenWebRX] Installing via apt-get...")
 
+        # Detect if we are running as root (Docker)
+        # In Docker with non-root user, sudo may not exist
+        is_root = (os.getuid() == 0)
+        sudo_available = shutil.which('sudo') is not None
+
+        # Build prefix: use sudo only if available and needed
+        if is_root:
+            sudo_prefix = []
+            print("[OpenWebRX] Running as root, no sudo needed")
+        elif sudo_available:
+            sudo_prefix = ['sudo']
+        else:
+            print(
+                "[OpenWebRX] WARNING: sudo not available. "
+                "Trying without sudo..."
+            )
+            sudo_prefix = []
+
         try:
-            # Install required tools
+            # Update package list
             subprocess.run(
-                ['sudo', 'apt-get', 'install', '-y',
-                 'apt-transport-https', 'curl', 'gnupg'],
+                sudo_prefix + ['apt-get', 'update', '-q'],
                 check=True,
                 capture_output=True
             )
 
-            # Add OpenWebRX GPG key
-            print("[OpenWebRX] Adding repository GPG key...")
-            key_result = subprocess.run(
-                ['curl', '-fsSL',
-                 'https://repo.openwebrx.de/debian/key.gpg.txt'],
-                capture_output=True
-            )
-
-            if key_result.returncode == 0:
-                # Add key to apt keyring
-                subprocess.run(
-                    ['sudo', 'apt-key', 'add', '-'],
-                    input=key_result.stdout,
-                    capture_output=True
-                )
-
-            # Add repository
-            print("[OpenWebRX] Adding repository...")
-            repo_line = (
-                f"deb {self.DEBIAN_REPO} bullseye main"
-            )
-
-            with open('/tmp/openwebrx.list', 'w') as f:
-                f.write(repo_line + '\n')
-
+            # Install OpenWebRX
             subprocess.run(
-                ['sudo', 'cp', '/tmp/openwebrx.list',
-                 '/etc/apt/sources.list.d/openwebrx.list'],
+                sudo_prefix + [
+                    'apt-get', 'install', '-y', 'openwebrx'
+                ],
                 check=True,
                 capture_output=True
             )
 
-            # Update and install
-            print("[OpenWebRX] Updating package list...")
-            subprocess.run(
-                ['sudo', 'apt-get', 'update', '-q'],
-                check=True,
-                capture_output=True
-            )
-
-            print("[OpenWebRX] Installing OpenWebRX...")
-            subprocess.run(
-                ['sudo', 'apt-get', 'install', '-y', 'openwebrx'],
-                check=True,
-                capture_output=True
-            )
-
-            print("[OpenWebRX] ✓ OpenWebRX installed via apt")
+            print("[OpenWebRX] ✓ Installed via apt-get")
             return True
 
         except subprocess.CalledProcessError as e:
-            print(f"[OpenWebRX] ERROR: apt installation failed: {e}")
-            return False
+            print(f"[OpenWebRX] apt-get failed: {e}")
+            return self._install_via_flatpak()
+        except FileNotFoundError as e:
+            print(f"[OpenWebRX] Command not found: {e}")
+            return self._install_via_flatpak()
         except Exception as e:
-            print(f"[OpenWebRX] ERROR: Installation error: {e}")
+            print(f"[OpenWebRX] Installation error: {e}")
             return False
-
     def install_via_pip(self):
         """
         Install OpenWebRX via pip as a fallback method.
