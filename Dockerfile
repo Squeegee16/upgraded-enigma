@@ -72,17 +72,6 @@ ENV PYTHONUNBUFFERED=1 \
     PLUGIN_SKIP_PIP_INSTALL=true
 
 # Install runtime dependencies (including build tools for compilation)
-# - wget: For downloading packages
-# - autoconf: For building from source
-# - build-essential: Compiler toolchain
-# - cmake: Build system for SDR projects
-# - git: For cloning SDR projects
-# - pkg-config: For finding libraries
-# - libusb-1.0-0-dev: For rtl-sdr USB support
-# - libhamlib-dev: For radio control via Hamlib
-# - gnuradio: GNU Radio framework
-# - gpsd: For GPS device support
-# - ca-certificates: For SSL/TLS support
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
@@ -156,29 +145,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     golang-go \
     && rm -rf /var/lib/apt/lists/*
 
-# Install OpenWebRX from official repository
-# This installs it system-wide so the runtime user
-# can launch it without elevated permissions
-RUN apt-get update && \
-    # Add OpenWebRX GPG key
-    curl -fsSL https://repo.openwebrx.de/debian/key.gpg.txt \
-        | apt-key add - 2>/dev/null; \
-    # Detect distribution for repository URL
-    DISTRO=$(. /etc/os-release && echo "$VERSION_CODENAME"); \
-    DISTRO=${DISTRO:-bookworm}; \
-    echo "Detected distro: ${DISTRO}"; \
-    # Add repository - fallback to bookworm if not found
-    echo "deb [arch=amd64] https://repo.openwebrx.de/debian/ ${DISTRO} main" \
-        > /etc/apt/sources.list.d/openwebrx.list || \
-    echo "deb [arch=amd64] https://repo.openwebrx.de/debian/ bookworm main" \
-        > /etc/apt/sources.list.d/openwebrx.list; \
-    # Try to install OpenWebRX, ignore if not available
-    # for this distro (plugin will show install button)
-    apt-get update -q && \
-    apt-get install -y openwebrx 2>/dev/null || \
-    echo "OpenWebRX not available via apt for ${DISTRO} - skipping"; \
-    rm -rf /var/lib/apt/lists/*
-
 # Create non-root user for running the application
 # IMPORTANT: Create user with specific UID/GID for volume permissions
 RUN groupadd -r hamradio -g 1000 && \
@@ -188,7 +154,9 @@ RUN groupadd -r hamradio -g 1000 && \
         -m \
         -s /bin/bash \
         -d /home/hamradio \
-        hamradio
+        hamradio && \
+    # Add hamradio user to plugdev for USB device access
+    usermod -a -G plugdev hamradio 2>/dev/null || true
 
 # Create data directories with proper ownership BEFORE switching user
 # This is critical for volume mounts to work correctly
@@ -224,18 +192,8 @@ COPY --chown=hamradio:hamradio static ./static/
 COPY --chown=hamradio:hamradio app.py .
 COPY --chown=hamradio:hamradio requirements.txt .
 COPY --chown=hamradio:hamradio blacklist-rtl.conf /etc/modprobe.d/
-#COPY --chown=hamradio:hamradio callsigns.txt ./data/callsigns/
 COPY --chown=hamradio:hamradio callsign_db ./callsign_db/
 
-# Create necessary directories with proper permissions
-#RUN mkdir -p \
-#    /data/db \
-#    /data/certs \
-#    /data/callsigns \
-#    /data/backups \
-#    /app/plugins/implementations \
-#    && chown -R hamradio:hamradio /data /app
-    
 
 # Copy and set permissions for entrypoint script
 COPY --chown=hamradio:hamradio docker-entrypoint.sh /usr/local/bin/
