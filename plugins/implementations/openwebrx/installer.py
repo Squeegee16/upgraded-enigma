@@ -388,17 +388,20 @@ class OpenWebRXInstaller(BaseInstaller):
 
         return None
 
-    def write_install_marker(self, method, version=None):
+def write_install_marker(self, method, version=None):
         """
-        Write the installation marker via BaseInstaller.
+        Write the OpenWebRX installation marker.
+
+        Delegates to BaseInstaller.write_marker() with
+        the correct extra_data keyword argument.
 
         Args:
-            method: Installation method string used
+            method:  Installation method string
             version: Version string if available
         """
         self.write_marker(
             self.INSTALL_MARKER,
-            extra={
+            extra_data={                     # <-- was 'extra='
                 'method': method,
                 'version': version,
                 'platform': platform.platform(),
