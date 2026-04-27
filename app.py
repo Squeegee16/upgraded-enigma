@@ -76,9 +76,21 @@ def create_app(config_name='default'):
 
         @login_manager.user_loader
         def load_user(user_id):
-            """Load user by ID for Flask-Login sessions."""
+            """
+            Load user by ID for Flask-Login.
+    
+            Uses Session.get() instead of the deprecated
+            Query.get() method (SQLAlchemy 2.0 compatible).
+    
+            Args:
+                user_id: User primary key as string
+    
+            Returns:
+                User: User instance or None
+            """
             try:
-                return User.query.get(int(user_id))
+                from models import db
+                return db.session.get(User, int(user_id))
             except Exception:
                 return None
 
