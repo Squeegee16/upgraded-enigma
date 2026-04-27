@@ -388,7 +388,7 @@ class OpenWebRXInstaller(BaseInstaller):
 
         return None
 
-def write_install_marker(self, method, version=None):
+    def write_install_marker(self, method, version=None):
         """
         Write the OpenWebRX installation marker.
 
