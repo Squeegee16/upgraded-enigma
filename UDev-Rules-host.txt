@@ -1,0 +1,33 @@
+# Run on the Docker HOST machine
+sudo tee /etc/udev/rules.d/20-rtlsdr.rules << 'EOF'
+# RTL-SDR USB device rules
+# Grants read/write access to the plugdev group
+# allowing Docker containers to access the device
+# without privileged mode
+
+# RTL2832U - Most common RTL-SDR chip
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2832", \
+    GROUP="plugdev", MODE="0664", \
+    SYMLINK+="rtlsdr0"
+
+# RTL2838UHIDIR - RTL-SDR Blog v3 dongle
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2838", \
+    GROUP="plugdev", MODE="0664", \
+    SYMLINK+="rtlsdr0"
+
+# Rafael Micro R820T - common tuner chip
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2839", \
+    GROUP="plugdev", MODE="0664", \
+    SYMLINK+="rtlsdr0"
+EOF
+
+# Add the user running Docker to the plugdev group
+sudo usermod -a -G plugdev $USER
+
+# Reload udev rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+
+# Unplug and replug RTL-SDR dongle to apply rules
+# Verify the symlink was created
+ls -la /dev/rtlsdr*
