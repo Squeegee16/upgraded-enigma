@@ -1,25 +1,37 @@
 # Ham Radio Operator Web Application - Dockerfile
 # =============================================
-# Multi-stage build for optimized image size and security
-# Base image: Python 3.11 on Debian Bookworm (slim variant)
+# Multi-stage build for optimized image size and security.
+#
+# Stage 1 (builder): Installs all Python dependencies as root
+#                    into a virtual environment.
+# Stage 2 (runtime): Copies venv, builds SDR tools from source,
+#                    and runs as non-root user (hamradio:1000).
+#
+# All Python packages are installed at build time so the
+# non-root runtime user never needs to write to /opt/venv.
+#
+# Usage:
+#   docker compose build
+#   docker compose up -d
+
 # ============================================================
 # Stage 1: Builder
+# Installs Python dependencies into /opt/venv as root.
 # ============================================================
-# Build stage - Install dependencies and compile Python packages
 FROM python:3.11-slim-bookworm AS builder
 
-# Set build-time metadata
 LABEL maintainer="Ham Radio App Team"
 LABEL description="Ham Radio App - Dependency Builder Stage"
 LABEL version="0.2.0"
 
-# Set environment variables for Python
+# Python build environment settings
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install build dependencies for compiling Python packages
+# Build dependencies required to compile Python C extensions
+# (psutil, numpy, cryptography, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
@@ -37,70 +49,74 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Create application directory
 WORKDIR /build
 
-# Copy requirements file first (for better Docker layer caching)
+# Copy requirements first for better layer cache reuse.
+# Docker will skip pip install if requirements.txt is unchanged.
 COPY requirements.txt .
 
-# Install Python dependencies in a virtual environment
+# Create virtual environment and install all packages as root.
+# Combining pip install commands reduces image layers.
 RUN python -m venv /opt/venv && \
     . /opt/venv/bin/activate && \
-    pip install --upgrade pip && \
-    pip install setuptools && \
-    pip install wheel && \
+    pip install --upgrade pip setuptools wheel && \
     pip install -r requirements.txt
+
 
 # ============================================================
 # Stage 2: Runtime
+# Minimal image with SDR tools built from source.
 # ============================================================
-# Runtime stage - Minimal image with only runtime dependencies
 FROM python:3.11-slim-bookworm
 
-# Set runtime metadata
 LABEL maintainer="Ham Radio App Team"
 LABEL description="Ham Radio Operator Web Application"
 LABEL version="0.2.0"
 
-# Set environment variables
+# Runtime environment variables.
+# NOTE: FLASK_ENV defaults to production here.
+#       docker-compose.yml overrides this per environment.
+# NOTE: PLUGIN_SKIP_PIP_INSTALL=true tells all plugin
+#       installers not to attempt pip installs at runtime
+#       since the non-root user cannot write to /opt/venv.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     FLASK_APP=app.py \
-    FLASK_ENV=development \
-    # Tell plugins NOT to attempt runtime pip installs
+    FLASK_ENV=production \
     PLUGIN_SKIP_PIP_INSTALL=true
 
-# Install runtime dependencies (including build tools for compilation)
-
+# Install runtime system dependencies.
+# Comments are on separate lines — NOT after package names,
+# which would break the apt-get command.
+#
+# NOTE: wget appears only once (was duplicated before).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
+    curl \
     autoconf \
     build-essential \
     cmake \
     git \
     pkg-config \
     libusb-1.0-0-dev \
-    libhamlib-dev \
+    libusb-1.0-0 \
     gnuradio \
-    # GPS support
     gpsd \
     gpsd-clients \
     ca-certificates \
-    # SSL certificate generation
     openssl \
-    # Process utilities (used by plugins)
     procps \
-    # Network utilities
     lsb-release \
     gnupg \
     apt-transport-https \
-    curl \
-    wget \
     usbutils \
+    golang-go \
     && rm -rf /var/lib/apt/lists/*
 
-# Build SoapySDR from source # Radio control
+# Build and install SoapySDR from source.
+# SoapySDR is the SDR hardware abstraction layer used by
+# OpenWebRX and other SDR applications.
 RUN cd /tmp && \
     git clone https://github.com/pothosware/SoapySDR.git && \
     cd SoapySDR && \
@@ -113,40 +129,40 @@ RUN cd /tmp && \
     cd / && \
     rm -rf /tmp/SoapySDR
 
-# Build hamlib from source
+# Build and install Hamlib from source.
+# Hamlib provides radio control for 400+ radio models.
+# Version 4.7.0 is used for stability and FT-891 support.
 RUN cd /tmp && \
-    wget https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download -O hamlib-4.7.0.tar.gz && \
+    wget -q \
+        https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download \
+        -O hamlib-4.7.0.tar.gz && \
     tar -xzf hamlib-4.7.0.tar.gz && \
-    cd hamlib-* && \
-    ./configure && \
-    make && \
+    cd hamlib-4.7.0 && \
+    ./configure --prefix=/usr/local && \
+    make -j$(nproc) && \
     make install && \
     ldconfig && \
     cd / && \
-    rm -rf /tmp/hamlib-*
+    rm -rf /tmp/hamlib-4.7.0 /tmp/hamlib-4.7.0.tar.gz
 
-# Build rtl-sdr from source
+# Build and install RTL-SDR from source.
+# Provides rtl_sdr, rtl_test and related utilities
+# for RTL2832U-based SDR dongles.
 RUN cd /tmp && \
-    git clone git://git.osmocom.org/rtl-sdr.git && \
+    git clone https://github.com/osmocom/rtl-sdr.git && \
     cd rtl-sdr && \
     mkdir build && \
     cd build && \
     cmake -DINSTALL_UDEV_RULES=ON .. && \
-    make && \
+    make -j$(nproc) && \
     make install && \
     ldconfig && \
     cd / && \
     rm -rf /tmp/rtl-sdr
 
-
-#Install native plugins
-# graywolf
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    golang-go \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create non-root user for running the application
-# IMPORTANT: Create user with specific UID/GID for volume permissions
+# Create non-root runtime user.
+# Using a fixed UID/GID (1000:1000) ensures that volume-mounted
+# directories on the host have matching ownership.
 RUN groupadd -r hamradio -g 1000 && \
     useradd -r \
         -g hamradio \
@@ -155,11 +171,12 @@ RUN groupadd -r hamradio -g 1000 && \
         -s /bin/bash \
         -d /home/hamradio \
         hamradio && \
-    # Add hamradio user to plugdev for USB device access
     usermod -a -G plugdev hamradio 2>/dev/null || true
 
-# Create data directories with proper ownership BEFORE switching user
-# This is critical for volume mounts to work correctly
+# Create all required data directories and set ownership
+# BEFORE switching to the non-root user.
+# This ensures the hamradio user can write to these directories
+# even when they are bind-mounted from the Docker host.
 RUN mkdir -p \
         /data/db \
         /data/certs \
@@ -167,57 +184,73 @@ RUN mkdir -p \
         /data/callsigns \
         /data/logs \
         /data/plugins \
-        /app 
-        
-RUN chown -R hamradio:hamradio /data /app 
-RUN chmod -R 755 /data
+        /app \
+    && chown -R hamradio:hamradio /data /app \
+    && chmod -R 755 /data
 
-# Copy Python virtual environment from builder stage
+# Copy the RTL-SDR kernel module blacklist.
+# This must be owned by root and copied without --chown
+# because /etc/modprobe.d/ requires root ownership.
+# The hamradio user does not need to modify this file.
+COPY blacklist-rtl.conf /etc/modprobe.d/blacklist-rtl.conf
+
+# Copy Python virtual environment from builder stage.
+# The venv is owned by root but has a+rX so the hamradio
+# user can execute binaries and import packages.
+# The hamradio user CANNOT install new packages at runtime,
+# which is the intended security boundary.
 COPY --from=builder /opt/venv /opt/venv
 RUN chmod -R a+rX /opt/venv
 
 WORKDIR /app
 
-# Copy application files with proper ownership
+# Copy application source files with hamradio ownership.
+# Files are ordered from least to most frequently changed
+# to maximise Docker build cache effectiveness.
+COPY --chown=hamradio:hamradio requirements.txt .
 COPY --chown=hamradio:hamradio config.py .
 COPY --chown=hamradio:hamradio secret_key_manager.py .
+COPY --chown=hamradio:hamradio app.py .
 COPY --chown=hamradio:hamradio models ./models/
 COPY --chown=hamradio:hamradio auth ./auth/
 COPY --chown=hamradio:hamradio dashboard ./dashboard/
 COPY --chown=hamradio:hamradio logbook ./logbook/
 COPY --chown=hamradio:hamradio plugins ./plugins/
 COPY --chown=hamradio:hamradio devices ./devices/
+COPY --chown=hamradio:hamradio callsign_db ./callsign_db/
 COPY --chown=hamradio:hamradio templates ./templates/
 COPY --chown=hamradio:hamradio static ./static/
-COPY --chown=hamradio:hamradio app.py .
-COPY --chown=hamradio:hamradio requirements.txt .
-COPY --chown=hamradio:hamradio blacklist-rtl.conf /etc/modprobe.d/
-COPY --chown=hamradio:hamradio callsign_db ./callsign_db/
 
-
-# Copy and set permissions for entrypoint script
-COPY --chown=hamradio:hamradio docker-entrypoint.sh /usr/local/bin/
+# Copy entrypoint script.
+# Owned by root so the hamradio user cannot modify it.
+# chmod +x must be run as root before USER hamradio.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Create plugin implementations directory
+# Create the plugin implementations directory.
+# Users copy plugin packages here at runtime.
 RUN mkdir -p /app/plugins/implementations && \
     chown -R hamradio:hamradio /app/plugins
 
-# Switch to non-root user
+# Switch to non-root user for all subsequent operations
+# and for the running container process.
 USER hamradio
 
-# Expose application port
+# Document the port this container listens on.
 EXPOSE 5000
 
-# Health check
+# Health check.
+# Uses plain HTTP because SSL context is only confirmed
+# after the app fully starts. The app redirects HTTP to HTTPS
+# or responds on HTTP for the health check path.
 HEALTHCHECK \
     --interval=30s \
     --timeout=10s \
     --start-period=60s \
     --retries=3 \
     CMD python -c \
-    "import urllib.request; \
-     urllib.request.urlopen('http://localhost:5000/').read()" \
+        "import urllib.request; \
+         urllib.request.urlopen('http://localhost:5000/').read()" \
     || exit 1
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
