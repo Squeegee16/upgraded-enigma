@@ -3,107 +3,133 @@
 {% block title %}Dashboard - Ham Radio App{% endblock %}
 
 {% block content %}
+{# ============================================================ #}
+{# Page Header                                                  #}
+{# ============================================================ #}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="fas fa-tachometer-alt"></i> Dashboard</h2>
+    <h2>
+        <i class="fas fa-tachometer-alt"></i> Dashboard
+    </h2>
     <small class="text-muted">
         <i class="fas fa-clock"></i>
-        <span id="dash-utc">{{ current_time.strftime('%Y-%m-%d %H:%M:%S') }} UTC</span>
+        <span id="dash-utc">
+            {{ current_time.strftime('%Y-%m-%d %H:%M:%S') }} UTC
+        </span>
     </small>
 </div>
-<!-- ============================================================
-     Operator Info Card
-     ============================================================ -->
-<div class="col-md-4 mb-4">
-    <div class="card h-100">
-        <div class="card-header bg-primary text-white
-                    d-flex justify-content-between
-                    align-items-center">
-            <h5 class="mb-0">
-                <i class="fas fa-user-circle me-2"></i>
-                Operator
-            </h5>
-            <!-- Database update button -->
-            <button class="btn btn-sm btn-outline-light"
-                    type="button"
-                    id="db-open-btn"
-                    onclick="showDbModal()"
-                    title="Canadian Callsign Database">
-                <i class="fas fa-database me-1"></i>
-                ISED DB
-            </button>
-        </div>
-        <div class="card-body">
 
-            {% if operator_info %}
-            <!-- Operator found in ISED database -->
-            <div class="mb-3 pb-3 border-bottom">
-                <h5 class="text-primary mb-1">
-                    {{ operator_info.full_name }}
+{# ============================================================ #}
+{# Top Row: Operator Card | GPS Card | Device Card              #}
+{# FIX 1: Added the missing <div class="row"> wrapper           #}
+{# ============================================================ #}
+<div class="row">
+
+    {# -------------------------------------------------------- #}
+    {# Operator Info Card                                        #}
+    {# -------------------------------------------------------- #}
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white
+                        d-flex justify-content-between
+                        align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-user-circle me-2"></i>
+                    Operator
                 </h5>
-
-                <div class="d-flex align-items-center mb-2">
-                    <span class="badge bg-dark fs-6 me-2
-                                 operator-card callsign-badge">
-                        {{ current_user.callsign }}
-                    </span>
-                    <small class="text-success">
-                        <i class="fas fa-check-circle me-1"></i>
-                        ISED Verified
-                    </small>
-                </div>
-
-                {% if operator_info.location %}
-                <div class="text-muted small mb-2">
-                    <i class="fas fa-map-marker-alt me-1"></i>
-                    {{ operator_info.location }}
-                </div>
-                {% endif %}
-
-                {% if operator_info.qualification_badges %}
-                <div class="mb-1">
-                    <small class="text-muted d-block mb-1">
-                        <i class="fas fa-certificate me-1"></i>
-                        Qualifications:
-                    </small>
-                    <div class="d-flex flex-wrap gap-1">
-                        {% for badge in operator_info.qualification_badges %}
-                        <span class="badge bg-{{ badge.colour }}"
-                              title="Code {{ badge.code }}">
-                            <i class="fas fa-{{ badge.icon }} me-1"></i>
-                            {{ badge.label }}
-                        </span>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
-                {% if operator_info.is_club %}
-                <div class="mt-1">
-                    <small class="text-muted">
-                        <i class="fas fa-users me-1"></i>
-                        Club / Organisation
-                    </small>
-                </div>
-                {% endif %}
+                <button class="btn btn-sm btn-outline-light"
+                        type="button"
+                        id="db-open-btn"
+                        onclick="showDbModal()"
+                        title="Canadian Callsign Database">
+                    <i class="fas fa-database me-1"></i>
+                    ISED DB
+                </button>
             </div>
 
-            {% else %}
-            <!-- Not found or DB not populated -->
-            <div class="mb-3 pb-3 border-bottom">
-                <div class="d-flex align-items-center mb-2">
-                    <span class="badge bg-dark fs-6 me-2">
-                        {{ current_user.callsign }}
-                    </span>
-                    {% if db_stats and db_stats.is_populated %}
-                    <small class="text-warning">
-                        <i class="fas fa-question-circle me-1"></i>
-                        Not in ISED database
-                    </small>
-                    {% else %}
-                    <small class="text-muted">
-                        <i class="fas fa-database me-1"></i>
-                        DB not downloaded
-                    </small>
+            <div class="card-body">
+
+                {% if operator_info %}
+                {# Operator found in ISED database #}
+                <div class="mb-3 pb-3 border-bottom">
+
+                    <h5 class="text-primary mb-1">
+                        {{ operator_info.full_name }}
+                    </h5>
+
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge bg-dark fs-6 me-2">
+                            {{ current_user.callsign }}
+                        </span>
+                        <small class="text-success">
+                            <i class="fas fa-check-circle me-1"></i>
+                            ISED Verified
+                        </small>
+                    </div>
+
+                    {% if operator_info.location %}
+                    <div class="text-muted small mb-2">
+                        <i class="fas fa-map-marker-alt me-1"></i>
+                        {{ operator_info.location }}
+                    </div>
                     {% endif %}
+
+                    {% if operator_info.qualification_badges %}
+                    <div class="mb-1">
+                        <small class="text-muted d-block mb-1">
+                            <i class="fas fa-certificate me-1"></i>
+                            Qualifications:
+                        </small>
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for badge in operator_info.qualification_badges %}
+                            <span class="badge bg-{{ badge.colour }}"
+                                  title="Code {{ badge.code }}">
+                                <i class="fas fa-{{ badge.icon }} me-1"></i>
+                                {{ badge.label }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                        <small class="text-muted mt-1 d-block">
+                            Codes:
+                            {{ operator_info.qual_codes | join(', ') }}
+                        </small>
+                    </div>
+                    {% endif %}
+
+                    {% if operator_info.is_club %}
+                    <div class="mt-1">
+                        <small class="text-muted">
+                            <i class="fas fa-users me-1"></i>
+                            Club / Organisation
+                        </small>
+                    </div>
+                    {% endif %}
+
+                </div>{# end .mb-3.pb-3.border-bottom (operator found) #}
+
+                {% else %}
+                {# FIX 2: Correctly closed the border-bottom div    #}
+                {# in the else branch. Previously the closing </div> #}
+                {# was outside/after the endif, leaving the else     #}
+                {# branch's div open.                                #}
+                <div class="mb-3 pb-3 border-bottom">
+
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge bg-dark fs-6 me-2">
+                            {{ current_user.callsign }}
+                        </span>
+
+                        {% if db_stats and db_stats.is_populated %}
+                        <small class="text-warning">
+                            <i class="fas fa-question-circle me-1"></i>
+                            Not in ISED database
+                        </small>
+                        {% else %}
+                        <small class="text-muted">
+                            <i class="fas fa-database me-1"></i>
+                            DB not downloaded
+                        </small>
+                        {% endif %}
+                    </div>
 
                     {% if db_stats and not db_stats.is_populated %}
                     <div class="alert alert-info py-2 px-3 mb-0">
@@ -121,67 +147,158 @@
                         </button>
                     </div>
                     {% endif %}
-                </div>
-            {% endif %}
 
-            <!-- Standard Fields -->
-            <dl class="row mb-0 small">
-                <dt class="col-5">Member Since:</dt>
-                <dd class="col-7">
-                    {{ current_user.created_at
-                       .strftime('%Y-%m-%d') }}
-                </dd>
-                <dt class="col-5">Total QSOs:</dt>
-                <dd class="col-7">
-                    <span class="badge bg-primary">
-                        {{ total_contacts }}
-                    </span>
-                </dd>
-                {% if current_user.last_login %}
-                <dt class="col-5">Last Login:</dt>
-                <dd class="col-7">
-                    <small class="text-muted">
-                        {{ current_user.last_login
-                           .strftime('%Y-%m-%d %H:%M') }}
-                    </small>
-                </dd>
-                {% endif %}
-                {% if db_stats %}
-                <dt class="col-5">ISED DB:</dt>
-                <dd class="col-7">
-                    {% if db_stats.is_populated %}
-                    <small class="text-success">
-                        <i class="fas fa-check-circle me-1"></i>
-                        {{ "{:,}".format(
-                           db_stats.record_count) }}
-                        records
-                    </small>
-                    {% else %}
-                    <small class="text-warning">
-                        <i class="fas fa-exclamation-triangle
-                                  me-1"></i>
-                        Not downloaded
-                    </small>
+                </div>{# end .mb-3.pb-3.border-bottom (not found) #}
+
+                {% endif %}{# end operator_info check #}
+
+                {# Standard operator fields - shown in both cases #}
+                <dl class="row mb-0 small">
+                    <dt class="col-5">Member Since:</dt>
+                    <dd class="col-7">
+                        {{ current_user.created_at
+                           .strftime('%Y-%m-%d') }}
+                    </dd>
+
+                    <dt class="col-5">Total QSOs:</dt>
+                    <dd class="col-7">
+                        <span class="badge bg-primary">
+                            {{ total_contacts }}
+                        </span>
+                    </dd>
+
+                    {% if current_user.last_login %}
+                    <dt class="col-5">Last Login:</dt>
+                    <dd class="col-7">
+                        <small class="text-muted">
+                            {{ current_user.last_login
+                               .strftime('%Y-%m-%d %H:%M') }}
+                        </small>
+                    </dd>
                     {% endif %}
-                </dd>
-                {% if db_stats.last_updated_display != 'Never' %}
-                <dt class="col-5">DB Updated:</dt>
-                <dd class="col-7">
-                    <small class="text-muted">
-                        {{ db_stats.last_updated_display }}
-                    </small>
-                </dd>
+
+                    {% if db_stats %}
+                    <dt class="col-5">ISED DB:</dt>
+                    <dd class="col-7">
+                        {% if db_stats.is_populated %}
+                        <small class="text-success">
+                            <i class="fas fa-check-circle me-1"></i>
+                            {{ "{:,}".format(db_stats.record_count) }}
+                            records
+                        </small>
+                        {% else %}
+                        <small class="text-warning">
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                            Not downloaded
+                        </small>
+                        {% endif %}
+                    </dd>
+
+                    {% if db_stats.last_updated_display != 'Never' %}
+                    <dt class="col-5">DB Updated:</dt>
+                    <dd class="col-7">
+                        <small class="text-muted">
+                            {{ db_stats.last_updated_display }}
+                        </small>
+                    </dd>
+                    {% endif %}
+
+                    {% endif %}{# end db_stats check #}
+                </dl>
+
+            </div>{# end .card-body #}
+        </div>{# end .card #}
+    </div>{# end .col-md-4 (operator card) #}
+
+
+    {# -------------------------------------------------------- #}
+    {# GPS Location Card                                         #}
+    {# FIX 3: Moved GPS and Device cards back inside the row    #}
+    {# div. Previously the modal was inserted between the       #}
+    {# operator card and these cards, breaking the layout.      #}
+    {# -------------------------------------------------------- #}
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-map-marker-alt"></i>
+                    Location
+                </h5>
+            </div>
+            <div class="card-body" id="location-card">
+                {% if gps_data %}
+                <dl class="row mb-0">
+                    <dt class="col-5">Grid:</dt>
+                    <dd class="col-7">
+                        <strong>{{ gps_data.grid }}</strong>
+                    </dd>
+                    <dt class="col-5">Latitude:</dt>
+                    <dd class="col-7">
+                        {{ "%.4f"|format(gps_data.latitude) }}°
+                    </dd>
+                    <dt class="col-5">Longitude:</dt>
+                    <dd class="col-7">
+                        {{ "%.4f"|format(gps_data.longitude) }}°
+                    </dd>
+                    <dt class="col-5">Altitude:</dt>
+                    <dd class="col-7">
+                        {{ "%.1f"|format(gps_data.altitude) }} m
+                    </dd>
+                    <dt class="col-5">Satellites:</dt>
+                    <dd class="col-7">
+                        {{ gps_data.satellites }}
+                    </dd>
+                </dl>
+                {% else %}
+                <div class="text-center py-3">
+                    <i class="fas fa-satellite-dish fa-2x
+                              text-muted mb-2"></i>
+                    <p class="text-muted mb-2">
+                        GPS not available
+                    </p>
+                    <button class="btn btn-sm btn-outline-success"
+                            onclick="refreshLocation()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
                 {% endif %}
-                {% endif %}
-            </dl>
             </div>
         </div>
-</div>
+    </div>{# end .col-md-4 (GPS card) #}
 
-<!-- ============================================================
-     ISED Database Update Modal
-     ============================================================ -->
 
+    {# -------------------------------------------------------- #}
+    {# Device Status Card                                        #}
+    {# -------------------------------------------------------- #}
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-microchip"></i> Devices
+                </h5>
+            </div>
+            <div class="card-body" id="device-status">
+                <div class="d-flex justify-content-center py-3">
+                    <div class="spinner-border text-info"
+                         role="status">
+                        <span class="visually-hidden">
+                            Loading...
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>{# end .col-md-4 (device card) #}
+
+</div>{# end .row (top three cards) #}
+
+
+{# ============================================================ #}
+{# ISED Database Modal                                          #}
+{# FIX 3 (cont): Modal is now placed OUTSIDE the row div,      #}
+{# after all three cards. Modals must be at the page level,     #}
+{# not nested inside grid columns.                              #}
+{# ============================================================ #}
 <div class="modal fade"
      id="isedDbModal"
      tabindex="-1"
@@ -189,6 +306,7 @@
      aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
+
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title" id="isedDbModalLabel">
                     <i class="fas fa-database me-2"></i>
@@ -203,12 +321,11 @@
 
             <div class="modal-body">
 
-                <!-- Database Status Row -->
                 <div class="row mb-3">
+                    {# Database Status column #}
                     <div class="col-md-6">
                         <div class="card h-100">
                             <div class="card-body">
-
                                 <h6 class="card-title">
                                     <i class="fas fa-info-circle me-1"></i>
                                     Database Status
@@ -232,7 +349,8 @@
                                     </dd>
                                 </dl>
                                 {% if db_stats.needs_update %}
-                                <div class="alert alert-warning py-1 px-2 mt-2 mb-0 small">
+                                <div class="alert alert-warning
+                                            py-1 px-2 mt-2 mb-0 small">
                                     <i class="fas fa-exclamation-triangle me-1"></i>
                                     Database is outdated.
                                     Update recommended.
@@ -247,6 +365,7 @@
                         </div>
                     </div>
 
+                    {# Quick Callsign Lookup column #}
                     <div class="col-md-6">
                         <div class="card h-100">
                             <div class="card-body">
@@ -266,24 +385,24 @@
                                         <i class="fas fa-search"></i>
                                     </button>
                                 </div>
-                                <div id="modal-lookup-result" class="mt-2">
+                                <div id="modal-lookup-result"
+                                     class="mt-2">
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                </div>{# end .row (modal status row) #}
 
-                <!-- Download Progress / Info Area -->
+                {# Download progress / info area #}
                 <div id="db-download-section">
 
-                    <!-- Idle state -->
+                    {# Idle state #}
                     <div id="db-section-idle">
                         <div class="alert alert-info mb-0">
                             <h6>
                                 <i class="fas fa-info-circle me-1"></i>
                                 About this Database
                             </h6>
-
                             <p class="small mb-2">
                                 Downloads the official Canadian
                                 amateur radio operators database
@@ -292,25 +411,25 @@
                             </p>
                             <ul class="small mb-2">
                                 <li>80,000+ licensed operators</li>
-                                <li>Names, qualifications, and
-                                    locations</li>
+                                <li>Names, qualifications, locations</li>
                                 <li>Download size: ~5 MB</li>
                                 <li>Update every 90 days</li>
                             </ul>
                             <small class="text-muted">
                                 Source:
-                                <a href="https://apc-cap.ic.gc.ca/datafiles/amateur_delim.zip" target="_blank" class="text-muted">
+                                <a href="https://apc-cap.ic.gc.ca/datafiles/amateur_delim.zip"
+                                   target="_blank"
+                                   class="text-muted">
                                     apc-cap.ic.gc.ca
                                 </a>
                             </small>
                         </div>
                     </div>
 
-                    <!-- Progress state -->
+                    {# Progress state #}
                     <div id="db-section-progress"
                          style="display:none;">
-                        <h6 id="db-progress-message"
-                            class="mb-2">
+                        <h6 id="db-progress-message" class="mb-2">
                             Downloading...
                         </h6>
                         <div class="progress mb-3"
@@ -325,81 +444,58 @@
                                  aria-valuenow="0"
                                  aria-valuemin="0"
                                  aria-valuemax="100">
-                                <span id="db-progress-pct">
-                                    0%
-                                </span>
+                                <span id="db-progress-pct">0%</span>
                             </div>
                         </div>
                         <div class="row text-center small">
                             <div class="col-4">
                                 <span class="fw-bold"
-                                      id="db-imported-count">
-                                    0
-                                </span>
+                                      id="db-imported-count">0</span>
                                 <br>
-                                <small class="text-muted">
-                                    Imported
-                                </small>
+                                <small class="text-muted">Imported</small>
                             </div>
                             <div class="col-4">
                                 <span class="fw-bold"
-                                      id="db-total-count">
-                                    0
-                                </span>
+                                      id="db-total-count">0</span>
                                 <br>
-                                <small class="text-muted">
-                                    Total
-                                </small>
+                                <small class="text-muted">Total</small>
                             </div>
                             <div class="col-4">
                                 <span class="fw-bold"
-                                      id="db-status-text">
-                                    Starting
-                                </span>
+                                      id="db-status-text">Starting</span>
                                 <br>
-                                <small class="text-muted">
-                                    Status
-                                </small>
+                                <small class="text-muted">Status</small>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Success state -->
-                    <div id="db-section-success"
-                         style="display:none;">
+                    {# Success state #}
+                    <div id="db-section-success" style="display:none;">
                         <div class="alert alert-success mb-0">
-                            <i class="fas fa-check-circle
-                                      me-1"></i>
-                            <strong>
-                                Database updated successfully!
-                            </strong>
+                            <i class="fas fa-check-circle me-1"></i>
+                            <strong>Database updated successfully!</strong>
                             <span id="db-success-count"></span>
                             <br>
-                            <small>
-                                Reloading page in 3 seconds...
-                            </small>
+                            <small>Reloading page in 3 seconds...</small>
                         </div>
                     </div>
-                    
-                    <!-- Error state -->
-                    <div id="db-section-error"
-                         style="display:none;">
+
+                    {# Error state #}
+                    <div id="db-section-error" style="display:none;">
                         <div class="alert alert-danger mb-0">
-                            <i class="fas fa-exclamation-triangle
-                                      me-1"></i>
+                            <i class="fas fa-exclamation-triangle me-1"></i>
                             <strong>Update failed:</strong>
-                        <span id="db-error-msg"></span>
+                            <span id="db-error-msg"></span>
                             <br>
                             <small>
-                                Check network connection
-                                and try again.
+                                Check network connection and try again.
                             </small>
                         </div>
                     </div>
 
-                </div>
-                
-            </div>
+                </div>{# end #db-download-section #}
+
+            </div>{# end .modal-body #}
 
             <div class="modal-footer">
                 <button type="button"
@@ -415,81 +511,21 @@
                     Download / Update Database
                 </button>
             </div>
-        </div>
-    </div>
-</div>
 
-    <!-- GPS Location -->
-    <div class="col-md-4 mb-4">
-        <div class="card h-100">
-            <div class="card-header bg-success text-white">
-                <h5 class="mb-0">
-                    <i class="fas fa-map-marker-alt"></i> Location
-                </h5>
-            </div>
-            <div class="card-body" id="location-card">
-                {% if gps_data %}
-                <dl class="row mb-0">
-                    <dt class="col-5">Grid:</dt>
-                    <dd class="col-7">
-                        <strong>{{ gps_data.grid }}</strong>
-                    </dd>
-                    <dt class="col-5">Latitude:</dt>
-                    <dd class="col-7">
-                        {{ "%.4f"|format(gps_data.latitude) }}°
-                    </dd>
-                    <dt class="col-5">Longitude:</dt>
-                    <dd class="col-7">
-                        {{ "%.4f"|format(gps_data.longitude) }}°
-                    </dd>
-                    <dt class="col-5">Altitude:</dt>
-                    <dd class="col-7">
-                        {{ "%.1f"|format(gps_data.altitude) }} m
-                    </dd>
-                    <dt class="col-5">Satellites:</dt>
-                    <dd class="col-7">{{ gps_data.satellites }}</dd>
-                </dl>
-                {% else %}
-                <div class="text-center py-3">
-                    <i class="fas fa-satellite-dish fa-2x text-muted mb-2"></i>
-                    <p class="text-muted mb-2">GPS not available</p>
-                    <button class="btn btn-sm btn-outline-success"
-                            onclick="refreshLocation()">
-                        <i class="fas fa-sync"></i> Refresh
-                    </button>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
+        </div>{# end .modal-content #}
+    </div>{# end .modal-dialog #}
+</div>{# end #isedDbModal #}
 
-    <!-- Device Status -->
-    <div class="col-md-4 mb-4">
-        <div class="card h-100">
-            <div class="card-header bg-info text-white">
-                <h5 class="mb-0">
-                    <i class="fas fa-microchip"></i> Devices
-                </h5>
-            </div>
-            <div class="card-body" id="device-status">
-                <div class="d-flex justify-content-center py-3">
-                    <div class="spinner-border text-info"
-                         role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
-<!-- ============================================================ -->
-<!-- Plugins Section -->
-<!-- ============================================================ -->
+{# ============================================================ #}
+{# Plugins Section                                              #}
+{# ============================================================ #}
 <div class="row mb-4">
     <div class="col-12">
         <div class="card">
-            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <div class="card-header bg-dark text-white
+                        d-flex justify-content-between
+                        align-items-center">
                 <h5 class="mb-0">
                     <i class="fas fa-puzzle-piece"></i>
                     Available Plugins
@@ -501,7 +537,9 @@
                 </h5>
                 <small class="text-muted">
                     Copy plugins to
-                    <code class="text-light">plugins/implementations/</code>
+                    <code class="text-light">
+                        plugins/implementations/
+                    </code>
                     to add more
                 </small>
             </div>
@@ -512,44 +550,45 @@
                     <div class="col-md-4 col-lg-3 mb-3">
                         <div class="card h-100 border plugin-card">
                             <div class="card-body">
-                                <!-- Plugin name and version -->
-                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="d-flex
+                                            justify-content-between
+                                            align-items-start mb-2">
                                     <h6 class="card-title mb-0">
-                                        <i class="fas fa-puzzle-piece text-primary me-1"></i>
+                                        <i class="fas fa-puzzle-piece
+                                                  text-primary me-1"></i>
                                         {{ plugin_info.name }}
                                     </h6>
                                     <span class="badge bg-secondary">
                                         v{{ plugin_info.version }}
                                     </span>
                                 </div>
-
-                                <!-- Description -->
-                                <p class="card-text small text-muted mb-2">
+                                <p class="card-text small
+                                          text-muted mb-2">
                                     {{ plugin_info.description }}
                                 </p>
-
-                                <!-- Author -->
                                 {% if plugin_info.author %}
-                                <small class="text-muted d-block mb-3">
+                                <small class="text-muted
+                                              d-block mb-3">
                                     <i class="fas fa-user me-1"></i>
                                     {{ plugin_info.author }}
                                 </small>
                                 {% endif %}
-
-                                <!-- Status indicator -->
-                                <div class="d-flex align-items-center mb-2">
+                                <div class="d-flex
+                                            align-items-center mb-2">
                                     <span class="badge {% if plugin_info.enabled %}bg-success{% else %}bg-danger{% endif %} me-2">
                                         {% if plugin_info.enabled %}
-                                        <i class="fas fa-check-circle"></i> Active
+                                        <i class="fas fa-check-circle"></i>
+                                        Active
                                         {% else %}
-                                        <i class="fas fa-times-circle"></i> Inactive
+                                        <i class="fas fa-times-circle"></i>
+                                        Inactive
                                         {% endif %}
                                     </span>
                                 </div>
                             </div>
-
-                            <!-- Launch button -->
-                            <div class="card-footer bg-transparent border-top-0 pt-0">
+                            <div class="card-footer
+                                        bg-transparent
+                                        border-top-0 pt-0">
                                 <a href="{{ url_for(plugin_info.endpoint) }}"
                                    class="btn btn-primary btn-sm w-100">
                                     <i class="fas fa-arrow-right me-1"></i>
@@ -562,13 +601,13 @@
                 </div>
 
                 {% else %}
-                <!-- No plugins loaded -->
                 <div class="text-center py-5">
-                    <i class="fas fa-puzzle-piece fa-4x text-muted mb-4"></i>
+                    <i class="fas fa-puzzle-piece fa-4x
+                              text-muted mb-4"></i>
                     <h5 class="text-muted">No Plugins Loaded</h5>
                     <p class="text-muted mb-4">
-                        Copy plugin packages to the plugins directory
-                        to add functionality.
+                        Copy plugin packages to the plugins
+                        directory to add functionality.
                     </p>
                     <div class="alert alert-info text-start mx-auto"
                          style="max-width: 500px;">
@@ -588,8 +627,9 @@
                     </div>
                     <div class="mt-3">
                         <small class="text-muted">
-                            Available plugins: fldigi, wsjtx, winlink,
-                            graywolf, openwebrx, qsstv, satdump
+                            Available plugins: fldigi, wsjtx,
+                            winlink, graywolf, openwebrx,
+                            qsstv, satdump
                         </small>
                     </div>
                 </div>
@@ -597,15 +637,20 @@
             </div>
         </div>
     </div>
-</div>
+</div>{# end plugins row #}
 
-<!-- Recent Contacts -->
+
+{# ============================================================ #}
+{# Recent Contacts                                              #}
+{# ============================================================ #}
 <div class="row">
     <div class="col-12">
         <div class="card">
-            <div class="card-header bg-secondary text-white d-flex justify-content-between">
+            <div class="card-header bg-secondary text-white
+                        d-flex justify-content-between">
                 <h5 class="mb-0">
-                    <i class="fas fa-history"></i> Recent Contacts
+                    <i class="fas fa-history"></i>
+                    Recent Contacts
                 </h5>
                 <a href="{{ url_for('logbook.add_contact') }}"
                    class="btn btn-sm btn-outline-light">
@@ -615,7 +660,8 @@
             <div class="card-body">
                 {% if recent_contacts %}
                 <div class="table-responsive">
-                    <table class="table table-striped table-hover table-sm mb-0">
+                    <table class="table table-striped
+                                  table-hover table-sm mb-0">
                         <thead>
                             <tr>
                                 <th>Date/Time (UTC)</th>
@@ -630,11 +676,14 @@
                             <tr>
                                 <td>
                                     <small>
-                                        {{ contact.timestamp.strftime('%Y-%m-%d %H:%M') }}
+                                        {{ contact.timestamp
+                                           .strftime('%Y-%m-%d %H:%M') }}
                                     </small>
                                 </td>
                                 <td>
-                                    <strong>{{ contact.contact_callsign }}</strong>
+                                    <strong>
+                                        {{ contact.contact_callsign }}
+                                    </strong>
                                 </td>
                                 <td>
                                     <span class="badge bg-primary">
@@ -658,8 +707,11 @@
                 </div>
                 {% else %}
                 <div class="text-center py-4">
-                    <i class="fas fa-book-open fa-2x text-muted mb-2"></i>
-                    <p class="text-muted">No contacts logged yet</p>
+                    <i class="fas fa-book-open fa-2x
+                              text-muted mb-2"></i>
+                    <p class="text-muted">
+                        No contacts logged yet
+                    </p>
                     <a href="{{ url_for('logbook.add_contact') }}"
                        class="btn btn-success btn-sm">
                         <i class="fas fa-plus"></i>
@@ -670,155 +722,227 @@
             </div>
         </div>
     </div>
-</div>
+</div>{# end recent contacts row #}
 
+{% endblock %}{# end block content #}
+
+
+{# ============================================================ #}
+{# JavaScript                                                   #}
+{# FIX 4+5: Moved ALL JavaScript into the extra_js block.      #}
+{# Previously the script tags were inside block content with    #}
+{# an HTML comment inside a <script> block (syntax error),     #}
+{# and the $(document).ready() was OUTSIDE the closing         #}
+{# </script> tag making it raw visible text on the page.       #}
+{# ============================================================ #}
+{% block extra_js %}
 <script>
+/* ==============================================================
+   Dashboard JavaScript
+   ============================================================== */
+
 // ---------------------------------------------------------------
-// Live UTC clock on dashboard
+// FIX 6: UTC clock
 // ---------------------------------------------------------------
 function updateDashClock() {
     const now = new Date();
-    const str = now.getUTCFullYear() + '-' +
-        String(now.getUTCMonth()+1).padStart(2,'0') + '-' +
-        String(now.getUTCDate()).padStart(2,'0') + ' ' +
-        String(now.getUTCHours()).padStart(2,'0') + ':' +
-        String(now.getUTCMinutes()).padStart(2,'0') + ':' +
-        String(now.getUTCSeconds()).padStart(2,'0');
+    const str =
+        now.getUTCFullYear() + '-' +
+        String(now.getUTCMonth() + 1).padStart(2, '0') + '-' +
+        String(now.getUTCDate()).padStart(2, '0') + ' ' +
+        String(now.getUTCHours()).padStart(2, '0') + ':' +
+        String(now.getUTCMinutes()).padStart(2, '0') + ':' +
+        String(now.getUTCSeconds()).padStart(2, '0');
     const el = document.getElementById('dash-utc');
     if (el) el.textContent = str + ' UTC';
 }
 setInterval(updateDashClock, 1000);
 
+
 // ---------------------------------------------------------------
-// Load device status via AJAX
+// Device status
 // ---------------------------------------------------------------
 function loadDeviceStatus() {
-    $.get('{{ url_for("dashboard.get_devices") }}',
-        function(data) {
-            let html = '<ul class="list-group list-group-flush">';
+    $.ajax({
+        url: '{{ url_for("dashboard.get_devices") }}',
+        method: 'GET',
+        timeout: 8000,
+        success: function(data) {
+            if (!data || typeof data !== 'object') {
+                $('#device-status').html(
+                    '<p class="text-warning small text-center">' +
+                    'Invalid device response</p>'
+                );
+                return;
+            }
 
-            const deviceNames = {
-                'gps': { icon: 'satellite-dish', label: 'GPS' },
-                'radio': { icon: 'broadcast-tower', label: 'Radio' },
-                'sdr': { icon: 'signal', label: 'RTL-SDR' }
+            const icons = {
+                gps:   'satellite-dish',
+                radio: 'broadcast-tower',
+                sdr:   'signal'
             };
 
+            let html = '<ul class="list-group list-group-flush">';
+
             Object.entries(data).forEach(function([key, device]) {
-                const meta = deviceNames[key] || {
-                    icon: 'microchip', label: key.toUpperCase()
-                };
-                const statusClass = device.connected
-                    ? 'bg-success' : 'bg-danger';
-                const statusText = device.connected
-                    ? 'Connected' : 'Offline';
+                const icon = icons[key] || 'microchip';
+                const name = device.name || key.toUpperCase();
+                const connected = device.connected === true;
+                const available = device.available !== false;
+
+                let badgeCls, badgeTxt;
+                if (!available) {
+                    badgeCls = 'bg-secondary';
+                    badgeTxt = 'Not Available';
+                } else if (connected) {
+                    badgeCls = 'bg-success';
+                    badgeTxt = 'Connected';
+                } else {
+                    badgeCls = 'bg-danger';
+                    badgeTxt = 'Offline';
+                }
 
                 html += `
-                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                        <span>
-                            <i class="fas fa-${meta.icon} me-2 text-muted"></i>
-                            ${meta.label}
+                    <li class="list-group-item
+                               d-flex justify-content-between
+                               align-items-center px-0 py-2">
+                        <span class="small">
+                            <i class="fas fa-${icon}
+                                      me-2 text-muted"></i>
+                            ${name}
                         </span>
-                        <span class="badge ${statusClass}">
-                            ${statusText}
+                        <span class="badge ${badgeCls} small">
+                            ${badgeTxt}
                         </span>
                     </li>`;
 
-                // Show radio info if available
-                if (key === 'radio' && device.info && device.connected) {
-                    if (device.info.frequency) {
-                        const freqMhz = (device.info.frequency).toFixed(3);
-                        html += `
-                            <li class="list-group-item px-0 py-1">
-                                <small class="text-muted ms-3">
-                                    ${freqMhz} MHz
-                                    ${device.info.mode ? ' / ' + device.info.mode : ''}
-                                </small>
-                            </li>`;
-                    }
+                if (connected && device.info &&
+                        typeof device.info === 'object' &&
+                        Object.keys(device.info).length > 0) {
+                    const infoStr = Object.values(
+                        device.info
+                    ).join(' | ');
+                    html += `
+                        <li class="list-group-item
+                                   px-0 py-1 border-0">
+                            <small class="text-muted ms-4">
+                                ${infoStr}
+                            </small>
+                        </li>`;
                 }
             });
 
             html += '</ul>';
+            html += `
+                <div class="mt-2 text-end">
+                    <button class="btn btn-outline-secondary btn-sm"
+                            onclick="loadDeviceStatus()">
+                        <i class="fas fa-sync me-1"></i>
+                        Refresh
+                    </button>
+                </div>`;
+
             $('#device-status').html(html);
+        },
+        error: function(xhr, status) {
+            let msg = 'Device status unavailable';
+            if (status === 'timeout') msg = 'Request timed out';
+            $('#device-status').html(
+                `<div class="text-center py-2">
+                    <p class="text-muted small mb-2">${msg}</p>
+                    <button class="btn btn-outline-secondary btn-sm"
+                            onclick="loadDeviceStatus()">
+                        <i class="fas fa-sync me-1"></i>
+                        Retry
+                    </button>
+                 </div>`
+            );
         }
-    ).fail(function() {
-        $('#device-status').html(
-            '<p class="text-muted text-center">Device status unavailable</p>'
-        );
     });
 }
 
+
 // ---------------------------------------------------------------
-// Refresh GPS location
+// GPS location refresh
 // ---------------------------------------------------------------
 function refreshLocation() {
     const card = $('#location-card');
     card.html(
         '<div class="text-center py-3">' +
         '<div class="spinner-border spinner-border-sm"></div>' +
-        ' Loading...' +
-        '</div>'
+        ' Loading...</div>'
     );
 
-    $.get('{{ url_for("dashboard.get_location") }}',
-        function(data) {
+    $.ajax({
+        url: '{{ url_for("dashboard.get_location") }}',
+        method: 'GET',
+        timeout: 8000,
+        success: function(data) {
             if (data.error) {
                 card.html(
                     '<div class="text-center py-3">' +
-                    '<i class="fas fa-satellite-dish fa-2x text-muted mb-2"></i>' +
-                    '<p class="text-muted mb-2">' + data.error + '</p>' +
-                    '<button class="btn btn-sm btn-outline-success" onclick="refreshLocation()">' +
+                    '<i class="fas fa-satellite-dish fa-2x ' +
+                    'text-muted mb-2"></i>' +
+                    `<p class="text-muted mb-2">${data.error}</p>` +
+                    '<button class="btn btn-sm btn-outline-success"' +
+                    ' onclick="refreshLocation()">' +
                     '<i class="fas fa-sync"></i> Retry' +
-                    '</button>' +
-                    '</div>'
+                    '</button></div>'
                 );
                 return;
             }
             card.html(
                 '<dl class="row mb-0">' +
-                `<dt class="col-5">Grid:</dt>` +
-                `<dd class="col-7"><strong>${data.grid || 'N/A'}</strong></dd>` +
-                `<dt class="col-5">Latitude:</dt>` +
-                `<dd class="col-7">${parseFloat(data.latitude).toFixed(4)}°</dd>` +
-                `<dt class="col-5">Longitude:</dt>` +
-                `<dd class="col-7">${parseFloat(data.longitude).toFixed(4)}°</dd>` +
-                `<dt class="col-5">Altitude:</dt>` +
-                `<dd class="col-7">${parseFloat(data.altitude).toFixed(1)} m</dd>` +
-                `<dt class="col-5">Satellites:</dt>` +
-                `<dd class="col-7">${data.satellites || 'N/A'}</dd>` +
+                `<dt class="col-5">Grid:</dt>
+                 <dd class="col-7">
+                     <strong>${data.grid || 'N/A'}</strong>
+                 </dd>
+                 <dt class="col-5">Latitude:</dt>
+                 <dd class="col-7">
+                     ${parseFloat(data.latitude).toFixed(4)}°
+                 </dd>
+                 <dt class="col-5">Longitude:</dt>
+                 <dd class="col-7">
+                     ${parseFloat(data.longitude).toFixed(4)}°
+                 </dd>
+                 <dt class="col-5">Altitude:</dt>
+                 <dd class="col-7">
+                     ${parseFloat(data.altitude).toFixed(1)} m
+                 </dd>
+                 <dt class="col-5">Satellites:</dt>
+                 <dd class="col-7">
+                     ${data.satellites || 'N/A'}
+                 </dd>` +
                 '</dl>'
             );
+        },
+        error: function() {
+            card.html(
+                '<div class="text-center py-3">' +
+                '<p class="text-muted">GPS unavailable</p>' +
+                '<button class="btn btn-sm btn-outline-success"' +
+                ' onclick="refreshLocation()">' +
+                '<i class="fas fa-sync"></i> Retry' +
+                '</button></div>'
+            );
         }
-    ).fail(function() {
-        card.html(
-            '<div class="text-center py-3">' +
-            '<p class="text-muted">GPS unavailable</p>' +
-            '<button class="btn btn-sm btn-outline-success" onclick="refreshLocation()">' +
-            '<i class="fas fa-sync"></i> Retry' +
-            '</button>' +
-            '</div>'
-        );
     });
 }
-<!-- ============================================================
-     ISED Database JavaScript
-     Place at the end of the extra_js block
-     ============================================================ -->
-<script>
 
-// Hold reference to the Bootstrap modal instance
+
+// ---------------------------------------------------------------
+// ISED Database Modal
+// ---------------------------------------------------------------
 let _dbModal = null;
-// Polling timer reference
 let _dbPollTimer = null;
 
 /**
- * Show the ISED database modal.
- * Creates Bootstrap modal instance on first call.
+ * Open the ISED database modal.
  */
 function showDbModal() {
     const el = document.getElementById('isedDbModal');
     if (!el) {
-        console.error('isedDbModal element not found');
+        console.error('[ISED] Modal element #isedDbModal not found');
         return;
     }
 
@@ -829,16 +953,17 @@ function showDbModal() {
         });
     }
 
-    // Check if a download is already running when opening
-    $.get(
-        '{{ url_for("dashboard.db_status") }}',
-        function(data) {
+    // Check if download already running
+    $.ajax({
+        url: '{{ url_for("dashboard.db_status") }}',
+        method: 'GET',
+        timeout: 5000,
+        success: function(data) {
             if (data && data.state) {
                 const st = data.state.status;
                 if (['downloading', 'parsing',
                      'importing', 'extracting',
                      'starting'].includes(st)) {
-                    // Resume showing progress
                     _dbShowSection('progress');
                     document.getElementById(
                         'db-update-btn'
@@ -846,22 +971,19 @@ function showDbModal() {
                     _dbStartPolling();
                 }
             }
+        },
+        complete: function() {
+            _dbModal.show();
         }
-    ).always(function() {
-        _dbModal.show();
     });
 }
 
 /**
- * Show a specific section of the download area.
- * Hides all others first.
- *
- * @param {string} section - 'idle', 'progress',
- *                            'success', or 'error'
+ * Show one section, hide the others.
  */
 function _dbShowSection(section) {
-    ['idle', 'progress', 'success', 'error']
-        .forEach(function(name) {
+    ['idle', 'progress', 'success', 'error'].forEach(
+        function(name) {
             const el = document.getElementById(
                 'db-section-' + name
             );
@@ -870,18 +992,16 @@ function _dbShowSection(section) {
                     name === section ? 'block' : 'none'
                 );
             }
-        });
+        }
+    );
 }
 
 /**
- * Start the ISED database download.
+ * Kick off the database download.
  */
 function startDbDownload() {
     document.getElementById('db-update-btn').disabled = true;
-
     _dbShowSection('progress');
-
-    // Reset progress display
     _dbUpdateProgress(0, 'Connecting...', 0, 0, 'Starting');
 
     $.ajax({
@@ -889,41 +1009,41 @@ function startDbDownload() {
         method: 'POST',
         contentType: 'application/json',
         data: JSON.stringify({}),
+        timeout: 10000,
         success: function(data) {
             if (data && data.success) {
                 _dbStartPolling();
             } else {
-                const err = (data && data.error)
-                    ? data.error
-                    : 'Failed to start download';
-                _dbShowError(err);
+                _dbShowError(
+                    (data && data.error)
+                        ? data.error
+                        : 'Failed to start download'
+                );
             }
         },
-
         error: function(xhr) {
-            const err = (xhr.responseJSON &&
-                         xhr.responseJSON.error)
-                ? xhr.responseJSON.error
-                : 'Server error starting download';
-            _dbShowError(err);
+            _dbShowError(
+                (xhr.responseJSON && xhr.responseJSON.error)
+                    ? xhr.responseJSON.error
+                    : 'Server error starting download'
+            );
         }
     });
 }
 
 /**
- * Start polling for download progress.
- * Polls every 1.5 seconds until complete or error.
+ * Start polling for download progress every 1.5 s.
  */
 function _dbStartPolling() {
-    // Clear any existing timer
-    if (_dbPollTimer) {
-        clearInterval(_dbPollTimer);
-    }
+    if (_dbPollTimer) clearInterval(_dbPollTimer);
     _dbPollTimer = setInterval(_dbPollStatus, 1500);
 }
 
 /**
- * Poll the download status endpoint.
+ * Poll the status endpoint and update the UI.
+ *
+ * FIX 6: 'status' variable was used but never declared.
+ *         Must read it from state.status, not a bare variable.
  */
 function _dbPollStatus() {
     $.ajax({
@@ -938,59 +1058,49 @@ function _dbPollStatus() {
             }
 
             const state = data.state || {};
-            const progress = state.progress || 0;
-            const message = state.message || '';
 
+            /* FIX 6: read status FROM state, not a bare variable */
+            const status   = state.status || 'idle';
+            const progress = parseInt(state.progress) || 0;
+            const message  = state.message || '';
             const imported = state.records_imported || 0;
-            const total = state.total_records || 0;
+            const total    = state.total_records || 0;
 
-            // Update progress display
             _dbUpdateProgress(
                 progress,
                 message,
                 imported,
                 total,
-                status.charAt(0).toUpperCase() +
-                status.slice(1)
+                status.charAt(0).toUpperCase() + status.slice(1)
             );
 
-            // Handle terminal states
             if (status === 'complete') {
                 clearInterval(_dbPollTimer);
                 _dbPollTimer = null;
                 _dbShowSuccess(imported);
-
             } else if (status === 'error') {
                 clearInterval(_dbPollTimer);
                 _dbPollTimer = null;
-                _dbShowError(
-                    state.error || 'Unknown error'
-                );
+                _dbShowError(state.error || 'Unknown error');
             }
         },
         error: function() {
-            // Non-fatal - keep polling
-            console.warn('[ISED DB] Status poll failed, retrying...');
+            console.warn('[ISED DB] Poll failed, retrying...');
         }
     });
 }
 
-
 /**
- * Update the progress bar display.
+ * Update all progress bar UI elements.
  */
 function _dbUpdateProgress(pct, msg, imported,
                             total, statusText) {
-    const bar = document.getElementById('db-progress-bar');
+    const bar  = document.getElementById('db-progress-bar');
     const pctEl = document.getElementById('db-progress-pct');
-    const msgEl = document.getElementById(
-        'db-progress-message'
-    );
-    const impEl = document.getElementById(
-        'db-imported-count'
-    );
+    const msgEl = document.getElementById('db-progress-message');
+    const impEl = document.getElementById('db-imported-count');
     const totEl = document.getElementById('db-total-count');
-    const stEl = document.getElementById('db-status-text');
+    const stEl  = document.getElementById('db-status-text');
 
     if (bar) {
         bar.style.width = pct + '%';
@@ -1000,114 +1110,96 @@ function _dbUpdateProgress(pct, msg, imported,
     if (msgEl) msgEl.textContent = msg;
     if (impEl) impEl.textContent = imported.toLocaleString();
     if (totEl) totEl.textContent = total.toLocaleString();
-    if (stEl) stEl.textContent = statusText;
+    if (stEl)  stEl.textContent  = statusText;
 }
 
-
 /**
- * Show download success state.
+ * Show the success state and reload after 3 s.
  */
 function _dbShowSuccess(count) {
     _dbShowSection('success');
-    const countEl = document.getElementById(
-        'db-success-count'
-    );
-    if (countEl) {
-        countEl.textContent = (
-            ` ${count.toLocaleString()} operators imported.`
-        );
+    const el = document.getElementById('db-success-count');
+    if (el) {
+        el.textContent =
+            ' ' + count.toLocaleString() + ' operators imported.';
     }
     document.getElementById('db-update-btn').disabled = false;
-
-    // Auto-reload page to show updated operator info
-    setTimeout(function() {
-        location.reload();
-    }, 3000);
+    setTimeout(function() { location.reload(); }, 3000);
 }
 
 /**
- * Show download error state.
+ * Show the error state with a message.
  */
 function _dbShowError(message) {
     _dbShowSection('error');
-    const errEl = document.getElementById('db-error-msg');
-    if (errEl) errEl.textContent = ' ' + message;
+    const el = document.getElementById('db-error-msg');
+    if (el) el.textContent = ' ' + message;
     document.getElementById('db-update-btn').disabled = false;
 }
 
-
 /**
- * Perform quick callsign lookup in modal.
+ * Quick callsign lookup from within the modal.
+ *
+ * FIX 7: 'op' was used but never declared.
+ *         Must assign data.operator to a local variable first.
  */
 function doCallsignLookup() {
-    const input = document.getElementById(
-        'modal-lookup-input'
-    );
-    const result = document.getElementById(
-        'modal-lookup-result'
-    );
-
+    const input  = document.getElementById('modal-lookup-input');
+    const result = document.getElementById('modal-lookup-result');
     if (!input || !result) return;
 
     const callsign = input.value.trim().toUpperCase();
     if (!callsign) {
-        result.innerHTML = (
+        result.innerHTML =
             '<small class="text-warning">' +
-            'Enter a callsign to search' +
-            '</small>'
-        );
+            'Enter a callsign to search</small>';
         return;
     }
 
-
-    result.innerHTML = (
+    result.innerHTML =
         '<div class="spinner-border spinner-border-sm me-1">' +
-        '</div> Looking up...'
-    );
+        '</div> Looking up...';
 
     $.ajax({
-        url: '{{ url_for("dashboard.callsign_lookup", callsign="PLACEHOLDER") }}'
-            .replace('PLACEHOLDER', encodeURIComponent(callsign)),
+        url: '{{ url_for("dashboard.callsign_lookup",
+                          callsign="PLACEHOLDER") }}'
+             .replace('PLACEHOLDER', encodeURIComponent(callsign)),
         method: 'GET',
         timeout: 8000,
         success: function(data) {
-            if (data && data.found && data.operator) {             
-                
+            if (data && data.found && data.operator) {
+
+                /* FIX 7: assign to local variable 'op' */
+                const op = data.operator;
+
                 let badges = '';
                 if (op.qualification_badges) {
-                    op.qualification_badges.forEach(
-                        function(b) {
-                            badges += (
-                                `<span class="badge ` +
-                                `bg-${b.colour} me-1">` +
-                                `<i class="fas ` +
-                                `fa-${b.icon} me-1"></i>` +
-                                `${b.label}</span>`
-                            );
-                        }
-                    );
+                    op.qualification_badges.forEach(function(b) {
+                        badges +=
+                            `<span class="badge bg-${b.colour} me-1"
+                                   title="Code ${b.code}">` +
+                            `<i class="fas fa-${b.icon} me-1"></i>` +
+                            `${b.label}</span>`;
+                    });
                 }
 
                 result.innerHTML = `
                     <div class="card border-success mt-1">
                         <div class="card-body py-2 px-3">
-
-                            <div class="d-flex justify-content-between">
+                            <div class="d-flex
+                                        justify-content-between">
                                 <strong class="text-success">
-
-                                    <i class="fas fa-check-circle me-1"></i>
+                                    <i class="fas fa-check-circle
+                                              me-1"></i>
                                     ${op.callsign}
                                 </strong>
-
                                 <small class="text-muted">
                                     ${op.province || ''}
-
                                 </small>
                             </div>
                             <div class="fw-bold small">
                                 ${op.full_name}
                             </div>
-
                             ${op.city
                               ? `<small class="text-muted">
                                      ${op.city}
@@ -1116,37 +1208,43 @@ function doCallsignLookup() {
                             <div class="mt-1">${badges}</div>
                         </div>
                     </div>`;
-            } else {
 
+            } else {
                 result.innerHTML = `
-                    <div class="alert alert-warning py-2 px-3 mt-1 mb-0 small">
+                    <div class="alert alert-warning
+                                py-2 px-3 mt-1 mb-0 small">
                         <i class="fas fa-question-circle me-1"></i>
                         ${callsign} not found in database
                     </div>`;
             }
         },
         error: function() {
-            result.innerHTML = (
+            result.innerHTML =
                 '<div class="alert alert-danger ' +
-                'py-2 mt-1 small">Lookup error</div>'
-            );
+                'py-2 mt-1 small">Lookup error</div>';
         }
-
     });
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    const inp = document.getElementById(
-        'modal-lookup-input'
-    );
+
+// ---------------------------------------------------------------
+// Page load
+// ---------------------------------------------------------------
+$(document).ready(function() {
+    /* Load device status immediately and poll every 30 s */
+    loadDeviceStatus();
+    setInterval(loadDeviceStatus, 30000);
+
+    /* Enter key in callsign lookup field */
+    const inp = document.getElementById('modal-lookup-input');
     if (inp) {
         inp.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') doCallsignLookup();
         });
     }
 
-
-    // Check if download was in progress before page loaded
+    /* If a download was in progress when page loaded,
+       auto-open the modal to resume showing progress */
     $.ajax({
         url: '{{ url_for("dashboard.db_status") }}',
         method: 'GET',
@@ -1156,20 +1254,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 const st = data.state.status;
                 if (['downloading', 'parsing',
                      'importing', 'extracting'].includes(st)) {
-
                     showDbModal();
                 }
             }
         }
     });
 });
+
 </script>
-// ---------------------------------------------------------------
-// On page load
-// ---------------------------------------------------------------
-$(document).ready(function() {
-    loadDeviceStatus();
-    setInterval(loadDeviceStatus, 30000);
-});
-</script>
-{% endblock %}
+{% endblock %}{# end block extra_js #}
