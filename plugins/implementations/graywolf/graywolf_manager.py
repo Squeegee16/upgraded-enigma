@@ -538,7 +538,102 @@ class GrayWolfManager:
         self._status['ui_url'] = f"http://localhost:{port}"
 
         return dict(self._status)
+        
+    def get_messages(self):
+        """
+        Get messages from GrayWolf.
 
+        GrayWolf manages its own messages internally via
+        its SQLite database and web UI. This method returns
+        an empty list as a compatibility stub so the plugin
+        UI loads without error.
+
+        Full message management is available through the
+        GrayWolf web interface at http://localhost:8080.
+
+        Returns:
+            list: Empty list (messages managed by GrayWolf UI)
+        """
+        return []
+
+    def get_inbox(self):
+        """
+        Get inbox messages.
+
+        Stub method for API compatibility.
+        Use the GrayWolf web UI for message management.
+
+        Returns:
+            list: Empty list
+        """
+        return []
+
+    def get_outbox(self):
+        """
+        Get outbox messages.
+
+        Stub method for API compatibility.
+        Use the GrayWolf web UI for message management.
+
+        Returns:
+            list: Empty list
+        """
+        return []
+
+    def get_sent(self):
+        """
+        Get sent messages.
+
+        Stub method for API compatibility.
+        Use the GrayWolf web UI for message management.
+
+        Returns:
+            list: Empty list
+        """
+        return []
+
+    def get_message_counts(self):
+        """
+        Get message counts for all folders.
+
+        Stub method for API compatibility.
+        Use the GrayWolf web UI for message management.
+
+        Returns:
+            dict: Zero counts for all folders
+        """
+        return {
+            'inbox': 0,
+            'outbox': 0,
+            'sent': 0,
+        }
+
+    def send_message(self, to_address, subject, body):
+        """
+        Send a Winlink message via GrayWolf.
+
+        GrayWolf manages message sending through its own
+        web UI and internal queue. This method logs the
+        intent and directs the user to the GrayWolf UI.
+
+        Args:
+            to_address: Recipient callsign or email
+            subject: Message subject line
+            body: Message body text
+
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        self._add_log(
+            f"Message compose requested for {to_address}. "
+            f"Use GrayWolf web UI: "
+            f"{self.get_web_ui_url()}"
+        )
+        return (
+            False,
+            f"Use the GrayWolf web UI to send messages: "
+            f"{self.get_web_ui_url()}"
+        )
     def get_web_ui_url(self):
         """
         Get the GrayWolf web interface URL.
