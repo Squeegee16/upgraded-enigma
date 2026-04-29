@@ -58,7 +58,7 @@ LABEL version="0.2.0"
 # Must be >= the version required by go.mod in any plugin.
 # GrayWolf requires 1.26.x — using latest stable.
 # Check https://go.dev/dl/ for current version.
-ARG GO_VERSION=1.22.3
+ARG GO_VERSION=1.26.2
 ARG GO_ARCH=amd64
 
 ENV PYTHONUNBUFFERED=1 \
