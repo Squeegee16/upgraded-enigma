@@ -1,19 +1,9 @@
 # Ham Radio Operator Web Application - Dockerfile
 # =============================================
-# Multi-stage build for optimized image size and security.
+# Multi-stage build.
 #
-# Stage 1 (builder): Installs all Python dependencies as root
-#                    into a virtual environment.
-# Stage 2 (runtime): Copies venv, builds SDR tools from source,
-#                    and runs as non-root user (hamradio:1000).
-#
-# IMPORTANT ORDERING RULES:
-#   1. All chmod/chown of system paths (/usr/local/bin, /etc)
-#      must happen BEFORE USER hamradio
-#   2. Files in /usr/local/bin must be owned by root
-#   3. Files in /app and /data are owned by hamradio
-#   4. The USER directive must be the LAST configuration
-#      step before EXPOSE/HEALTHCHECK/ENTRYPOINT
+# Stage 1 (builder): Python dependencies
+# Stage 2 (runtime): Application + SDR tools + current Go
 
 # ============================================================
 # Stage 1: Builder
@@ -64,24 +54,30 @@ LABEL maintainer="Ham Radio App Team"
 LABEL description="Ham Radio Operator Web Application"
 LABEL version="0.2.0"
 
-# Runtime environment variables
-# NOTE: All ENV directives are grouped here at the top
-# of stage 2 for clarity and easy maintenance.
+# Go version to install from official distribution.
+# Must be >= the version required by go.mod in any plugin.
+# GrayWolf requires 1.26.x — using latest stable.
+# Check https://go.dev/dl/ for current version.
+ARG GO_VERSION=1.22.3
+ARG GO_ARCH=amd64
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PATH="/home/hamradio/.local/bin:/home/hamradio/go/bin:/opt/venv/bin:$PATH" \
     FLASK_APP=app.py \
     FLASK_ENV=production \
     PLUGIN_SKIP_PIP_INSTALL=true \
+    # Go environment — paths under hamradio home
+    GOROOT=/usr/local/go \
     GOPATH=/home/hamradio/go \
     GOCACHE=/home/hamradio/.cache/go-build \
-    GOMODCACHE=/home/hamradio/go/pkg/mod
+    GOMODCACHE=/home/hamradio/go/pkg/mod \
+    # PATH includes Go bin, hamradio local bin, and venv
+    PATH="/usr/local/go/bin:/home/hamradio/.local/bin:/home/hamradio/go/bin:/opt/venv/bin:$PATH"
 
 # -------------------------------------------------------
 # Install runtime system packages
-# All RUN commands here execute as root (default)
-# Comments are on their own lines - NOT after package
-# names which would break the apt-get command
+# NOTE: golang-go is NOT installed here — it is too old.
+#       Go is installed from official source below.
 # -------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
@@ -103,8 +99,34 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     apt-transport-https \
     usbutils \
-    golang-go \
     && rm -rf /var/lib/apt/lists/*
+
+# -------------------------------------------------------
+# Install Go from official distribution
+#
+# Why not apt golang-go?
+#   Debian Bookworm ships Go 1.19 which is too old for
+#   many modern Go modules. GrayWolf requires Go 1.26+.
+#   The official Go tarball always has the current version.
+#
+# Installation method:
+#   1. Download go${VERSION}.linux-amd64.tar.gz from go.dev
+#   2. Extract to /usr/local/go
+#   3. Add /usr/local/go/bin to PATH (done in ENV above)
+#   4. Verify with 'go version'
+# -------------------------------------------------------
+RUN set -eux; \
+    GO_URL="https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"; \
+    echo "Downloading Go ${GO_VERSION} from ${GO_URL}"; \
+    wget -q "${GO_URL}" -O /tmp/go.tar.gz; \
+    # Remove any existing Go installation
+    rm -rf /usr/local/go; \
+    # Extract to /usr/local
+    tar -C /usr/local -xzf /tmp/go.tar.gz; \
+    rm /tmp/go.tar.gz; \
+    # Verify installation
+    /usr/local/go/bin/go version; \
+    echo "Go ${GO_VERSION} installed successfully"
 
 # -------------------------------------------------------
 # Build SoapySDR from source
@@ -153,18 +175,14 @@ RUN cd /tmp && \
     rm -rf /tmp/rtl-sdr
 
 # -------------------------------------------------------
-# Copy and configure the entrypoint script AS ROOT
-# This MUST happen before USER hamradio because:
-#   1. /usr/local/bin/ requires root to write to
-#   2. chmod +x requires the file owner or root
-#   3. After USER hamradio, neither condition is met
+# Copy and configure entrypoint script AS ROOT
+# Must happen BEFORE USER hamradio
 # -------------------------------------------------------
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # -------------------------------------------------------
-# Copy the RTL-SDR kernel module blacklist AS ROOT
-# /etc/modprobe.d/ requires root ownership
+# Copy RTL-SDR kernel module blacklist AS ROOT
 # -------------------------------------------------------
 COPY blacklist-rtl.conf /etc/modprobe.d/blacklist-rtl.conf
 
@@ -182,8 +200,7 @@ RUN groupadd -r hamradio -g 1000 && \
     usermod -a -G plugdev hamradio 2>/dev/null || true
 
 # -------------------------------------------------------
-# Create data directories and set ownership
-# Must happen before USER hamradio
+# Create data and application directories
 # -------------------------------------------------------
 RUN mkdir -p \
         /data/db \
@@ -197,8 +214,11 @@ RUN mkdir -p \
     && chmod -R 755 /data
 
 # -------------------------------------------------------
-# Pre-create Go directories for the hamradio user
-# Must happen before USER hamradio so chown works
+# Pre-create Go workspace directories for hamradio user
+#
+# These must exist and be owned by hamradio before the
+# container starts. Without them go build fails with
+# permission errors when trying to create cache dirs.
 # -------------------------------------------------------
 RUN mkdir -p \
         /home/hamradio/go/bin \
@@ -209,20 +229,15 @@ RUN mkdir -p \
     && chown -R hamradio:hamradio /home/hamradio
 
 # -------------------------------------------------------
-# Copy venv from builder stage
-# Must happen before USER hamradio so chmod works
+# Copy venv from builder (readable by all users)
 # -------------------------------------------------------
 COPY --from=builder /opt/venv /opt/venv
 RUN chmod -R a+rX /opt/venv
 
-# -------------------------------------------------------
-# Set working directory
-# -------------------------------------------------------
 WORKDIR /app
 
 # -------------------------------------------------------
-# Copy application source files
-# These are owned by hamradio
+# Copy application source files (owned by hamradio)
 # -------------------------------------------------------
 COPY --chown=hamradio:hamradio requirements.txt .
 COPY --chown=hamradio:hamradio config.py .
@@ -246,16 +261,12 @@ RUN mkdir -p /app/plugins/implementations && \
 
 # -------------------------------------------------------
 # Switch to non-root user
-# THIS MUST BE THE LAST CONFIGURATION STEP
-# After this line all RUN commands execute as hamradio
-# which cannot write to /usr/local/bin, /etc, or /opt/venv
+# ALL subsequent RUN, COPY, CMD, ENTRYPOINT run as hamradio
 # -------------------------------------------------------
 USER hamradio
 
-# Document the port
 EXPOSE 5000
 
-# Health check
 HEALTHCHECK \
     --interval=30s \
     --timeout=10s \
