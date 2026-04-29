@@ -698,8 +698,8 @@ class GrayWolfInstaller(BaseInstaller):
                 )
 
         return len(failed) == 0
-
-   def _find_main_package_dir(self, repo_root):
+        
+        def _find_main_package_dir(self, repo_root):
         """
         Find the directory containing the main Go package.
 
