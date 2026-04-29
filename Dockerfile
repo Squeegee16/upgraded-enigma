@@ -160,9 +160,7 @@ RUN cd /tmp && \
     cd / && \
     rm -rf /tmp/rtl-sdr
 
-# Create non-root runtime user.
-# Using a fixed UID/GID (1000:1000) ensures that volume-mounted
-# directories on the host have matching ownership.
+# Create non-root runtime user
 RUN groupadd -r hamradio -g 1000 && \
     useradd -r \
         -g hamradio \
@@ -173,10 +171,7 @@ RUN groupadd -r hamradio -g 1000 && \
         hamradio && \
     usermod -a -G plugdev hamradio 2>/dev/null || true
 
-# Create all required data directories and set ownership
-# BEFORE switching to the non-root user.
-# This ensures the hamradio user can write to these directories
-# even when they are bind-mounted from the Docker host.
+# Create data directories
 RUN mkdir -p \
         /data/db \
         /data/certs \
@@ -188,19 +183,29 @@ RUN mkdir -p \
     && chown -R hamradio:hamradio /data /app \
     && chmod -R 755 /data
 
-# Copy the RTL-SDR kernel module blacklist.
-# This must be owned by root and copied without --chown
-# because /etc/modprobe.d/ requires root ownership.
-# The hamradio user does not need to modify this file.
-COPY blacklist-rtl.conf /etc/modprobe.d/blacklist-rtl.conf
+# Pre-create Go directories for the hamradio user.
+# The GrayWolf installer builds from source at runtime.
+# Go toolchain requires writable GOPATH and GOCACHE
+# which must be in the user's home directory.
+RUN mkdir -p \
+        /home/hamradio/go/bin \
+        /home/hamradio/go/pkg \
+        /home/hamradio/go/src \
+        /home/hamradio/.cache/go-build \
+        /home/hamradio/.local/bin \
+    && chown -R hamradio:hamradio /home/hamradio
 
-# Copy Python virtual environment from builder stage.
-# The venv is owned by root but has a+rX so the hamradio
-# user can execute binaries and import packages.
-# The hamradio user CANNOT install new packages at runtime,
-# which is the intended security boundary.
+# Copy venv from builder
 COPY --from=builder /opt/venv /opt/venv
 RUN chmod -R a+rX /opt/venv
+
+# Set Go and PATH environment for runtime user.
+# These persist into the running container and are
+# available to the GrayWolf installer subprocess.
+ENV GOPATH=/home/hamradio/go \
+    GOCACHE=/home/hamradio/.cache/go-build \
+    GOMODCACHE=/home/hamradio/go/pkg/mod \
+    PATH="/home/hamradio/.local/bin:/home/hamradio/go/bin:/opt/venv/bin:$PATH"
 
 WORKDIR /app
 
@@ -221,6 +226,7 @@ COPY --chown=hamradio:hamradio callsign_db ./callsign_db/
 COPY --chown=hamradio:hamradio templates ./templates/
 COPY --chown=hamradio:hamradio static ./static/
 
+USER hamradio
 # Copy entrypoint script.
 # Owned by root so the hamradio user cannot modify it.
 # chmod +x must be run as root before USER hamradio.
