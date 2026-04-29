@@ -699,28 +699,179 @@ class GrayWolfInstaller(BaseInstaller):
 
         return len(failed) == 0
 
+   def _find_main_package_dir(self, repo_root):
+        """
+        Find the directory containing the main Go package.
+
+        In many Go repositories the main package (the
+        executable entry point) is not in the repository
+        root but in a subdirectory such as:
+            cmd/graywolf/
+            cmd/
+            main/
+            src/
+
+        This method scans the repository for .go files
+        containing 'package main' to find the correct
+        directory to pass to 'go build'.
+
+        Args:
+            repo_root: Root directory of the cloned repo
+
+        Returns:
+            str: Path to directory with main package,
+                 or repo_root if not found elsewhere
+        """
+        print(
+            "[GrayWolf] Scanning for main package..."
+        )
+
+        # Common locations to check first (fast path)
+        common_locations = [
+            os.path.join(repo_root, 'cmd', 'graywolf'),
+            os.path.join(repo_root, 'cmd'),
+            os.path.join(repo_root, 'main'),
+            os.path.join(repo_root, 'src'),
+            os.path.join(repo_root, 'app'),
+        ]
+
+        for location in common_locations:
+            if os.path.isdir(location):
+                go_files = [
+                    f for f in os.listdir(location)
+                    if f.endswith('.go')
+                ]
+                if go_files:
+                    # Check if any file declares package main
+                    for go_file in go_files:
+                        filepath = os.path.join(
+                            location, go_file
+                        )
+                        try:
+                            with open(filepath, 'r') as f:
+                                content = f.read(512)
+                            if 'package main' in content:
+                                print(
+                                    f"[GrayWolf] main package "
+                                    f"found: {location}"
+                                )
+                                return location
+                        except Exception:
+                            continue
+
+        # Full scan of repository for package main
+        print(
+            "[GrayWolf] Scanning all directories for "
+            "package main..."
+        )
+
+        main_dirs = []
+        for root, dirs, files in os.walk(repo_root):
+            # Skip hidden dirs and vendor/test dirs
+            dirs[:] = [
+                d for d in dirs
+                if not d.startswith('.') and
+                d not in ('vendor', 'testdata', '_test')
+            ]
+
+            go_files = [f for f in files if f.endswith('.go')]
+            if not go_files:
+                continue
+
+            # Check for package main declaration
+            for go_file in go_files:
+                filepath = os.path.join(root, go_file)
+                try:
+                    with open(filepath, 'r',
+                              errors='ignore') as f:
+                        # Only read enough to find declaration
+                        content = f.read(256)
+                    if 'package main' in content:
+                        main_dirs.append(root)
+                        print(
+                            f"[GrayWolf] Found package main: "
+                            f"{root}"
+                        )
+                        break
+                except Exception:
+                    continue
+
+        if len(main_dirs) == 1:
+            return main_dirs[0]
+        elif len(main_dirs) > 1:
+            # Prefer the shortest path (most likely root cmd)
+            shortest = min(main_dirs, key=len)
+            print(
+                f"[GrayWolf] Multiple main packages found, "
+                f"using: {shortest}"
+            )
+            return shortest
+
+        # No main package found - log repo structure and
+        # fall back to repo root
+        print(
+            "[GrayWolf] WARNING: No package main found. "
+            "Repository structure:"
+        )
+        self._log_directory_tree(repo_root, max_depth=3)
+
+        return repo_root
+
+    def _log_directory_tree(self, path, max_depth=3,
+                             current_depth=0, prefix=''):
+        """
+        Log the directory tree for diagnostic purposes.
+
+        Shows the repository layout when the main package
+        cannot be found, helping diagnose build failures.
+
+        Args:
+            path: Directory to log
+            max_depth: Maximum depth to traverse
+            current_depth: Current recursion depth
+            prefix: Indentation prefix string
+        """
+        if current_depth > max_depth:
+            return
+
+        try:
+            entries = sorted(os.listdir(path))
+            for entry in entries:
+                if entry.startswith('.'):
+                    continue
+                full_path = os.path.join(path, entry)
+                if os.path.isdir(full_path):
+                    print(f"[GrayWolf]   {prefix}{entry}/")
+                    self._log_directory_tree(
+                        full_path,
+                        max_depth,
+                        current_depth + 1,
+                        prefix + '  '
+                    )
+                else:
+                    print(f"[GrayWolf]   {prefix}{entry}")
+        except Exception:
+            pass
+
     def clone_and_build(self):
         """
         Clone GrayWolf from GitHub and build the binary.
 
         Complete build pipeline:
-            1. Create a clean build directory in home folder
-            2. Clone repository (shallow clone for speed)
+            1. Create clean build directory
+            2. Clone repository (shallow)
             3. Locate go.mod in cloned repo
             4. Verify Go version compatibility
-            5. Download Go module dependencies
-            6. Compile binary with 'go build'
-            7. Copy binary to INSTALL_DIR (~/.local/bin)
-            8. Verify the installed binary runs
-
-        Full stdout and stderr from Go commands are printed
-        to Docker logs when failures occur so the root cause
-        is always diagnosable without exec-ing into the container.
+            5. Find main package directory
+               (may differ from go.mod location)
+            6. Download Go module dependencies
+            7. Compile binary with 'go build'
+            8. Copy binary to INSTALL_DIR
+            9. Verify installed binary executes
 
         Returns:
             bool: True if build and install successful
         """
-        # Use home directory for build to ensure write access
         build_dir = os.path.join(
             os.path.expanduser('~'),
             '.graywolf_build'
@@ -748,7 +899,7 @@ class GrayWolfInstaller(BaseInstaller):
             ok, stdout, stderr = self._run_go_command(
                 [
                     'git', 'clone',
-                    '--depth', '1',        # Shallow clone
+                    '--depth', '1',
                     self.GRAYWOLF_REPO,
                     build_dir
                 ],
@@ -757,23 +908,18 @@ class GrayWolfInstaller(BaseInstaller):
 
             if not ok:
                 print(
-                    f"[GrayWolf] ERROR: Clone failed: {stderr}"
-                )
-                print(
-                    "[GrayWolf] Check network connectivity "
-                    "from the container."
+                    f"[GrayWolf] ERROR: Clone failed: "
+                    f"{stderr}"
                 )
                 return False
 
             print("[GrayWolf] ✓ Repository cloned")
 
             # -------------------------------------------------------
-            # Step 2: Find go.mod in the cloned repository
-            # Some repos have go.mod in root, some in a subdir
+            # Step 2: Find go.mod (defines module root)
             # -------------------------------------------------------
             go_mod_dir = None
             for root, dirs, files in os.walk(build_dir):
-                # Skip hidden directories
                 dirs[:] = [
                     d for d in dirs
                     if not d.startswith('.')
@@ -787,22 +933,19 @@ class GrayWolfInstaller(BaseInstaller):
 
             if not go_mod_dir:
                 print(
-                    "[GrayWolf] ERROR: go.mod not found "
-                    "in cloned repository"
+                    "[GrayWolf] ERROR: go.mod not found"
                 )
-                print("[GrayWolf] Repository contents:")
-                for item in sorted(os.listdir(build_dir)):
-                    print(f"  {item}")
+                self._log_directory_tree(build_dir)
                 return False
 
-            # Print go.mod content for diagnostic purposes
+            # Print go.mod for diagnostics
             go_mod_path = os.path.join(go_mod_dir, 'go.mod')
             try:
                 with open(go_mod_path, 'r') as f:
                     go_mod_content = f.read()
                 print(
                     f"[GrayWolf] go.mod content:\n"
-                    f"{go_mod_content[:300]}"
+                    f"{go_mod_content[:400]}"
                 )
             except Exception:
                 pass
@@ -811,83 +954,102 @@ class GrayWolfInstaller(BaseInstaller):
             # Step 3: Check Go version compatibility
             # -------------------------------------------------------
             print(
-                "[GrayWolf] Checking Go version compatibility..."
+                "[GrayWolf] Checking Go version "
+                "compatibility..."
             )
             compatible, installed_ver, required_ver = (
                 self._check_go_version_compatible(go_mod_dir)
             )
 
             if not compatible:
-                # Error details already printed by the checker
                 print(
-                    "[GrayWolf] ERROR: Cannot build with "
-                    f"Go {installed_ver} — need Go {required_ver}"
+                    f"[GrayWolf] ERROR: Cannot build with "
+                    f"Go {installed_ver} — need "
+                    f"Go {required_ver}"
                 )
                 return False
 
             # -------------------------------------------------------
-            # Step 4: Download Go module dependencies
+            # Step 4: Find the main package directory
+            #
+            # CRITICAL FIX: go.mod may be in the repo root
+            # but the .go source files (package main) may be
+            # in a subdirectory like cmd/graywolf/.
+            # 'go build .' fails with "no Go files" if run
+            # in a directory containing only go.mod.
+            # We must find the directory that has the .go files.
+            # -------------------------------------------------------
+            main_pkg_dir = self._find_main_package_dir(
+                go_mod_dir
+            )
+
+            print(
+                f"[GrayWolf] Build target directory: "
+                f"{main_pkg_dir}"
+            )
+
+            # -------------------------------------------------------
+            # Step 5: Download Go module dependencies
+            # Must run from the go.mod directory (module root)
             # -------------------------------------------------------
             print(
                 "[GrayWolf] Downloading Go dependencies..."
             )
             ok, stdout, stderr = self._run_go_command(
-                ['go', 'mod', 'download', '-x'],
-                cwd=go_mod_dir,
+                ['go', 'mod', 'download'],
+                cwd=go_mod_dir,    # Module root, not main pkg
                 timeout=300
             )
 
             if not ok:
-                # go mod download failure is often non-fatal
-                # because modules may be cached already
                 print(
-                    f"[GrayWolf] WARNING: go mod download "
-                    f"issues (may be non-fatal):"
+                    f"[GrayWolf] WARNING: go mod download: "
+                    f"{stderr[:300]}"
                 )
-                if stderr:
-                    # Print last 10 lines of error
-                    err_lines = stderr.strip().splitlines()
-                    for line in err_lines[-10:]:
-                        print(f"  {line}")
             else:
                 print(
                     "[GrayWolf] ✓ Go dependencies downloaded"
                 )
 
-            # Also run go mod tidy to ensure consistency
-            print("[GrayWolf] Running go mod tidy...")
-            ok, stdout, stderr = self._run_go_command(
-                ['go', 'mod', 'tidy'],
-                cwd=go_mod_dir,
-                timeout=120
-            )
-            if not ok and stderr:
-                print(
-                    f"[GrayWolf] go mod tidy warning: "
-                    f"{stderr[:200]}"
-                )
-
             # -------------------------------------------------------
-            # Step 5: Build the binary
+            # Step 6: Build the binary
+            #
+            # Build output path is in go_mod_dir so the
+            # binary is findable regardless of which subdir
+            # contains the main package.
             # -------------------------------------------------------
             build_output_path = os.path.join(
                 go_mod_dir,
                 self.GRAYWOLF_BINARY
             )
 
+            # Calculate the build target path relative to
+            # the module root. This is what we pass to go build.
+            if main_pkg_dir == go_mod_dir:
+                # Main package is at module root
+                build_target = '.'
+            else:
+                # Main package is in a subdirectory.
+                # We need a path relative to go_mod_dir OR
+                # the module path (e.g. ./cmd/graywolf)
+                rel_path = os.path.relpath(
+                    main_pkg_dir, go_mod_dir
+                )
+                build_target = f'./{rel_path}'
+
             print(
-                f"[GrayWolf] Building binary "
-                f"(output: {build_output_path})..."
+                f"[GrayWolf] Building: go build "
+                f"-o {self.GRAYWOLF_BINARY} {build_target}"
             )
 
             ok, stdout, stderr = self._run_go_command(
                 [
                     'go', 'build',
-                    '-v',                    # Verbose: list packages
-                    '-o', build_output_path, # Output path
-                    '.'                      # Build current package
+                    '-v',
+                    '-o', build_output_path,
+                    build_target
                 ],
-                cwd=go_mod_dir,
+                cwd=go_mod_dir,    # Always run from module root
                 timeout=300
             )
 
@@ -900,39 +1062,31 @@ class GrayWolfInstaller(BaseInstaller):
                 )
                 if stdout and stdout.strip():
                     print(
-                        f"[GrayWolf] STDOUT:\n{stdout.strip()}"
+                        f"[GrayWolf] STDOUT:\n"
+                        f"{stdout.strip()}"
                     )
                 if stderr and stderr.strip():
                     print(
-                        f"[GrayWolf] STDERR:\n{stderr.strip()}"
+                        f"[GrayWolf] STDERR:\n"
+                        f"{stderr.strip()}"
                     )
                 print(
                     "[GrayWolf] ---- END BUILD ERROR ----"
                 )
 
-                # Provide targeted guidance based on error
+                # Targeted guidance
                 if stderr:
-                    if 'cannot find package' in stderr or \
-                            'no required module' in stderr:
+                    if 'no Go files' in stderr:
                         print(
-                            "[GrayWolf] HINT: Missing Go modules. "
-                            "Check network and try again."
+                            "[GrayWolf] HINT: No .go files in "
+                            f"build target '{build_target}'. "
+                            "Repository structure:"
                         )
-                    elif 'undefined:' in stderr:
-                        print(
-                            "[GrayWolf] HINT: Compilation error. "
-                            "The repository may require a newer "
-                            "version of Go."
-                        )
-                    elif 'permission denied' in stderr.lower():
-                        print(
-                            "[GrayWolf] HINT: Permission denied. "
-                            f"GOPATH={self.gopath} and "
-                            f"GOCACHE={self.gocache} must be "
-                            "writable by the hamradio user."
+                        self._log_directory_tree(
+                            go_mod_dir,
+                            max_depth=4
                         )
                     elif 'invalid go version' in stderr:
-                        # Extract required version from error message
                         ver_match = re.search(
                             r"invalid go version '([\d.]+)'",
                             stderr
@@ -940,20 +1094,22 @@ class GrayWolfInstaller(BaseInstaller):
                         if ver_match:
                             needed = ver_match.group(1)
                             print(
-                                f"[GrayWolf] HINT: Update Dockerfile:"
+                                f"[GrayWolf] HINT: Update "
+                                f"Dockerfile: "
+                                f"ARG GO_VERSION={needed}"
                             )
                             print(
-                                f"[GrayWolf]   ARG GO_VERSION="
-                                f"{needed}"
+                                "[GrayWolf] Then rebuild: "
+                                "docker compose build --no-cache"
                             )
-                            print(
-                                f"[GrayWolf]   docker compose build "
-                                f"--no-cache"
-                            )
-
+                    elif 'permission denied' in stderr.lower():
+                        print(
+                            "[GrayWolf] HINT: Check GOPATH "
+                            f"({self.gopath}) and GOCACHE "
+                            f"({self.gocache}) are writable."
+                        )
                 return False
 
-            # Log what was compiled
             if stdout and stdout.strip():
                 pkg_count = len(stdout.strip().splitlines())
                 print(
@@ -964,26 +1120,29 @@ class GrayWolfInstaller(BaseInstaller):
                 print("[GrayWolf] ✓ Build successful")
 
             # -------------------------------------------------------
-            # Step 6: Verify binary was created
+            # Step 7: Verify binary was created
             # -------------------------------------------------------
             if not os.path.isfile(build_output_path):
                 print(
                     f"[GrayWolf] ERROR: Binary not found "
                     f"after build at {build_output_path}"
                 )
-                print("[GrayWolf] Build directory contents:")
+                print(
+                    "[GrayWolf] go_mod_dir contents:"
+                )
                 for item in os.listdir(go_mod_dir):
                     print(f"  {item}")
                 return False
 
-            binary_size = os.path.getsize(build_output_path)
+            size_kb = os.path.getsize(
+                build_output_path
+            ) / 1024
             print(
-                f"[GrayWolf] Binary size: "
-                f"{binary_size / 1024:.1f} KB"
+                f"[GrayWolf] Binary size: {size_kb:.1f} KB"
             )
 
             # -------------------------------------------------------
-            # Step 7: Install binary to INSTALL_DIR
+            # Step 8: Install binary to INSTALL_DIR
             # -------------------------------------------------------
             os.makedirs(self.INSTALL_DIR, exist_ok=True)
 
@@ -999,10 +1158,11 @@ class GrayWolfInstaller(BaseInstaller):
             )
 
             # -------------------------------------------------------
-            # Step 8: Verify the installed binary executes
+            # Step 9: Verify installed binary executes
             # -------------------------------------------------------
             print("[GrayWolf] Verifying installed binary...")
-            for flag in ['--version', '-version', '-h']:
+            verified = False
+            for flag in ['--version', '-version', '-h', '--help']:
                 try:
                     result = subprocess.run(
                         [self.graywolf_binary_path, flag],
@@ -1015,15 +1175,19 @@ class GrayWolfInstaller(BaseInstaller):
                         result.stdout + result.stderr
                     ).strip()
                     if output:
+                        first_line = output.splitlines()[0]
                         print(
                             f"[GrayWolf] ✓ Binary response: "
-                            f"{output.splitlines()[0][:80]}"
+                            f"{first_line[:80]}"
                         )
+                        verified = True
                         break
                 except Exception:
                     continue
-            else:
-                # Binary runs but produces no output — still ok
+
+            if not verified:
+                # Binary runs but gives no output — still ok
+                # as long as the file exists and is executable
                 print(
                     "[GrayWolf] ✓ Binary installed "
                     "(no version output)"
@@ -1033,17 +1197,19 @@ class GrayWolfInstaller(BaseInstaller):
 
         except Exception as e:
             print(
-                f"[GrayWolf] Unexpected error during build: "
-                f"{e}"
+                f"[GrayWolf] Unexpected error during "
+                f"build: {e}"
             )
             traceback.print_exc()
             return False
 
         finally:
-            # Always remove build directory regardless of outcome
+            # Always remove build directory
             if os.path.exists(build_dir):
                 shutil.rmtree(build_dir, ignore_errors=True)
-                print("[GrayWolf] Build directory cleaned up")
+                print(
+                    "[GrayWolf] Build directory cleaned up"
+                )
 
     def write_install_marker(self, method, version=None):
         """
