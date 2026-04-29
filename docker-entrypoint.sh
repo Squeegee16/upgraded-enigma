@@ -254,36 +254,43 @@ fi
 # ---------------------------------------------------------------
 # Go toolchain check (for GrayWolf plugin)
 # ---------------------------------------------------------------
+# ---------------------------------------------------------------
+# Go toolchain check (for GrayWolf and other Go plugins)
+# ---------------------------------------------------------------
 echo -e "\n${BLUE}--- Go Toolchain ---${NC}"
 
 if command -v go >/dev/null 2>&1; then
-    GO_VERSION=$(go version 2>/dev/null || echo "unknown")
-    echo -e "${GREEN}  ✓ Go available: ${GO_VERSION}${NC}"
+    GO_INSTALLED=$(go version 2>/dev/null | \
+        grep -oP 'go\K[\d.]+' | head -1)
+    echo -e "${GREEN}  ✓ Go ${GO_INSTALLED} available${NC}"
+    echo "  GOROOT:   ${GOROOT:-$(go env GOROOT)}"
     echo "  GOPATH:   ${GOPATH:-not set}"
     echo "  GOCACHE:  ${GOCACHE:-not set}"
 
-    # Verify GOPATH is writable
-    if [ -w "${GOPATH:-$HOME/go}" ]; then
-        echo -e "${GREEN}  ✓ GOPATH is writable${NC}"
-    else
-        echo -e "${YELLOW}  ⚠ GOPATH not writable: ${GOPATH}${NC}"
-        echo "    GrayWolf build will fail."
-        echo "    Check Dockerfile ENV and RUN mkdir commands."
-    fi
+    # Ensure Go directories are writable
+    for dir in \
+        "${GOPATH:-$HOME/go}" \
+        "${GOCACHE:-$HOME/.cache/go-build}" \
+        "${HOME}/.local/bin"; do
+        if [ ! -d "$dir" ]; then
+            mkdir -p "$dir" 2>/dev/null && \
+                echo -e "${GREEN}  ✓ Created: $dir${NC}" || \
+                echo -e "${YELLOW}  ⚠ Cannot create: $dir${NC}"
+        fi
+        if [ -w "$dir" ]; then
+            echo -e "${GREEN}  ✓ Writable: $dir${NC}"
+        else
+            echo -e "${RED}  ERROR: Not writable: $dir${NC}"
+        fi
+    done
 
-    # Verify GOCACHE is writable
-    if [ -w "${GOCACHE:-$HOME/.cache/go-build}" ]; then
-        echo -e "${GREEN}  ✓ GOCACHE is writable${NC}"
-    else
-        echo -e "${YELLOW}  ⚠ GOCACHE not writable: ${GOCACHE}${NC}"
-        mkdir -p "${GOCACHE:-$HOME/.cache/go-build}" 2>/dev/null && \
-            echo -e "${GREEN}  ✓ GOCACHE created${NC}" || \
-            echo -e "${RED}  ERROR: Cannot create GOCACHE${NC}"
-    fi
+    # Show version for diagnostic purposes
+    echo "  Full: $(go version)"
+
 else
-    echo -e "${YELLOW}  ⚠ Go not found in PATH${NC}"
-    echo "    GrayWolf plugin requires Go."
-    echo "    Ensure golang-go is in the Dockerfile."
+    echo -e "${RED}  ERROR: Go not found in PATH${NC}"
+    echo "  PATH=${PATH}"
+    echo "  Rebuild the Docker image with a current Go version"
 fi
 # ---------------------------------------------------------------
 # OpenWebRX sidecar availability check
