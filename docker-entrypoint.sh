@@ -251,7 +251,40 @@ if [ "$USE_MOCK_DEVICES" = "false" ]; then
 else
     echo "  Mock radio enabled"
 fi
+# ---------------------------------------------------------------
+# Go toolchain check (for GrayWolf plugin)
+# ---------------------------------------------------------------
+echo -e "\n${BLUE}--- Go Toolchain ---${NC}"
 
+if command -v go >/dev/null 2>&1; then
+    GO_VERSION=$(go version 2>/dev/null || echo "unknown")
+    echo -e "${GREEN}  ✓ Go available: ${GO_VERSION}${NC}"
+    echo "  GOPATH:   ${GOPATH:-not set}"
+    echo "  GOCACHE:  ${GOCACHE:-not set}"
+
+    # Verify GOPATH is writable
+    if [ -w "${GOPATH:-$HOME/go}" ]; then
+        echo -e "${GREEN}  ✓ GOPATH is writable${NC}"
+    else
+        echo -e "${YELLOW}  ⚠ GOPATH not writable: ${GOPATH}${NC}"
+        echo "    GrayWolf build will fail."
+        echo "    Check Dockerfile ENV and RUN mkdir commands."
+    fi
+
+    # Verify GOCACHE is writable
+    if [ -w "${GOCACHE:-$HOME/.cache/go-build}" ]; then
+        echo -e "${GREEN}  ✓ GOCACHE is writable${NC}"
+    else
+        echo -e "${YELLOW}  ⚠ GOCACHE not writable: ${GOCACHE}${NC}"
+        mkdir -p "${GOCACHE:-$HOME/.cache/go-build}" 2>/dev/null && \
+            echo -e "${GREEN}  ✓ GOCACHE created${NC}" || \
+            echo -e "${RED}  ERROR: Cannot create GOCACHE${NC}"
+    fi
+else
+    echo -e "${YELLOW}  ⚠ Go not found in PATH${NC}"
+    echo "    GrayWolf plugin requires Go."
+    echo "    Ensure golang-go is in the Dockerfile."
+fi
 # ---------------------------------------------------------------
 # OpenWebRX sidecar availability check
 # ---------------------------------------------------------------
