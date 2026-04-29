@@ -8,58 +8,92 @@ GrayWolf is a Winlink gateway client written in Go.
 Source: https://github.com/chrissnell/graywolf
 
 Installation Process:
-    1. Install required Python packages
-    2. Verify Go is available (installed in Dockerfile)
-    3. Clone GrayWolf repository from GitHub
-    4. Build binary with 'go build'
-    5. Install binary to ~/.local/bin/graywolf
-    6. Write installation marker
+    1. Verify Go toolchain is available and version-compatible
+    2. Install required Python packages
+    3. Verify git is available
+    4. Clone GrayWolf repository from GitHub
+    5. Verify go.mod version compatibility
+    6. Download Go module dependencies
+    7. Build binary with 'go build'
+    8. Install binary to ~/.local/bin/graywolf
+    9. Write installation marker
 
-Go Build Notes:
-    - Go must be installed before this runs
-    - go.mod must exist in the repository root
-    - Build runs in the repository directory
-    - stderr is captured and logged on failure
-    - The GOPATH and GOCACHE must be writable by
-      the runtime user
+Go Version Requirements:
+    The go.mod in the GrayWolf repository specifies the
+    minimum Go version. This installer reads that version
+    and compares it against the installed Go version before
+    attempting to build. If the versions are incompatible,
+    a clear error message is displayed with instructions
+    to update the Dockerfile ARG GO_VERSION value.
 
 Docker Notes:
-    - golang-go is installed in the Dockerfile
-    - The hamradio user (UID 1000) needs a writable
-      GOPATH. Default is ~/go which is /home/hamradio/go
-    - GOCACHE defaults to ~/.cache/go-build
+    - Go is installed from official go.dev tarball in
+      the Dockerfile (NOT from apt golang-go which is
+      always outdated in Debian Bookworm)
+    - The hamradio user (UID 1000) has a pre-created
+      writable GOPATH at /home/hamradio/go
+    - GOCACHE is at /home/hamradio/.cache/go-build
+    - The built binary is installed to
+      /home/hamradio/.local/bin/graywolf
+
+Common Errors:
+    go.mod version mismatch:
+        Update ARG GO_VERSION in Dockerfile to the
+        version required by go.mod and rebuild.
+    Permission denied on GOCACHE/GOPATH:
+        Ensure the pre-create RUN mkdir commands in
+        the Dockerfile ran before USER hamradio.
+    git clone failed:
+        Check network connectivity from the container.
 
 Author: Ham Radio App Team
 Version: 1.0.0
 """
 
 import os
+import re
 import sys
 import json
 import shutil
 import platform
 import subprocess
 import traceback
-from pathlib import Path
 from datetime import datetime
 
-# Import shared base installer for Docker-aware pip handling
+
+# ----------------------------------------------------------------
+# Import shared base installer for Docker-aware pip handling.
+# Falls back to an inline minimal implementation if the base
+# installer module is not yet available (e.g. first install).
+# ----------------------------------------------------------------
 try:
-    from plugins.implementations.base_installer import (
-        BaseInstaller
-    )
+    from plugins.implementations.base_installer import BaseInstaller
 except ImportError:
-    # Minimal inline fallback
     class BaseInstaller:
+        """
+        Minimal inline fallback for BaseInstaller.
+
+        Used when plugins/implementations/base_installer.py
+        cannot be imported. Provides the minimum interface
+        needed by GrayWolfInstaller.
+        """
+
         def __init__(self):
+            """Detect runtime environment."""
             try:
                 self.is_root = (os.getuid() == 0)
             except AttributeError:
                 self.is_root = False
-            self.sudo_available = shutil.which('sudo') is not None
-            self._sudo = [] if (
-                self.is_root or not self.sudo_available
-            ) else ['sudo']
+
+            self.sudo_available = (
+                shutil.which('sudo') is not None
+            )
+            self._sudo = (
+                [] if (self.is_root or not self.sudo_available)
+                else ['sudo']
+            )
+
+            # Docker detection via env var or /.dockerenv
             self.in_docker = (
                 os.environ.get(
                     'PLUGIN_SKIP_PIP_INSTALL', ''
@@ -68,13 +102,28 @@ except ImportError:
             )
 
         def pip_install(self, package):
+            """
+            Install package or skip in Docker.
+
+            Args:
+                package: Package name to install
+
+            Returns:
+                bool: True if available or skipped
+            """
             if self.in_docker:
+                # In Docker all packages must be pre-installed
+                # via requirements.txt — skip silently
                 return True
+
             try:
                 subprocess.run(
-                    [sys.executable, '-m', 'pip',
-                     'install', '--quiet', package],
-                    check=True, capture_output=True,
+                    [
+                        sys.executable, '-m', 'pip',
+                        'install', '--quiet', package
+                    ],
+                    check=True,
+                    capture_output=True,
                     timeout=120
                 )
                 return True
@@ -82,6 +131,15 @@ except ImportError:
                 return False
 
         def install_python_packages(self, packages):
+            """
+            Install a list of packages.
+
+            Args:
+                packages: List of package name strings
+
+            Returns:
+                tuple: (available_count, failed_list)
+            """
             failed = []
             for pkg in packages:
                 if not self.pip_install(pkg):
@@ -89,23 +147,40 @@ except ImportError:
             return len(packages) - len(failed), failed
 
         def write_marker(self, path, extra_data=None):
+            """
+            Write installation marker JSON file.
+
+            Args:
+                path: Full path for the marker file
+                extra_data: Optional dict of extra fields
+            """
             data = {
                 'installed': True,
                 'timestamp': datetime.utcnow().isoformat(),
                 'in_docker': self.in_docker,
             }
-            if extra_data:
+            if extra_data and isinstance(extra_data, dict):
                 data.update(extra_data)
+
             try:
-                os.makedirs(
-                    os.path.dirname(path), exist_ok=True
-                )
+                marker_dir = os.path.dirname(path)
+                if marker_dir:
+                    os.makedirs(marker_dir, exist_ok=True)
                 with open(path, 'w') as f:
                     json.dump(data, f, indent=2)
             except Exception as e:
-                print(f"[GrayWolf] Marker error: {e}")
+                print(f"[GrayWolf] Marker write error: {e}")
 
         def read_marker(self, path):
+            """
+            Read installation marker JSON file.
+
+            Args:
+                path: Full path to marker file
+
+            Returns:
+                dict: Marker data or empty dict
+            """
             if not os.path.exists(path):
                 return {}
             try:
@@ -117,29 +192,40 @@ except ImportError:
 
 class GrayWolfInstaller(BaseInstaller):
     """
-    Manages GrayWolf installation.
+    Manages GrayWolf installation from source.
 
-    Extends BaseInstaller to handle Go-based build
-    process with proper environment setup and
-    verbose error reporting.
+    Extends BaseInstaller to handle the Go build process
+    with proper environment setup, Go version checking,
+    and verbose error reporting so failures are diagnosable
+    from Docker logs.
+
+    Installation is tracked via a JSON marker file at
+    INSTALL_MARKER. Once the marker exists and the binary
+    is present, no reinstallation is attempted.
     """
 
-    # Installation state marker
+    # ----------------------------------------------------------
+    # Class-level constants
+    # ----------------------------------------------------------
+
+    # Marker file path — stored inside the plugin directory
     INSTALL_MARKER = os.path.join(
         os.path.dirname(__file__),
         '.installed'
     )
 
-    # GrayWolf GitHub repository
+    # GrayWolf source repository
     GRAYWOLF_REPO = 'https://github.com/chrissnell/graywolf'
 
-    # Binary name
+    # Output binary name
     GRAYWOLF_BINARY = 'graywolf'
 
-    # Install directory (in user home for non-root)
+    # Installation directory for the built binary
+    # Uses ~/.local/bin which is on the PATH for the
+    # hamradio user as configured in the Dockerfile ENV
     INSTALL_DIR = os.path.expanduser('~/.local/bin')
 
-    # Required Python packages
+    # Python packages required by this plugin
     REQUIRED_PACKAGES = [
         'requests',
         'psutil',
@@ -147,18 +233,22 @@ class GrayWolfInstaller(BaseInstaller):
 
     def __init__(self):
         """
-        Initialise installer with Go environment setup.
+        Initialise installer with Go environment detection.
+
+        Calls BaseInstaller.__init__() for Docker/root
+        detection, then sets up Go-specific paths.
         """
         super().__init__()
 
-        # Binary path (in INSTALL_DIR)
+        # Full path to the installed GrayWolf binary
         self.graywolf_binary_path = os.path.join(
-            self.INSTALL_DIR, self.GRAYWOLF_BINARY
+            self.INSTALL_DIR,
+            self.GRAYWOLF_BINARY
         )
 
-        # Go environment paths
-        # Default GOPATH is ~/go
-        # Default GOCACHE is ~/.cache/go-build
+        # Go workspace paths
+        # These match the ENV variables set in the Dockerfile
+        # and the pre-created directories from RUN mkdir -p
         self.gopath = os.environ.get(
             'GOPATH',
             os.path.expanduser('~/go')
@@ -167,62 +257,87 @@ class GrayWolfInstaller(BaseInstaller):
             'GOCACHE',
             os.path.expanduser('~/.cache/go-build')
         )
+        self.goroot = os.environ.get(
+            'GOROOT',
+            '/usr/local/go'
+        )
 
         print(
             f"[GrayWolf] Installer init | "
             f"Docker: {self.in_docker} | "
+            f"Root: {self.is_root} | "
             f"Go: {shutil.which('go') or 'not found'} | "
             f"GOPATH: {self.gopath}"
         )
 
+    # ----------------------------------------------------------
+    # Go environment helpers
+    # ----------------------------------------------------------
+
     def _get_go_env(self):
         """
-        Build environment variables for Go build commands.
+        Build a clean environment dict for Go subprocesses.
 
-        Ensures GOPATH and GOCACHE are set to writable
-        directories for the current user.
+        Ensures GOPATH, GOCACHE, GOROOT, HOME, and PATH
+        are all correctly set. Creates GOPATH and GOCACHE
+        directories if they do not exist.
 
         Returns:
-            dict: Environment variables for subprocess
+            dict: Environment variables for subprocess calls
         """
         env = os.environ.copy()
 
-        # Ensure GOPATH is set and writable
+        # Set Go workspace variables
         env['GOPATH'] = self.gopath
-        os.makedirs(self.gopath, exist_ok=True)
-
-        # Ensure GOCACHE is set and writable
         env['GOCACHE'] = self.gocache
-        os.makedirs(self.gocache, exist_ok=True)
 
-        # Ensure HOME is set (needed by Go toolchain)
+        if self.goroot and os.path.exists(self.goroot):
+            env['GOROOT'] = self.goroot
+
+        # Ensure HOME is set — Go needs it for .config paths
         if 'HOME' not in env:
             env['HOME'] = os.path.expanduser('~')
 
-        # Add ~/.local/bin to PATH so installed binary
-        # is immediately findable
+        # Ensure GOPATH and GOCACHE directories exist
+        try:
+            os.makedirs(self.gopath, exist_ok=True)
+            os.makedirs(self.gocache, exist_ok=True)
+        except OSError as e:
+            print(
+                f"[GrayWolf] WARNING: Cannot create Go dirs: "
+                f"{e}"
+            )
+
+        # Add Go bin directories and ~/.local/bin to PATH
+        go_bin = os.path.join(self.goroot, 'bin') \
+            if self.goroot else '/usr/local/go/bin'
+        gopath_bin = os.path.join(self.gopath, 'bin')
         local_bin = os.path.expanduser('~/.local/bin')
-        path_parts = env.get('PATH', '').split(':')
-        if local_bin not in path_parts:
-            env['PATH'] = f"{local_bin}:{env.get('PATH', '')}"
+
+        current_path = env.get('PATH', '')
+        path_parts = current_path.split(':')
+
+        for p in [go_bin, gopath_bin, local_bin]:
+            if p not in path_parts:
+                env['PATH'] = f"{p}:{env['PATH']}"
 
         return env
 
     def _run_go_command(self, cmd, cwd=None, timeout=300):
         """
-        Run a Go command and capture all output.
+        Execute a Go-related command with full output capture.
 
-        Unlike _run_command in the base class, this method
-        intentionally captures stderr separately so that
-        Go compiler errors can be displayed clearly.
+        Unlike a generic _run_command, this method captures
+        stdout and stderr separately so Go compiler errors
+        are fully visible in logs when a build fails.
 
         Args:
-            cmd: Command list to execute
-            cwd: Working directory for the command
-            timeout: Maximum seconds to wait
+            cmd: Command and arguments as a list
+            cwd: Working directory (None = current dir)
+            timeout: Maximum seconds to allow
 
         Returns:
-            tuple: (success, stdout, stderr)
+            tuple: (success: bool, stdout: str, stderr: str)
         """
         env = self._get_go_env()
 
@@ -231,247 +346,646 @@ class GrayWolfInstaller(BaseInstaller):
                 cmd,
                 cwd=cwd,
                 env=env,
-                capture_output=True,  # Separate stdout/stderr
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 timeout=timeout,
                 text=True
             )
 
+            stdout = result.stdout or ''
+            stderr = result.stderr or ''
+
             if result.returncode == 0:
-                return True, result.stdout, result.stderr
+                return True, stdout, stderr
             else:
-                return False, result.stdout, result.stderr
+                return False, stdout, stderr
 
         except FileNotFoundError as e:
-            return False, '', f"Command not found: {cmd[0]}: {e}"
+            return (
+                False, '',
+                f"Command not found: {cmd[0]} — {e}"
+            )
         except subprocess.TimeoutExpired:
-            return False, '', f"Timed out after {timeout}s"
+            return (
+                False, '',
+                f"Command timed out after {timeout}s: "
+                f"{' '.join(cmd)}"
+            )
         except Exception as e:
             return False, '', str(e)
 
+    # ----------------------------------------------------------
+    # Installation state checks
+    # ----------------------------------------------------------
+
     def is_installed(self):
         """
-        Check if GrayWolf binary is installed.
+        Check whether GrayWolf is installed.
+
+        Verifies that:
+        1. The installation marker file exists
+        2. The GrayWolf binary is present and executable
 
         Returns:
-            bool: True if marker exists and binary found
+            bool: True if both conditions are met
         """
         if not os.path.exists(self.INSTALL_MARKER):
             return False
 
-        # Check binary in INSTALL_DIR
-        if os.path.exists(self.graywolf_binary_path):
+        # Check the binary in INSTALL_DIR
+        if os.path.isfile(self.graywolf_binary_path) and \
+                os.access(self.graywolf_binary_path, os.X_OK):
             return True
 
-        # Check if in PATH
+        # Also check if it was installed somewhere on PATH
         return shutil.which(self.GRAYWOLF_BINARY) is not None
+
+    def get_install_info(self):
+        """
+        Read the installation marker data.
+
+        Returns:
+            dict: Marker contents or empty dict if not found
+        """
+        return self.read_marker(self.INSTALL_MARKER)
+
+    def get_version(self):
+        """
+        Get the installed GrayWolf binary version.
+
+        Tries common version flags in order.
+
+        Returns:
+            str: Version string or None if not determinable
+        """
+        binary = (
+            shutil.which(self.GRAYWOLF_BINARY) or
+            (self.graywolf_binary_path
+             if os.path.exists(self.graywolf_binary_path)
+             else None)
+        )
+
+        if not binary:
+            return None
+
+        for flag in ['--version', '-version', 'version', '-v']:
+            try:
+                result = subprocess.run(
+                    [binary, flag],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                output = (
+                    result.stdout + result.stderr
+                ).strip()
+                if output:
+                    # Return first non-empty line
+                    first_line = output.splitlines()[0]
+                    return first_line[:80]
+            except Exception:
+                continue
+
+        return 'installed'
+
+    # ----------------------------------------------------------
+    # Go toolchain checks
+    # ----------------------------------------------------------
 
     def _check_go_available(self):
         """
-        Verify Go toolchain is installed and working.
+        Verify the Go toolchain is installed and accessible.
+
+        Checks:
+        1. 'go' binary exists in PATH
+        2. 'go version' runs successfully
 
         Returns:
-            tuple: (available, version_string)
+            tuple: (available: bool, info_string: str)
+                   info_string is the version on success
+                   or an error description on failure
         """
         go_binary = shutil.which('go')
+
         if not go_binary:
-            return False, "go binary not found in PATH"
+            # Also check GOROOT directly in case PATH is wrong
+            if self.goroot:
+                go_in_root = os.path.join(
+                    self.goroot, 'bin', 'go'
+                )
+                if os.path.exists(go_in_root):
+                    go_binary = go_in_root
+                else:
+                    return (
+                        False,
+                        f"go binary not found in PATH or "
+                        f"GOROOT ({self.goroot}/bin/go)"
+                    )
+            else:
+                return False, "go binary not found in PATH"
 
         ok, stdout, stderr = self._run_go_command(
-            ['go', 'version'],
+            [go_binary, 'version'],
             timeout=15
         )
 
-        if ok and stdout:
-            version = stdout.strip()
-            print(f"[GrayWolf] Go version: {version}")
-            return True, version
+        if ok and stdout.strip():
+            version_line = stdout.strip()
+            print(f"[GrayWolf] Go version: {version_line}")
+            return True, version_line
 
-        return False, stderr or "go version failed"
+        return (
+            False,
+            stderr or "go version command failed"
+        )
+
+    def _parse_version_tuple(self, version_str):
+        """
+        Parse a Go version string into a comparable tuple.
+
+        Handles formats like:
+            '1.22.3'   -> (1, 22, 3)
+            '1.21'     -> (1, 21, 0)
+            '1.26.2'   -> (1, 26, 2)
+
+        Args:
+            version_str: Version string to parse
+
+        Returns:
+            tuple: (major, minor, patch) integers
+        """
+        try:
+            parts = version_str.strip().split('.')
+            # Pad to 3 parts
+            while len(parts) < 3:
+                parts.append('0')
+            return tuple(int(x) for x in parts[:3])
+        except (ValueError, AttributeError):
+            return (0, 0, 0)
+
+    def _check_go_version_compatible(self, go_mod_dir):
+        """
+        Verify installed Go version meets go.mod requirement.
+
+        Reads the 'go' directive from go.mod and compares
+        it with the installed Go version. Provides a clear,
+        actionable error message if incompatible.
+
+        Args:
+            go_mod_dir: Directory containing go.mod file
+
+        Returns:
+            tuple: (
+                compatible: bool,
+                installed_ver: str,
+                required_ver: str
+            )
+        """
+        go_mod_path = os.path.join(go_mod_dir, 'go.mod')
+
+        if not os.path.exists(go_mod_path):
+            print(
+                "[GrayWolf] WARNING: go.mod not found at "
+                f"{go_mod_path}"
+            )
+            return True, 'unknown', 'unknown'
+
+        # -------------------------------------------------------
+        # Read required version from go.mod
+        # The relevant line looks like: "go 1.26.2"
+        # -------------------------------------------------------
+        required_version = None
+        try:
+            with open(go_mod_path, 'r') as f:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped.startswith('go '):
+                        parts = stripped.split()
+                        if len(parts) >= 2:
+                            required_version = parts[1]
+                            break
+        except Exception as e:
+            print(
+                f"[GrayWolf] WARNING: Cannot read go.mod: "
+                f"{e}"
+            )
+            return True, 'unknown', 'unknown'
+
+        if not required_version:
+            print(
+                "[GrayWolf] WARNING: No 'go' directive "
+                "found in go.mod"
+            )
+            return True, 'unknown', 'unknown'
+
+        print(
+            f"[GrayWolf] go.mod requires: Go {required_version}"
+        )
+
+        # -------------------------------------------------------
+        # Get installed Go version
+        # -------------------------------------------------------
+        ok, stdout, stderr = self._run_go_command(
+            ['go', 'version'],
+            timeout=10
+        )
+
+        if not ok or not stdout:
+            return (
+                False,
+                'not found',
+                required_version
+            )
+
+        # Parse installed version from output like:
+        # "go version go1.22.3 linux/amd64"
+        installed_version = None
+        match = re.search(
+            r'go(\d+\.\d+(?:\.\d+)?)',
+            stdout
+        )
+        if match:
+            installed_version = match.group(1)
+        else:
+            print(
+                f"[GrayWolf] WARNING: Cannot parse Go "
+                f"version from: {stdout.strip()}"
+            )
+            return True, stdout.strip(), required_version
+
+        # -------------------------------------------------------
+        # Compare versions
+        # -------------------------------------------------------
+        installed_tuple = self._parse_version_tuple(
+            installed_version
+        )
+        required_tuple = self._parse_version_tuple(
+            required_version
+        )
+
+        compatible = installed_tuple >= required_tuple
+
+        if compatible:
+            print(
+                f"[GrayWolf] ✓ Go version compatible: "
+                f"{installed_version} >= {required_version}"
+            )
+        else:
+            print(
+                f"[GrayWolf] ERROR: Go version incompatible!"
+            )
+            print(
+                f"[GrayWolf]   Installed : Go {installed_version}"
+            )
+            print(
+                f"[GrayWolf]   Required  : Go {required_version}"
+                f" (from go.mod)"
+            )
+            print(
+                f"[GrayWolf]   ----------------------------------------"
+            )
+            print(
+                f"[GrayWolf]   Fix: Update the Dockerfile ARG:"
+            )
+            print(
+                f"[GrayWolf]     ARG GO_VERSION={required_version}"
+            )
+            print(
+                f"[GrayWolf]   Then rebuild the Docker image:"
+            )
+            print(
+                f"[GrayWolf]     docker compose build --no-cache"
+            )
+            print(
+                f"[GrayWolf]   ----------------------------------------"
+            )
+
+        return compatible, installed_version, required_version
+
+    # ----------------------------------------------------------
+    # Installation methods
+    # ----------------------------------------------------------
 
     def install_python_packages(self):
         """
         Install required Python packages.
 
+        Delegates to BaseInstaller.install_python_packages()
+        which handles Docker environments correctly by
+        checking availability rather than installing.
+
         Returns:
-            bool: True if all packages available
+            bool: True if all packages are available
         """
-        print("[GrayWolf] Installing required Python packages...")
+        print(
+            "[GrayWolf] Installing required Python packages..."
+        )
+
         available, failed = super().install_python_packages(
             self.REQUIRED_PACKAGES
         )
 
-        if failed and not self.in_docker:
-            print(
-                f"[GrayWolf] WARNING: Failed packages: {failed}"
-            )
+        if failed:
+            if self.in_docker:
+                print(
+                    f"[GrayWolf] INFO: Packages not in Docker "
+                    f"image: {failed}. Add to requirements.txt."
+                )
+            else:
+                print(
+                    f"[GrayWolf] WARNING: Failed packages: "
+                    f"{failed}"
+                )
+
         return len(failed) == 0
 
     def clone_and_build(self):
         """
         Clone GrayWolf from GitHub and build the binary.
 
-        Provides detailed error output when the build
-        fails so the root cause is visible in logs.
+        Complete build pipeline:
+            1. Create a clean build directory in home folder
+            2. Clone repository (shallow clone for speed)
+            3. Locate go.mod in cloned repo
+            4. Verify Go version compatibility
+            5. Download Go module dependencies
+            6. Compile binary with 'go build'
+            7. Copy binary to INSTALL_DIR (~/.local/bin)
+            8. Verify the installed binary runs
 
-        Build steps:
-            1. Create build directory
-            2. Clone repository
-            3. Verify go.mod exists
-            4. Run 'go mod download' for dependencies
-            5. Run 'go build' to compile binary
-            6. Copy binary to INSTALL_DIR
+        Full stdout and stderr from Go commands are printed
+        to Docker logs when failures occur so the root cause
+        is always diagnosable without exec-ing into the container.
 
         Returns:
             bool: True if build and install successful
         """
+        # Use home directory for build to ensure write access
         build_dir = os.path.join(
             os.path.expanduser('~'),
             '.graywolf_build'
         )
 
         try:
-            # Clean previous failed builds
+            # -------------------------------------------------------
+            # Prepare clean build directory
+            # -------------------------------------------------------
             if os.path.exists(build_dir):
+                print(
+                    "[GrayWolf] Removing previous build dir..."
+                )
                 shutil.rmtree(build_dir, ignore_errors=True)
 
             os.makedirs(build_dir, exist_ok=True)
+            print(
+                f"[GrayWolf] Build directory: {build_dir}"
+            )
 
             # -------------------------------------------------------
             # Step 1: Clone repository
             # -------------------------------------------------------
             print("[GrayWolf] Cloning repository...")
             ok, stdout, stderr = self._run_go_command(
-                ['git', 'clone',
-                 '--depth', '1',
-                 self.GRAYWOLF_REPO,
-                 build_dir],
+                [
+                    'git', 'clone',
+                    '--depth', '1',        # Shallow clone
+                    self.GRAYWOLF_REPO,
+                    build_dir
+                ],
                 timeout=120
             )
 
             if not ok:
-                print(f"[GrayWolf] Clone failed: {stderr}")
+                print(
+                    f"[GrayWolf] ERROR: Clone failed: {stderr}"
+                )
+                print(
+                    "[GrayWolf] Check network connectivity "
+                    "from the container."
+                )
                 return False
 
             print("[GrayWolf] ✓ Repository cloned")
 
             # -------------------------------------------------------
-            # Step 2: Verify repository structure
+            # Step 2: Find go.mod in the cloned repository
+            # Some repos have go.mod in root, some in a subdir
             # -------------------------------------------------------
-            # Find the directory containing go.mod
-            # Some repos have it in the root, others in a subdir
             go_mod_dir = None
-
             for root, dirs, files in os.walk(build_dir):
+                # Skip hidden directories
+                dirs[:] = [
+                    d for d in dirs
+                    if not d.startswith('.')
+                ]
                 if 'go.mod' in files:
                     go_mod_dir = root
-                    print(f"[GrayWolf] go.mod found: {root}")
+                    print(
+                        f"[GrayWolf] go.mod found: {root}"
+                    )
                     break
 
             if not go_mod_dir:
                 print(
-                    "[GrayWolf] ERROR: go.mod not found in "
-                    "cloned repository"
+                    "[GrayWolf] ERROR: go.mod not found "
+                    "in cloned repository"
                 )
-                print(
-                    "[GrayWolf] Repository contents:"
-                )
-                for item in os.listdir(build_dir):
+                print("[GrayWolf] Repository contents:")
+                for item in sorted(os.listdir(build_dir)):
                     print(f"  {item}")
                 return False
 
+            # Print go.mod content for diagnostic purposes
+            go_mod_path = os.path.join(go_mod_dir, 'go.mod')
+            try:
+                with open(go_mod_path, 'r') as f:
+                    go_mod_content = f.read()
+                print(
+                    f"[GrayWolf] go.mod content:\n"
+                    f"{go_mod_content[:300]}"
+                )
+            except Exception:
+                pass
+
             # -------------------------------------------------------
-            # Step 3: Download Go module dependencies
+            # Step 3: Check Go version compatibility
             # -------------------------------------------------------
-            print("[GrayWolf] Downloading Go dependencies...")
+            print(
+                "[GrayWolf] Checking Go version compatibility..."
+            )
+            compatible, installed_ver, required_ver = (
+                self._check_go_version_compatible(go_mod_dir)
+            )
+
+            if not compatible:
+                # Error details already printed by the checker
+                print(
+                    "[GrayWolf] ERROR: Cannot build with "
+                    f"Go {installed_ver} — need Go {required_ver}"
+                )
+                return False
+
+            # -------------------------------------------------------
+            # Step 4: Download Go module dependencies
+            # -------------------------------------------------------
+            print(
+                "[GrayWolf] Downloading Go dependencies..."
+            )
             ok, stdout, stderr = self._run_go_command(
-                ['go', 'mod', 'download'],
+                ['go', 'mod', 'download', '-x'],
                 cwd=go_mod_dir,
-                timeout=180
+                timeout=300
             )
 
             if not ok:
+                # go mod download failure is often non-fatal
+                # because modules may be cached already
                 print(
                     f"[GrayWolf] WARNING: go mod download "
-                    f"failed: {stderr}"
+                    f"issues (may be non-fatal):"
                 )
-                # Continue — may still build with cached modules
+                if stderr:
+                    # Print last 10 lines of error
+                    err_lines = stderr.strip().splitlines()
+                    for line in err_lines[-10:]:
+                        print(f"  {line}")
+            else:
+                print(
+                    "[GrayWolf] ✓ Go dependencies downloaded"
+                )
+
+            # Also run go mod tidy to ensure consistency
+            print("[GrayWolf] Running go mod tidy...")
+            ok, stdout, stderr = self._run_go_command(
+                ['go', 'mod', 'tidy'],
+                cwd=go_mod_dir,
+                timeout=120
+            )
+            if not ok and stderr:
+                print(
+                    f"[GrayWolf] go mod tidy warning: "
+                    f"{stderr[:200]}"
+                )
 
             # -------------------------------------------------------
-            # Step 4: Build the binary
+            # Step 5: Build the binary
             # -------------------------------------------------------
-            print(
-                f"[GrayWolf] Building binary in {go_mod_dir}..."
-            )
             build_output_path = os.path.join(
-                go_mod_dir, self.GRAYWOLF_BINARY
+                go_mod_dir,
+                self.GRAYWOLF_BINARY
+            )
+
+            print(
+                f"[GrayWolf] Building binary "
+                f"(output: {build_output_path})..."
             )
 
             ok, stdout, stderr = self._run_go_command(
                 [
                     'go', 'build',
-                    '-v',  # Verbose output for debugging
-                    '-o', build_output_path,
-                    '.'   # Build from current directory
+                    '-v',                    # Verbose: list packages
+                    '-o', build_output_path, # Output path
+                    '.'                      # Build current package
                 ],
                 cwd=go_mod_dir,
                 timeout=300
             )
 
             if not ok:
-                # Log full build error for diagnosis
                 print(
                     "[GrayWolf] ERROR: go build failed"
                 )
-                if stdout:
+                print(
+                    "[GrayWolf] ---- FULL BUILD ERROR ----"
+                )
+                if stdout and stdout.strip():
                     print(
-                        f"[GrayWolf] stdout:\n{stdout[:500]}"
+                        f"[GrayWolf] STDOUT:\n{stdout.strip()}"
                     )
-                if stderr:
+                if stderr and stderr.strip():
                     print(
-                        f"[GrayWolf] stderr:\n{stderr[:1000]}"
+                        f"[GrayWolf] STDERR:\n{stderr.strip()}"
                     )
+                print(
+                    "[GrayWolf] ---- END BUILD ERROR ----"
+                )
 
-                # Try to provide helpful guidance
-                if 'cannot find package' in stderr or \
-                        'no required module' in stderr:
-                    print(
-                        "[GrayWolf] Missing Go modules. "
-                        "Try: go mod tidy in the repository."
-                    )
-                elif 'undefined:' in stderr:
-                    print(
-                        "[GrayWolf] Compilation error. "
-                        "The repository may need a newer "
-                        "version of Go."
-                    )
-                elif 'permission denied' in stderr.lower():
-                    print(
-                        "[GrayWolf] Permission denied. "
-                        f"Check GOPATH ({self.gopath}) and "
-                        f"GOCACHE ({self.gocache}) are "
-                        "writable."
-                    )
+                # Provide targeted guidance based on error
+                if stderr:
+                    if 'cannot find package' in stderr or \
+                            'no required module' in stderr:
+                        print(
+                            "[GrayWolf] HINT: Missing Go modules. "
+                            "Check network and try again."
+                        )
+                    elif 'undefined:' in stderr:
+                        print(
+                            "[GrayWolf] HINT: Compilation error. "
+                            "The repository may require a newer "
+                            "version of Go."
+                        )
+                    elif 'permission denied' in stderr.lower():
+                        print(
+                            "[GrayWolf] HINT: Permission denied. "
+                            f"GOPATH={self.gopath} and "
+                            f"GOCACHE={self.gocache} must be "
+                            "writable by the hamradio user."
+                        )
+                    elif 'invalid go version' in stderr:
+                        # Extract required version from error message
+                        ver_match = re.search(
+                            r"invalid go version '([\d.]+)'",
+                            stderr
+                        )
+                        if ver_match:
+                            needed = ver_match.group(1)
+                            print(
+                                f"[GrayWolf] HINT: Update Dockerfile:"
+                            )
+                            print(
+                                f"[GrayWolf]   ARG GO_VERSION="
+                                f"{needed}"
+                            )
+                            print(
+                                f"[GrayWolf]   docker compose build "
+                                f"--no-cache"
+                            )
 
                 return False
 
-            if stdout:
-                # Verbose build output (list of compiled packages)
+            # Log what was compiled
+            if stdout and stdout.strip():
+                pkg_count = len(stdout.strip().splitlines())
                 print(
-                    f"[GrayWolf] Build output: "
-                    f"{len(stdout.splitlines())} packages compiled"
+                    f"[GrayWolf] ✓ Build successful: "
+                    f"{pkg_count} package(s) compiled"
                 )
+            else:
+                print("[GrayWolf] ✓ Build successful")
 
             # -------------------------------------------------------
-            # Step 5: Install binary to INSTALL_DIR
+            # Step 6: Verify binary was created
+            # -------------------------------------------------------
+            if not os.path.isfile(build_output_path):
+                print(
+                    f"[GrayWolf] ERROR: Binary not found "
+                    f"after build at {build_output_path}"
+                )
+                print("[GrayWolf] Build directory contents:")
+                for item in os.listdir(go_mod_dir):
+                    print(f"  {item}")
+                return False
+
+            binary_size = os.path.getsize(build_output_path)
+            print(
+                f"[GrayWolf] Binary size: "
+                f"{binary_size / 1024:.1f} KB"
+            )
+
+            # -------------------------------------------------------
+            # Step 7: Install binary to INSTALL_DIR
             # -------------------------------------------------------
             os.makedirs(self.INSTALL_DIR, exist_ok=True)
-
-            if not os.path.exists(build_output_path):
-                print(
-                    f"[GrayWolf] ERROR: Built binary not found "
-                    f"at {build_output_path}"
-                )
-                return False
 
             shutil.copy2(
                 build_output_path,
@@ -484,38 +998,79 @@ class GrayWolfInstaller(BaseInstaller):
                 f"{self.graywolf_binary_path}"
             )
 
-            # Verify the binary runs
-            ok, stdout, stderr = self._run_go_command(
-                [self.graywolf_binary_path, '--version'],
-                timeout=10
-            )
-            if ok or stdout or stderr:
+            # -------------------------------------------------------
+            # Step 8: Verify the installed binary executes
+            # -------------------------------------------------------
+            print("[GrayWolf] Verifying installed binary...")
+            for flag in ['--version', '-version', '-h']:
+                try:
+                    result = subprocess.run(
+                        [self.graywolf_binary_path, flag],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        env=self._get_go_env()
+                    )
+                    output = (
+                        result.stdout + result.stderr
+                    ).strip()
+                    if output:
+                        print(
+                            f"[GrayWolf] ✓ Binary response: "
+                            f"{output.splitlines()[0][:80]}"
+                        )
+                        break
+                except Exception:
+                    continue
+            else:
+                # Binary runs but produces no output — still ok
                 print(
-                    f"[GrayWolf] ✓ Binary verified: "
-                    f"{(stdout or stderr or 'ok').strip()[:50]}"
+                    "[GrayWolf] ✓ Binary installed "
+                    "(no version output)"
                 )
 
             return True
 
         except Exception as e:
-            print(f"[GrayWolf] Build exception: {e}")
+            print(
+                f"[GrayWolf] Unexpected error during build: "
+                f"{e}"
+            )
             traceback.print_exc()
             return False
 
         finally:
-            # Always clean up build directory
+            # Always remove build directory regardless of outcome
             if os.path.exists(build_dir):
                 shutil.rmtree(build_dir, ignore_errors=True)
                 print("[GrayWolf] Build directory cleaned up")
 
     def write_install_marker(self, method, version=None):
         """
-        Write installation marker.
+        Write installation marker with GrayWolf metadata.
+
+        Calls BaseInstaller.write_marker() with the
+        extra_data keyword argument.
 
         Args:
-            method: Installation method used
-            version: Binary version string if available
+            method: Installation method ('source', 'existing')
+            version: GrayWolf version string if available
         """
+        # Get installed Go version for the marker
+        go_version = None
+        try:
+            result = subprocess.run(
+                ['go', 'version'],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                env=self._get_go_env()
+            )
+            if result.returncode == 0:
+                go_version = result.stdout.strip()
+        except Exception:
+            pass
+
         self.write_marker(
             self.INSTALL_MARKER,
             extra_data={
@@ -523,77 +1078,60 @@ class GrayWolfInstaller(BaseInstaller):
                 'version': version,
                 'binary_path': self.graywolf_binary_path,
                 'platform': platform.platform(),
-                'go_version': (
-                    shutil.which('go') and
-                    subprocess.run(
-                        ['go', 'version'],
-                        capture_output=True,
-                        text=True
-                    ).stdout.strip()
-                )
+                'arch': platform.machine(),
+                'go_version': go_version,
             }
         )
 
-    def get_install_info(self):
-        """Read installation marker."""
-        return self.read_marker(self.INSTALL_MARKER)
-
-    def get_version(self):
-        """
-        Get GrayWolf binary version.
-
-        Returns:
-            str: Version string or None
-        """
-        binary = (
-            shutil.which(self.GRAYWOLF_BINARY) or
-            self.graywolf_binary_path
-        )
-        if not binary or not os.path.exists(binary):
-            return None
-
-        try:
-            for flag in ['--version', '-v', 'version']:
-                result = subprocess.run(
-                    [binary, flag],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                output = (
-                    result.stdout + result.stderr
-                ).strip()
-                if output:
-                    return output[:50]
-        except Exception:
-            pass
-
-        return 'installed'
+    # ----------------------------------------------------------
+    # Main entry point
+    # ----------------------------------------------------------
 
     def run(self):
         """
-        Execute the complete installation process.
+        Execute the complete first-run installation process.
 
-        Steps:
-            1. Check if already installed
-            2. Verify Go toolchain is available
-            3. Install Python packages
-            4. Clone and build GrayWolf
-            5. Write installation marker
+        This is the primary public method called by the
+        GrayWolfPlugin's initialize() method on first run.
+
+        Installation steps:
+            1. Check if already installed (skip if so)
+            2. Check if binary already in PATH (mark + skip)
+            3. Verify Go toolchain is available
+            4. Install Python packages
+            5. Verify git is available
+            6. Clone and build GrayWolf
+            7. Write installation marker
+
+        Error behaviour:
+            If any critical step fails, the method returns
+            False. The plugin UI still loads but shows an
+            install button. Full error details are printed
+            to Docker logs.
 
         Returns:
-            bool: True if successful or already installed
+            bool: True if installed successfully or
+                  already installed. False if build failed.
         """
-        # Already installed
+        # -------------------------------------------------------
+        # Already installed — nothing to do
+        # -------------------------------------------------------
         if self.is_installed():
             print("[GrayWolf] ✓ Already installed")
             return True
 
-        # Binary in PATH but no marker
-        existing = shutil.which(self.GRAYWOLF_BINARY)
-        if existing:
-            print(f"[GrayWolf] ✓ Found in PATH: {existing}")
-            self.write_install_marker('existing')
+        # -------------------------------------------------------
+        # Binary in PATH but no marker file
+        # Write the marker and continue
+        # -------------------------------------------------------
+        existing_binary = shutil.which(self.GRAYWOLF_BINARY)
+        if existing_binary:
+            print(
+                f"[GrayWolf] ✓ Found existing binary: "
+                f"{existing_binary}"
+            )
+            version = self.get_version()
+            self.write_install_marker('existing', version)
             return True
 
         print("[GrayWolf] ================================")
@@ -604,6 +1142,7 @@ class GrayWolfInstaller(BaseInstaller):
         # Step 1: Check Go toolchain
         # -------------------------------------------------------
         print("\n[GrayWolf] Step 1: Checking Go toolchain...")
+
         go_available, go_info = self._check_go_available()
 
         if not go_available:
@@ -611,51 +1150,67 @@ class GrayWolfInstaller(BaseInstaller):
                 f"[GrayWolf] ERROR: Go not available: {go_info}"
             )
             print(
-                "[GrayWolf] Go is installed in the Dockerfile."
+                "[GrayWolf] Go is installed from go.dev in "
+                "the Dockerfile."
             )
             print(
-                "[GrayWolf] Rebuild the Docker image: "
-                "docker compose build --no-cache"
+                "[GrayWolf] Check the Dockerfile has: "
+                "ARG GO_VERSION=<version>"
+            )
+            print(
+                "[GrayWolf] And the install RUN block using "
+                "wget from go.dev/dl/"
+            )
+            print(
+                "[GrayWolf] Rebuild: docker compose build "
+                "--no-cache"
             )
             return False
 
         print(f"[GrayWolf] ✓ Go available: {go_info}")
 
         # -------------------------------------------------------
-        # Step 2: Python packages
+        # Step 2: Python packages (non-fatal)
         # -------------------------------------------------------
         print("\n[GrayWolf] Step 2: Python packages...")
         self.install_python_packages()
-        # Non-fatal
+        # Non-fatal — plugin can run without all packages
 
         # -------------------------------------------------------
-        # Step 3: Check git
+        # Step 3: Verify git
         # -------------------------------------------------------
         print("\n[GrayWolf] Step 3: Checking git...")
         if not shutil.which('git'):
             print(
-                "[GrayWolf] ERROR: git is required but "
-                "not found. Add to Dockerfile: "
+                "[GrayWolf] ERROR: git not found in PATH"
+            )
+            print(
+                "[GrayWolf] Add to Dockerfile: "
                 "apt-get install -y git"
             )
             return False
+
         print("[GrayWolf] ✓ git available")
 
         # -------------------------------------------------------
         # Step 4: Clone and build
         # -------------------------------------------------------
         print("\n[GrayWolf] Step 4: Building GrayWolf...")
+
         success = self.clone_and_build()
 
         if not success:
-            print("[GrayWolf] ERROR: Build failed")
             print(
-                "[GrayWolf] Check the error messages above"
+                "\n[GrayWolf] ERROR: Build failed"
+            )
+            print(
+                "[GrayWolf] See error messages above "
+                "for the specific failure reason."
             )
             return False
 
         # -------------------------------------------------------
-        # Step 5: Write marker
+        # Step 5: Write installation marker
         # -------------------------------------------------------
         version = self.get_version()
         self.write_install_marker('source', version)
@@ -663,7 +1218,11 @@ class GrayWolfInstaller(BaseInstaller):
         print("\n[GrayWolf] ================================")
         print("[GrayWolf] ✓ Installation complete!")
         if version:
-            print(f"[GrayWolf]   Version: {version}")
+            print(f"[GrayWolf]   Version : {version}")
+        print(
+            f"[GrayWolf]   Binary  : "
+            f"{self.graywolf_binary_path}"
+        )
         print("[GrayWolf] ================================\n")
 
         return True
