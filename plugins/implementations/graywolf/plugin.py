@@ -200,21 +200,59 @@ class GrayWolfPlugin(BasePlugin):
             """
             GrayWolf main dashboard page.
 
-            Displays status, recent messages, and controls.
+            Shows process status, web UI link, activity
+            log, and basic controls. Message management
+            is delegated to the GrayWolf web UI.
             """
-            status = self.manager.get_status() if self.manager else {}
-            logs = self.manager.get_logs(50) if self.manager else []
-            messages = self.manager.get_messages() if self.manager else []
+            # Get status safely
+            status = (
+                self.manager.get_status()
+                if self.manager else {}
+            )
+
+            # Get log entries
+            logs = (
+                self.manager.get_logs(50)
+                if self.manager else []
+            )
+
+            # get_messages() now returns [] safely
+            messages = (
+                self.manager.get_messages()
+                if self.manager else []
+            )
+
+            # Get message counts safely
+            counts = (
+                self.manager.get_message_counts()
+                if self.manager else {
+                    'inbox': 0,
+                    'outbox': 0,
+                    'sent': 0
+                }
+            )
+
+            # Web UI URL for GrayWolf's own interface
+            ui_url = (
+                self.manager.get_web_ui_url()
+                if self.manager
+                else 'http://localhost:8080'
+            )
 
             return render_template(
                 'graywolf/index.html',
                 plugin=self,
                 status=status,
                 logs=logs,
-                messages=messages[:10],  # Show last 10 messages
+                messages=messages,
+                counts=counts,
+                ui_url=ui_url,
                 install_complete=self.install_complete,
                 install_error=self.install_error,
-                config=self.manager.config if self.manager else {}
+                config=(
+                    self.manager.config
+                    if self.manager else {}
+                )
             )
 
         # ============================================================
