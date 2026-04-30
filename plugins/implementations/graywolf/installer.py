@@ -853,24 +853,489 @@ class GrayWolfInstaller(BaseInstaller):
         except Exception:
             pass
 
-    def clone_and_build(self):
+    def _build_with_make(self, repo_dir):
         """
-        Clone GrayWolf from GitHub and build the binary.
+        Build GrayWolf using 'make release'.
 
-        Complete build pipeline:
-            1. Create clean build directory
-            2. Clone repository (shallow)
-            3. Locate go.mod in cloned repo
-            4. Verify Go version compatibility
-            5. Find main package directory
-               (may differ from go.mod location)
-            6. Download Go module dependencies
-            7. Compile binary with 'go build'
-            8. Copy binary to INSTALL_DIR
-            9. Verify installed binary executes
+        The GrayWolf repository uses a Makefile to build
+        both required binaries:
+            - graywolf        (main server binary)
+            - graywolf-modem  (radio modem companion binary)
+
+        Both must be present for GrayWolf to start.
+        Running 'make release' builds both in one step.
+
+        The Makefile requires:
+            - Go (already verified before this is called)
+            - Rust / cargo (for graywolf-modem)
+
+        If Rust is not available, falls back to building
+        just graywolf with 'go build' and attempts to
+        download a pre-built graywolf-modem binary.
+
+        Args:
+            repo_dir: Root directory of the cloned repo
 
         Returns:
-            bool: True if build and install successful
+            tuple: (success: bool, error_message: str)
+        """
+        # -------------------------------------------------------
+        # Try 'make release' first — builds both binaries
+        # -------------------------------------------------------
+        if shutil.which('make'):
+            print(
+                "[GrayWolf] Attempting 'make release'..."
+            )
+
+            # Check if Rust/cargo is available
+            cargo_available = (
+                shutil.which('cargo') is not None
+            )
+
+            if not cargo_available:
+                print(
+                    "[GrayWolf] WARNING: cargo (Rust) not "
+                    "found. 'make release' may fail."
+                )
+                print(
+                    "[GrayWolf] Will attempt to install "
+                    "Rust..."
+                )
+                rust_installed = self._install_rust()
+                cargo_available = rust_installed
+
+            if cargo_available:
+                ok, stdout, stderr = self._run_go_command(
+                    ['make', 'release'],
+                    cwd=repo_dir,
+                    timeout=600  # 10 min - Rust builds slowly
+                )
+
+                if ok:
+                    print(
+                        "[GrayWolf] ✓ 'make release' "
+                        "succeeded"
+                    )
+                    return True, ""
+                else:
+                    print(
+                        f"[GrayWolf] 'make release' failed: "
+                        f"{stderr[:300]}"
+                    )
+            else:
+                print(
+                    "[GrayWolf] Skipping 'make release' "
+                    "— cargo not available"
+                )
+
+        # -------------------------------------------------------
+        # Fallback: Build graywolf with go build and
+        # try to get graywolf-modem separately
+        # -------------------------------------------------------
+        print(
+            "[GrayWolf] Falling back to 'go build'..."
+        )
+
+        # Find and build the main graywolf binary
+        main_pkg_dir = self._find_main_package_dir(repo_dir)
+
+        build_output = os.path.join(
+            repo_dir, self.GRAYWOLF_BINARY
+        )
+
+        if main_pkg_dir == repo_dir:
+            build_target = '.'
+        else:
+            rel = os.path.relpath(main_pkg_dir, repo_dir)
+            build_target = f'./{rel}'
+
+        ok, stdout, stderr = self._run_go_command(
+            ['go', 'build', '-v',
+             '-o', build_output, build_target],
+            cwd=repo_dir,
+            timeout=300
+        )
+
+        if not ok:
+            return False, (
+                f"go build failed: {stderr[:300]}"
+            )
+
+        print("[GrayWolf] ✓ graywolf binary built")
+
+        # Try to build graywolf-modem if a modem subdir exists
+        modem_dir = os.path.join(repo_dir, 'graywolf-modem')
+        if not os.path.exists(modem_dir):
+            # Check for cmd/modem or similar locations
+            for candidate in [
+                os.path.join(repo_dir, 'modem'),
+                os.path.join(repo_dir, 'cmd', 'modem'),
+                os.path.join(repo_dir, 'cmd',
+                             'graywolf-modem'),
+            ]:
+                if os.path.exists(candidate):
+                    modem_dir = candidate
+                    break
+
+        # Return success for graywolf even if modem build
+        # fails — we will handle modem separately
+        return True, ""
+
+    def _install_rust(self):
+        """
+        Install Rust toolchain via rustup.
+
+        GrayWolf's modem component (graywolf-modem) is
+        written in Rust and requires cargo to build.
+
+        Uses the official rustup installer which works
+        on all Linux distributions.
+
+        Returns:
+            bool: True if Rust was installed successfully
+        """
+        print("[GrayWolf] Installing Rust via rustup...")
+
+        try:
+            env = self._get_go_env()
+            env['CARGO_HOME'] = os.path.expanduser(
+                '~/.cargo'
+            )
+            env['RUSTUP_HOME'] = os.path.expanduser(
+                '~/.rustup'
+            )
+
+            # Download and run rustup installer
+            result = subprocess.run(
+                [
+                    'sh', '-c',
+                    'curl --proto "=https" --tlsv1.2 '
+                    '-sSf https://sh.rustup.rs | '
+                    'sh -s -- -y --no-modify-path'
+                ],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                env=env
+            )
+
+            if result.returncode == 0:
+                # Add cargo to PATH for subsequent commands
+                cargo_bin = os.path.expanduser('~/.cargo/bin')
+                env['PATH'] = (
+                    f"{cargo_bin}:{env.get('PATH', '')}"
+                )
+                os.environ['PATH'] = (
+                    f"{cargo_bin}:{os.environ.get('PATH', '')}"
+                )
+
+                print("[GrayWolf] ✓ Rust installed")
+                return True
+            else:
+                print(
+                    f"[GrayWolf] Rust install failed: "
+                    f"{result.stderr[:200]}"
+                )
+                return False
+
+        except Exception as e:
+            print(f"[GrayWolf] Rust install error: {e}")
+            return False
+
+    def _build_graywolf_modem(self, repo_dir):
+        """
+        Build the graywolf-modem companion binary.
+
+        graywolf-modem is a Rust binary required by the
+        main GrayWolf server. Without it, GrayWolf exits
+        immediately with:
+            'graywolf-modem binary not found'
+
+        Build methods tried in order:
+            1. cargo build --release in graywolf-modem/
+            2. cargo build --release in repo root
+            3. Download pre-built binary from GitHub releases
+
+        Args:
+            repo_dir: GrayWolf repository root directory
+
+        Returns:
+            tuple: (success: bool, binary_path_or_error: str)
+        """
+        modem_binary_name = 'graywolf-modem'
+        modem_output_path = os.path.join(
+            self.INSTALL_DIR, modem_binary_name
+        )
+
+        # -------------------------------------------------------
+        # Try building from source with cargo
+        # -------------------------------------------------------
+        cargo = (
+            shutil.which('cargo') or
+            os.path.expanduser('~/.cargo/bin/cargo')
+        )
+
+        if cargo and os.path.exists(cargo):
+            print(
+                "[GrayWolf] Building graywolf-modem "
+                "with cargo..."
+            )
+
+            # Find the Rust source directory
+            modem_src_dir = None
+            for candidate in [
+                os.path.join(repo_dir, 'graywolf-modem'),
+                os.path.join(repo_dir, 'modem'),
+                repo_dir,  # Sometimes in root
+            ]:
+                cargo_toml = os.path.join(
+                    candidate, 'Cargo.toml'
+                )
+                if os.path.exists(cargo_toml):
+                    modem_src_dir = candidate
+                    print(
+                        f"[GrayWolf] Cargo.toml found: "
+                        f"{candidate}"
+                    )
+                    break
+
+            if modem_src_dir:
+                env = self._get_go_env()
+                cargo_home = os.path.expanduser('~/.cargo')
+                env['CARGO_HOME'] = cargo_home
+                env['PATH'] = (
+                    f"{cargo_home}/bin:"
+                    f"{env.get('PATH', '')}"
+                )
+
+                try:
+                    result = subprocess.run(
+                        [cargo, 'build', '--release'],
+                        cwd=modem_src_dir,
+                        capture_output=True,
+                        text=True,
+                        timeout=600,
+                        env=env
+                    )
+
+                    if result.returncode == 0:
+                        # Find the built binary
+                        release_binary = os.path.join(
+                            modem_src_dir,
+                            'target', 'release',
+                            modem_binary_name
+                        )
+
+                        if os.path.exists(release_binary):
+                            shutil.copy2(
+                                release_binary,
+                                modem_output_path
+                            )
+                            os.chmod(modem_output_path, 0o755)
+                            print(
+                                f"[GrayWolf] ✓ "
+                                f"graywolf-modem built: "
+                                f"{modem_output_path}"
+                            )
+                            return True, modem_output_path
+                        else:
+                            print(
+                                "[GrayWolf] cargo succeeded "
+                                "but binary not found at "
+                                f"{release_binary}"
+                            )
+                    else:
+                        print(
+                            f"[GrayWolf] cargo build failed: "
+                            f"{result.stderr[:300]}"
+                        )
+
+                except subprocess.TimeoutExpired:
+                    print(
+                        "[GrayWolf] cargo build timed out"
+                    )
+                except Exception as e:
+                    print(
+                        f"[GrayWolf] cargo build error: {e}"
+                    )
+
+        # -------------------------------------------------------
+        # Fallback: Download pre-built binary from GitHub
+        # -------------------------------------------------------
+        print(
+            "[GrayWolf] Attempting to download "
+            "pre-built graywolf-modem..."
+        )
+
+        downloaded = self._download_graywolf_modem(
+            modem_output_path
+        )
+        if downloaded:
+            return True, modem_output_path
+
+        return False, (
+            "Could not build or download graywolf-modem. "
+            "Install Rust and retry: "
+            "curl --proto '=https' --tlsv1.2 "
+            "-sSf https://sh.rustup.rs | sh"
+        )
+
+    def _download_graywolf_modem(self, dest_path):
+        """
+        Download a pre-built graywolf-modem binary from
+        the GitHub releases page.
+
+        Args:
+            dest_path: Destination path for the binary
+
+        Returns:
+            bool: True if downloaded successfully
+        """
+        import urllib.request
+
+        # GitHub API URL for latest release
+        api_url = (
+            'https://api.github.com/repos/'
+            'chrissnell/graywolf/releases/latest'
+        )
+
+        try:
+            print(
+                "[GrayWolf] Fetching GitHub release info..."
+            )
+
+            req = urllib.request.Request(
+                api_url,
+                headers={'User-Agent': 'HamRadioApp/1.0'}
+            )
+
+            with urllib.request.urlopen(
+                req, timeout=30
+            ) as response:
+                import json as json_mod
+                release_data = json_mod.loads(
+                    response.read().decode()
+                )
+
+            # Find the graywolf-modem asset for Linux amd64
+            arch = platform.machine().lower()
+            # Normalise architecture name
+            if arch == 'x86_64':
+                arch_str = 'amd64'
+            elif arch in ('aarch64', 'arm64'):
+                arch_str = 'arm64'
+            else:
+                arch_str = arch
+
+            download_url = None
+            asset_name = None
+
+            for asset in release_data.get('assets', []):
+                name = asset['name'].lower()
+                if ('graywolf-modem' in name and
+                        'linux' in name and
+                        arch_str in name):
+                    download_url = asset[
+                        'browser_download_url'
+                    ]
+                    asset_name = asset['name']
+                    break
+
+            if not download_url:
+                print(
+                    f"[GrayWolf] No graywolf-modem asset "
+                    f"found for linux/{arch_str} in release "
+                    f"{release_data.get('tag_name', '?')}"
+                )
+                print(
+                    "[GrayWolf] Available assets:"
+                )
+                for asset in release_data.get('assets', []):
+                    print(f"  {asset['name']}")
+                return False
+
+            print(
+                f"[GrayWolf] Downloading {asset_name}..."
+            )
+
+            tmp_path = dest_path + '.tmp'
+            urllib.request.urlretrieve(
+                download_url, tmp_path
+            )
+
+            # Handle compressed archives
+            if asset_name.endswith('.tar.gz'):
+                import tarfile
+                with tarfile.open(tmp_path) as tar:
+                    for member in tar.getmembers():
+                        if 'graywolf-modem' in member.name \
+                                and member.isfile():
+                            extracted = tar.extractfile(
+                                member
+                            )
+                            if extracted:
+                                with open(
+                                    dest_path, 'wb'
+                                ) as f:
+                                    f.write(extracted.read())
+                            break
+                os.remove(tmp_path)
+            elif asset_name.endswith('.zip'):
+                import zipfile
+                with zipfile.ZipFile(tmp_path) as zf:
+                    for name in zf.namelist():
+                        if 'graywolf-modem' in name.lower():
+                            with zf.open(name) as src, \
+                                    open(dest_path, 'wb') as dst:
+                                dst.write(src.read())
+                            break
+                os.remove(tmp_path)
+            else:
+                # Plain binary
+                shutil.move(tmp_path, dest_path)
+
+            os.chmod(dest_path, 0o755)
+            print(
+                f"[GrayWolf] ✓ graywolf-modem downloaded: "
+                f"{dest_path}"
+            )
+            return True
+
+        except Exception as e:
+            print(
+                f"[GrayWolf] Download failed: {e}"
+            )
+            # Clean up temp file
+            tmp = dest_path + '.tmp'
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            return False
+
+    def clone_and_build(self):
+        """
+        Clone GrayWolf from GitHub and build both binaries.
+
+        GrayWolf requires TWO binaries to operate:
+            1. graywolf        - Main server (Go)
+            2. graywolf-modem  - Radio modem (Rust)
+
+        Both must be in the same directory or on PATH.
+        Without graywolf-modem, GrayWolf exits with:
+            'graywolf-modem binary not found'
+
+        Build strategy:
+            1. Clone repository
+            2. Verify Go version compatibility
+            3. Try 'make release' (builds both in one step)
+               - Requires both Go and Rust/cargo
+               - If Rust missing, attempt rustup install
+            4. If make fails, build graywolf with go build
+               and graywolf-modem separately
+            5. Install both binaries to ~/.local/bin/
+            6. Verify both binaries are executable
+
+        Returns:
+            bool: True only if BOTH binaries are installed
         """
         build_dir = os.path.join(
             os.path.expanduser('~'),
@@ -883,11 +1348,13 @@ class GrayWolfInstaller(BaseInstaller):
             # -------------------------------------------------------
             if os.path.exists(build_dir):
                 print(
-                    "[GrayWolf] Removing previous build dir..."
+                    "[GrayWolf] Removing previous build..."
                 )
                 shutil.rmtree(build_dir, ignore_errors=True)
 
             os.makedirs(build_dir, exist_ok=True)
+            os.makedirs(self.INSTALL_DIR, exist_ok=True)
+
             print(
                 f"[GrayWolf] Build directory: {build_dir}"
             )
@@ -908,15 +1375,20 @@ class GrayWolfInstaller(BaseInstaller):
 
             if not ok:
                 print(
-                    f"[GrayWolf] ERROR: Clone failed: "
-                    f"{stderr}"
+                    f"[GrayWolf] Clone failed: {stderr}"
                 )
                 return False
 
             print("[GrayWolf] ✓ Repository cloned")
 
+            # Log repository structure for diagnostics
+            print("[GrayWolf] Repository contents:")
+            self._log_directory_tree(
+                build_dir, max_depth=2
+            )
+
             # -------------------------------------------------------
-            # Step 2: Find go.mod (defines module root)
+            # Step 2: Find go.mod
             # -------------------------------------------------------
             go_mod_dir = None
             for root, dirs, files in os.walk(build_dir):
@@ -932,21 +1404,19 @@ class GrayWolfInstaller(BaseInstaller):
                     break
 
             if not go_mod_dir:
-                print(
-                    "[GrayWolf] ERROR: go.mod not found"
-                )
-                self._log_directory_tree(build_dir)
+                print("[GrayWolf] ERROR: go.mod not found")
                 return False
 
-            # Print go.mod for diagnostics
-            go_mod_path = os.path.join(go_mod_dir, 'go.mod')
+            # Print go.mod content
+            go_mod_path = os.path.join(
+                go_mod_dir, 'go.mod'
+            )
             try:
                 with open(go_mod_path, 'r') as f:
-                    go_mod_content = f.read()
-                print(
-                    f"[GrayWolf] go.mod content:\n"
-                    f"{go_mod_content[:400]}"
-                )
+                    print(
+                        f"[GrayWolf] go.mod:\n"
+                        f"{f.read()[:400]}"
+                    )
             except Exception:
                 pass
 
@@ -954,262 +1424,248 @@ class GrayWolfInstaller(BaseInstaller):
             # Step 3: Check Go version compatibility
             # -------------------------------------------------------
             print(
-                "[GrayWolf] Checking Go version "
-                "compatibility..."
+                "[GrayWolf] Checking Go version..."
             )
-            compatible, installed_ver, required_ver = (
+            compatible, inst, req = (
                 self._check_go_version_compatible(go_mod_dir)
             )
 
             if not compatible:
                 print(
-                    f"[GrayWolf] ERROR: Cannot build with "
-                    f"Go {installed_ver} — need "
-                    f"Go {required_ver}"
+                    f"[GrayWolf] ERROR: Go {inst} < "
+                    f"required Go {req}"
                 )
                 return False
 
             # -------------------------------------------------------
-            # Step 4: Find the main package directory
-            #
-            # CRITICAL FIX: go.mod may be in the repo root
-            # but the .go source files (package main) may be
-            # in a subdirectory like cmd/graywolf/.
-            # 'go build .' fails with "no Go files" if run
-            # in a directory containing only go.mod.
-            # We must find the directory that has the .go files.
-            # -------------------------------------------------------
-            main_pkg_dir = self._find_main_package_dir(
-                go_mod_dir
-            )
-
-            print(
-                f"[GrayWolf] Build target directory: "
-                f"{main_pkg_dir}"
-            )
-
-            # -------------------------------------------------------
-            # Step 5: Download Go module dependencies
-            # Must run from the go.mod directory (module root)
+            # Step 4: Download Go dependencies
             # -------------------------------------------------------
             print(
                 "[GrayWolf] Downloading Go dependencies..."
             )
-            ok, stdout, stderr = self._run_go_command(
+            ok, _, stderr = self._run_go_command(
                 ['go', 'mod', 'download'],
-                cwd=go_mod_dir,    # Module root, not main pkg
+                cwd=go_mod_dir,
                 timeout=300
             )
-
             if not ok:
                 print(
-                    f"[GrayWolf] WARNING: go mod download: "
-                    f"{stderr[:300]}"
-                )
-            else:
-                print(
-                    "[GrayWolf] ✓ Go dependencies downloaded"
+                    f"[GrayWolf] WARNING: mod download: "
+                    f"{stderr[:200]}"
                 )
 
             # -------------------------------------------------------
-            # Step 6: Build the binary
-            #
-            # Build output path is in go_mod_dir so the
-            # binary is findable regardless of which subdir
-            # contains the main package.
+            # Step 5: Try 'make release' to build both binaries
             # -------------------------------------------------------
-            build_output_path = os.path.join(
+            print(
+                "\n[GrayWolf] Step 5: Building binaries..."
+            )
+            print(
+                "[GrayWolf] GrayWolf requires two binaries:"
+            )
+            print(
+                "[GrayWolf]   1. graywolf (Go)"
+            )
+            print(
+                "[GrayWolf]   2. graywolf-modem (Rust)"
+            )
+
+            make_success, make_error = (
+                self._build_with_make(go_mod_dir)
+            )
+
+            # -------------------------------------------------------
+            # Step 6: Install binaries from build output
+            # -------------------------------------------------------
+
+            # Find and install graywolf binary
+            graywolf_built = self._find_and_install_binary(
                 go_mod_dir,
-                self.GRAYWOLF_BINARY
-            )
-
-            # Calculate the build target path relative to
-            # the module root. This is what we pass to go build.
-            if main_pkg_dir == go_mod_dir:
-                # Main package is at module root
-                build_target = '.'
-            else:
-                # Main package is in a subdirectory.
-                # We need a path relative to go_mod_dir OR
-                # the module path (e.g. ./cmd/graywolf)
-                rel_path = os.path.relpath(
-                    main_pkg_dir, go_mod_dir
-                )
-                build_target = f'./{rel_path}'
-
-            print(
-                f"[GrayWolf] Building: go build "
-                f"-o {self.GRAYWOLF_BINARY} {build_target}"
-            )
-
-            ok, stdout, stderr = self._run_go_command(
-                [
-                    'go', 'build',
-                    '-v',
-                    '-o', build_output_path,
-                    build_target
-                ],
-                cwd=go_mod_dir,    # Always run from module root
-                timeout=300
-            )
-
-            if not ok:
-                print(
-                    "[GrayWolf] ERROR: go build failed"
-                )
-                print(
-                    "[GrayWolf] ---- FULL BUILD ERROR ----"
-                )
-                if stdout and stdout.strip():
-                    print(
-                        f"[GrayWolf] STDOUT:\n"
-                        f"{stdout.strip()}"
-                    )
-                if stderr and stderr.strip():
-                    print(
-                        f"[GrayWolf] STDERR:\n"
-                        f"{stderr.strip()}"
-                    )
-                print(
-                    "[GrayWolf] ---- END BUILD ERROR ----"
-                )
-
-                # Targeted guidance
-                if stderr:
-                    if 'no Go files' in stderr:
-                        print(
-                            "[GrayWolf] HINT: No .go files in "
-                            f"build target '{build_target}'. "
-                            "Repository structure:"
-                        )
-                        self._log_directory_tree(
-                            go_mod_dir,
-                            max_depth=4
-                        )
-                    elif 'invalid go version' in stderr:
-                        ver_match = re.search(
-                            r"invalid go version '([\d.]+)'",
-                            stderr
-                        )
-                        if ver_match:
-                            needed = ver_match.group(1)
-                            print(
-                                f"[GrayWolf] HINT: Update "
-                                f"Dockerfile: "
-                                f"ARG GO_VERSION={needed}"
-                            )
-                            print(
-                                "[GrayWolf] Then rebuild: "
-                                "docker compose build --no-cache"
-                            )
-                    elif 'permission denied' in stderr.lower():
-                        print(
-                            "[GrayWolf] HINT: Check GOPATH "
-                            f"({self.gopath}) and GOCACHE "
-                            f"({self.gocache}) are writable."
-                        )
-                return False
-
-            if stdout and stdout.strip():
-                pkg_count = len(stdout.strip().splitlines())
-                print(
-                    f"[GrayWolf] ✓ Build successful: "
-                    f"{pkg_count} package(s) compiled"
-                )
-            else:
-                print("[GrayWolf] ✓ Build successful")
-
-            # -------------------------------------------------------
-            # Step 7: Verify binary was created
-            # -------------------------------------------------------
-            if not os.path.isfile(build_output_path):
-                print(
-                    f"[GrayWolf] ERROR: Binary not found "
-                    f"after build at {build_output_path}"
-                )
-                print(
-                    "[GrayWolf] go_mod_dir contents:"
-                )
-                for item in os.listdir(go_mod_dir):
-                    print(f"  {item}")
-                return False
-
-            size_kb = os.path.getsize(
-                build_output_path
-            ) / 1024
-            print(
-                f"[GrayWolf] Binary size: {size_kb:.1f} KB"
-            )
-
-            # -------------------------------------------------------
-            # Step 8: Install binary to INSTALL_DIR
-            # -------------------------------------------------------
-            os.makedirs(self.INSTALL_DIR, exist_ok=True)
-
-            shutil.copy2(
-                build_output_path,
+                self.GRAYWOLF_BINARY,
                 self.graywolf_binary_path
             )
-            os.chmod(self.graywolf_binary_path, 0o755)
+
+            if not graywolf_built:
+                print(
+                    "[GrayWolf] ERROR: graywolf binary "
+                    "not found after build"
+                )
+                return False
 
             print(
-                f"[GrayWolf] ✓ Binary installed: "
+                f"[GrayWolf] ✓ graywolf installed: "
                 f"{self.graywolf_binary_path}"
             )
 
-            # -------------------------------------------------------
-            # Step 9: Verify installed binary executes
-            # -------------------------------------------------------
-            print("[GrayWolf] Verifying installed binary...")
-            verified = False
-            for flag in ['--version', '-version', '-h', '--help']:
-                try:
-                    result = subprocess.run(
-                        [self.graywolf_binary_path, flag],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                        env=self._get_go_env()
-                    )
-                    output = (
-                        result.stdout + result.stderr
-                    ).strip()
-                    if output:
-                        first_line = output.splitlines()[0]
-                        print(
-                            f"[GrayWolf] ✓ Binary response: "
-                            f"{first_line[:80]}"
-                        )
-                        verified = True
-                        break
-                except Exception:
-                    continue
+            # Find and install graywolf-modem binary
+            modem_install_path = os.path.join(
+                self.INSTALL_DIR, 'graywolf-modem'
+            )
 
-            if not verified:
-                # Binary runs but gives no output — still ok
-                # as long as the file exists and is executable
+            modem_built = self._find_and_install_binary(
+                go_mod_dir,
+                'graywolf-modem',
+                modem_install_path
+            )
+
+            if not modem_built:
+                # graywolf-modem not found in build output
+                # Try building it separately
                 print(
-                    "[GrayWolf] ✓ Binary installed "
-                    "(no version output)"
+                    "[GrayWolf] graywolf-modem not found "
+                    "in build output."
                 )
+                print(
+                    "[GrayWolf] Attempting separate "
+                    "graywolf-modem build..."
+                )
+
+                modem_success, modem_result = (
+                    self._build_graywolf_modem(go_mod_dir)
+                )
+
+                if not modem_success:
+                    print(
+                        f"[GrayWolf] ERROR: Could not "
+                        f"build graywolf-modem: "
+                        f"{modem_result}"
+                    )
+                    print(
+                        "[GrayWolf] GrayWolf requires "
+                        "graywolf-modem to run."
+                    )
+                    print(
+                        "[GrayWolf] Install Rust on the "
+                        "Docker image:"
+                    )
+                    print(
+                        "[GrayWolf]   In Dockerfile add:"
+                    )
+                    print(
+                        "[GrayWolf]   RUN curl "
+                        "--proto '=https' --tlsv1.2 "
+                        "-sSf https://sh.rustup.rs | "
+                        "sh -s -- -y"
+                    )
+                    print(
+                        "[GrayWolf]   ENV PATH="
+                        '"/root/.cargo/bin:$PATH"'
+                    )
+                    return False
+
+            # Verify both binaries are installed
+            modem_path = os.path.join(
+                self.INSTALL_DIR, 'graywolf-modem'
+            )
+
+            graywolf_ok = (
+                os.path.isfile(self.graywolf_binary_path)
+                and os.access(
+                    self.graywolf_binary_path, os.X_OK
+                )
+            )
+            modem_ok = (
+                os.path.isfile(modem_path) and
+                os.access(modem_path, os.X_OK)
+            )
+
+            if not graywolf_ok:
+                print(
+                    "[GrayWolf] ERROR: graywolf binary "
+                    "not executable"
+                )
+                return False
+
+            if not modem_ok:
+                print(
+                    "[GrayWolf] ERROR: graywolf-modem "
+                    "binary not executable"
+                )
+                return False
+
+            # Both binaries installed
+            gw_size = os.path.getsize(
+                self.graywolf_binary_path
+            ) / 1024
+            modem_size = os.path.getsize(modem_path) / 1024
+
+            print(
+                f"[GrayWolf] ✓ graywolf: "
+                f"{gw_size:.0f} KB"
+            )
+            print(
+                f"[GrayWolf] ✓ graywolf-modem: "
+                f"{modem_size:.0f} KB"
+            )
 
             return True
 
         except Exception as e:
             print(
-                f"[GrayWolf] Unexpected error during "
-                f"build: {e}"
+                f"[GrayWolf] Unexpected build error: {e}"
             )
             traceback.print_exc()
             return False
 
         finally:
-            # Always remove build directory
             if os.path.exists(build_dir):
                 shutil.rmtree(build_dir, ignore_errors=True)
                 print(
                     "[GrayWolf] Build directory cleaned up"
                 )
+
+    def _find_and_install_binary(self, search_root,
+                                  binary_name, dest_path):
+        """
+        Search for a built binary and install it.
+
+        Searches common build output locations:
+            - repo root
+            - target/release/
+            - build/
+            - cmd/<name>/
+
+        Args:
+            search_root: Repository root to search
+            binary_name: Binary filename to find
+            dest_path: Destination installation path
+
+        Returns:
+            bool: True if found and installed
+        """
+        # Common locations to check
+        candidates = [
+            os.path.join(search_root, binary_name),
+            os.path.join(search_root, 'target',
+                         'release', binary_name),
+            os.path.join(search_root, 'build',
+                         binary_name),
+            os.path.join(search_root, 'bin', binary_name),
+        ]
+
+        # Also do a recursive search
+        for root, dirs, files in os.walk(search_root):
+            dirs[:] = [
+                d for d in dirs
+                if d not in ('.git', 'vendor')
+            ]
+            if binary_name in files:
+                candidate = os.path.join(root, binary_name)
+                if os.access(candidate, os.X_OK):
+                    candidates.insert(0, candidate)
+
+        for candidate in candidates:
+            if os.path.isfile(candidate) and \
+                    os.access(candidate, os.X_OK):
+                print(
+                    f"[GrayWolf] Found {binary_name}: "
+                    f"{candidate}"
+                )
+                shutil.copy2(candidate, dest_path)
+                os.chmod(dest_path, 0o755)
+                return True
+
+        return False
 
     def write_install_marker(self, method, version=None):
         """
