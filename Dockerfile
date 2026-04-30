@@ -258,7 +258,38 @@ COPY --chown=hamradio:hamradio static ./static/
 # -------------------------------------------------------
 RUN mkdir -p /app/plugins/implementations && \
     chown -R hamradio:hamradio /app/plugins
+# -------------------------------------------------------
+# Install Rust toolchain for building graywolf-modem.
+# graywolf-modem is a Rust binary required by GrayWolf.
+# Must be installed as root and made available to
+# the hamradio user via PATH.
+# -------------------------------------------------------
+RUN curl --proto '=https' --tlsv1.2 \
+        -sSf https://sh.rustup.rs \
+        | sh -s -- -y --no-modify-path \
+        --default-toolchain stable 2>&1 && \
+    echo "✓ Rust installed" && \
+    /root/.cargo/bin/rustup --version && \
+    /root/.cargo/bin/cargo --version
 
+# Make Rust available system-wide so the hamradio user
+# can use cargo during GrayWolf installation
+RUN cp -r /root/.cargo /home/hamradio/.cargo 2>/dev/null || \
+    true && \
+    cp -r /root/.rustup /home/hamradio/.rustup 2>/dev/null \
+    || true && \
+    chown -R hamradio:hamradio \
+        /home/hamradio/.cargo \
+        /home/hamradio/.rustup 2>/dev/null || true
+
+ENV CARGO_HOME=/home/hamradio/.cargo \
+    RUSTUP_HOME=/home/hamradio/.rustup
+ENV GOPATH=/home/hamradio/go \
+    GOCACHE=/home/hamradio/.cache/go-build \
+    GOMODCACHE=/home/hamradio/go/pkg/mod \
+    CARGO_HOME=/home/hamradio/.cargo \
+    RUSTUP_HOME=/home/hamradio/.rustup \
+    PATH="/home/hamradio/.cargo/bin:/home/hamradio/.local/bin:/home/hamradio/go/bin:/usr/local/go/bin:/opt/venv/bin:$PATH"
 # -------------------------------------------------------
 # Switch to non-root user
 # ALL subsequent RUN, COPY, CMD, ENTRYPOINT run as hamradio
