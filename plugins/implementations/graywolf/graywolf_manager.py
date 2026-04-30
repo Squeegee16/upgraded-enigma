@@ -240,35 +240,55 @@ class GrayWolfManager:
         """
         Build the GrayWolf launch command.
 
-        IMPORTANT: GrayWolf does NOT accept callsign,
-        mode, port, or gateway as command line flags.
-        These are configured through its web UI and
-        stored in the SQLite config database.
-
-        Valid GrayWolf CLI flags:
-            -config string      SQLite database path
-            -http string        HTTP listen address
-            -history-db string  Position history DB path
-            -tile-cache-dir     PMTiles cache directory
-            -debug              Enable debug logging
+        Includes -modem flag pointing to the installed
+        graywolf-modem binary so GrayWolf can find it
+        even if it is not in the same directory as
+        the graywolf binary.
 
         Returns:
-            list: Command and valid arguments only
+            list: Command and valid arguments
         """
         cmd = [self.binary_path]
 
-        # SQLite config database path.
-        # All Winlink settings (callsign, password, gateway)
-        # are stored here and configured via the web UI.
+        # SQLite config database
         cmd.extend(['-config', self.graywolf_db_path])
 
-        # HTTP listen address for the web UI and API.
-        # Bind to all interfaces so the plugin Flask app
-        # can reach the GrayWolf API.
+        # HTTP listen address
         http_addr = self.config.get(
             'http_addr', '0.0.0.0:8080'
         )
         cmd.extend(['-http', http_addr])
+
+        # Explicit path to graywolf-modem binary.
+        # GrayWolf searches PATH and the directory next
+        # to graywolf, but being explicit avoids the
+        # 'binary not found' error when both are in
+        # ~/.local/bin.
+        modem_binary = os.path.join(
+            os.path.expanduser('~/.local/bin'),
+            'graywolf-modem'
+        )
+
+        if os.path.isfile(modem_binary) and \
+                os.access(modem_binary, os.X_OK):
+            cmd.extend(['-modem', modem_binary])
+            self._add_log(
+                f"Using modem: {modem_binary}"
+            )
+        else:
+            # Check PATH
+            modem_in_path = shutil.which('graywolf-modem')
+            if modem_in_path:
+                cmd.extend(['-modem', modem_in_path])
+                self._add_log(
+                    f"Using modem from PATH: {modem_in_path}"
+                )
+            else:
+                self._add_log(
+                    "WARNING: graywolf-modem not found. "
+                    "GrayWolf will fail to start.",
+                    'warning'
+                )
 
         # Position history database
         cmd.extend([
@@ -276,18 +296,17 @@ class GrayWolfManager:
             self.graywolf_history_db_path
         ])
 
-        # PMTiles cache directory for map display
+        # PMTiles cache directory
         cmd.extend([
             '-tile-cache-dir',
             self.graywolf_tiles_dir
         ])
 
-        # Optional debug logging
+        # Debug logging
         if self.config.get('debug_mode', False):
             cmd.append('-debug')
 
         return cmd
-
     def start(self, callsign=None, gateway=None,
               password=None):
         """
