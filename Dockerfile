@@ -90,6 +90,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     curl \
     autoconf \
+    autopoint \
     build-essential \
     cmake \
     git \
