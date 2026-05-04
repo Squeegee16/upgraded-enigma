@@ -3,24 +3,24 @@ QSSTV Installer
 ================
 Handles first-run installation of QSSTV and dependencies.
 
-QSSTV Installation Methods:
-    1. apt-get (Debian/Ubuntu) - Primary
-       Installs qsstv from official repositories
-    2. Build from source (GitHub) - Fallback
-       Clones and builds from https://github.com/ON4QZ/QSSTV
+Docker Deployment Notes:
+    QSSTV is a Qt5 GUI application that requires root to
+    install. In Docker the runtime user (hamradio, UID 1000)
+    cannot run apt-get or sudo.
 
-Python Dependencies:
-    - requests: HTTP client for API calls
-    - psutil: Process management
-    - Pillow: Image processing for SSTV images
-    - watchdog: File system monitoring for received images
+    QSSTV MUST be installed in the Dockerfile at build time.
+    Add to Dockerfile before USER hamradio:
 
-System Dependencies (installed automatically):
-    - Qt5 libraries (for QSSTV GUI)
-    - ALSA/PulseAudio (for audio I/O)
-    - hamlib (for radio control)
-    - v4l-utils (for video capture)
-    - cmake/build-essential (for source builds)
+        RUN apt-get update && apt-get install -y qsstv
+
+    This installer detects Docker and logs clear instructions
+    rather than attempting a doomed runtime install.
+
+QSSTV Installation Methods (outside Docker):
+    1. apt-get (Debian/Ubuntu)
+    2. dnf (Fedora/RHEL)
+    3. pacman + yay AUR (Arch Linux)
+    4. Build from source (GitHub fallback)
 
 Source: https://github.com/ON4QZ/QSSTV
 """
@@ -31,16 +31,94 @@ import json
 import shutil
 import platform
 import subprocess
-from pathlib import Path
+import traceback
+from datetime import datetime
+
+try:
+    from plugins.implementations.base_installer import (
+        BaseInstaller
+    )
+except ImportError:
+    class BaseInstaller:
+        """Minimal inline fallback for BaseInstaller."""
+
+        def __init__(self):
+            try:
+                self.is_root = (os.getuid() == 0)
+            except AttributeError:
+                self.is_root = False
+
+            self.sudo_available = (
+                shutil.which('sudo') is not None
+            )
+            self._sudo = (
+                []
+                if (self.is_root or not self.sudo_available)
+                else ['sudo']
+            )
+            self.in_docker = (
+                os.environ.get(
+                    'PLUGIN_SKIP_PIP_INSTALL', ''
+                ).lower() == 'true' or
+                os.path.exists('/.dockerenv')
+            )
+
+        def pip_install(self, package):
+            if self.in_docker:
+                return True
+            try:
+                subprocess.run(
+                    [sys.executable, '-m', 'pip',
+                     'install', '--quiet', package],
+                    check=True,
+                    capture_output=True,
+                    timeout=120
+                )
+                return True
+            except Exception:
+                return False
+
+        def install_python_packages(self, packages):
+            failed = []
+            for pkg in packages:
+                if not self.pip_install(pkg):
+                    failed.append(pkg)
+            return len(packages) - len(failed), failed
+
+        def write_marker(self, path, extra_data=None):
+            data = {
+                'installed': True,
+                'timestamp': datetime.utcnow().isoformat(),
+                'in_docker': self.in_docker,
+            }
+            if extra_data and isinstance(extra_data, dict):
+                data.update(extra_data)
+            try:
+                marker_dir = os.path.dirname(path)
+                if marker_dir:
+                    os.makedirs(marker_dir, exist_ok=True)
+                with open(path, 'w') as f:
+                    json.dump(data, f, indent=2)
+            except Exception as e:
+                print(f"[QSSTV] Marker write error: {e}")
+
+        def read_marker(self, path):
+            if not os.path.exists(path):
+                return {}
+            try:
+                with open(path, 'r') as f:
+                    return json.load(f)
+            except Exception:
+                return {}
 
 
-class QSStvInstaller:
+class QSStvInstaller(BaseInstaller):
     """
-    Manages QSSTV installation and dependency verification.
+    Manages QSSTV installation and verification.
 
-    Detects system capabilities and installs QSSTV via the
-    most appropriate method. Tracks installation state via
-    a JSON marker file.
+    Extends BaseInstaller for Docker-aware handling.
+    In Docker as non-root, system installs are skipped
+    with clear Dockerfile instructions logged.
     """
 
     # Installation state marker
@@ -52,7 +130,7 @@ class QSStvInstaller:
     # QSSTV binary name
     QSSTV_BINARY = 'qsstv'
 
-    # GitHub repository
+    # GitHub repository for source builds
     QSSTV_REPO = 'https://github.com/ON4QZ/QSSTV.git'
 
     # Required Python packages
@@ -61,14 +139,6 @@ class QSStvInstaller:
         'psutil',
         'Pillow',
         'watchdog',
-    ]
-
-    # System dependencies for apt-get
-    APT_DEPENDENCIES = [
-        'qsstv',
-        'libhamlib-utils',
-        'libpulse-dev',
-        'libasound2-dev',
     ]
 
     # Build dependencies for compiling from source
@@ -91,15 +161,23 @@ class QSStvInstaller:
 
     def __init__(self):
         """
-        Initialize installer with system detection.
+        Initialise installer with environment detection.
         """
-        self.plugin_dir = os.path.dirname(__file__)
-        self.package_manager = self._detect_package_manager()
-        self.qsstv_binary_path = shutil.which(self.QSSTV_BINARY)
+        super().__init__()
+
+        self._package_manager = (
+            self._detect_package_manager()
+        )
+        self.qsstv_binary_path = shutil.which(
+            self.QSSTV_BINARY
+        )
 
         print(
-            f"[QSSTV] Package manager: "
-            f"{self.package_manager or 'not found'}"
+            f"[QSSTV] Installer init | "
+            f"Docker: {self.in_docker} | "
+            f"Root: {self.is_root} | "
+            f"sudo: {self.sudo_available} | "
+            f"pkg mgr: {self._package_manager or 'none'}"
         )
 
     def _detect_package_manager(self):
@@ -109,104 +187,131 @@ class QSStvInstaller:
         Returns:
             str: Package manager name or None
         """
-        for manager in ['apt-get', 'dnf', 'yum', 'pacman']:
-            if shutil.which(manager):
-                return manager
+        for mgr in ['apt-get', 'dnf', 'yum', 'pacman']:
+            if shutil.which(mgr):
+                return mgr
         return None
 
-    def is_installed(self):
+    def _run_system_command(self, cmd, timeout=300):
         """
-        Check if QSSTV is installed and marker exists.
+        Run a system command safely.
+
+        Handles FileNotFoundError (missing sudo or binary)
+        without raising an unhandled exception.
+
+        Args:
+            cmd: Command list to execute
+            timeout: Maximum seconds to wait
 
         Returns:
-            bool: True if QSSTV is available
-        """
-        if not os.path.exists(self.INSTALL_MARKER):
-            return False
-
-        return shutil.which(self.QSSTV_BINARY) is not None
-
-    def is_running(self):
-        """
-        Check if QSSTV process is currently running.
-
-        Returns:
-            bool: True if QSSTV process is active
+            tuple: (success: bool, stdout: str, stderr: str)
         """
         try:
             result = subprocess.run(
-                ['pgrep', '-x', self.QSSTV_BINARY],
+                cmd,
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=timeout
             )
-            return result.returncode == 0
-        except Exception:
+            return (
+                result.returncode == 0,
+                result.stdout or '',
+                result.stderr or ''
+            )
+        except FileNotFoundError as e:
+            return (
+                False, '',
+                f"Command not found: {cmd[0]} — {e}"
+            )
+        except subprocess.TimeoutExpired:
+            return False, '', f"Timed out after {timeout}s"
+        except Exception as e:
+            return False, '', str(e)
+
+    def is_installed(self):
+        """
+        Check if QSSTV is installed.
+
+        Returns:
+            bool: True if marker exists and binary found
+        """
+        if not os.path.exists(self.INSTALL_MARKER):
             return False
+        return shutil.which(self.QSSTV_BINARY) is not None
 
     def install_python_packages(self):
         """
         Install required Python packages.
 
         Returns:
-            bool: True if all packages installed
+            bool: True if all packages available
         """
-        print("[QSSTV] Installing Python packages...")
-        failed = []
-
-        for package in self.REQUIRED_PACKAGES:
-            try:
-                subprocess.run(
-                    [sys.executable, '-m', 'pip',
-                     'install', '--quiet', package],
-                    check=True,
-                    capture_output=True
-                )
-                print(f"[QSSTV] ✓ {package}")
-            except subprocess.CalledProcessError as e:
-                print(f"[QSSTV] WARNING: {package} failed: {e}")
-                failed.append(package)
-
+        print("[QSSTV] Checking Python packages...")
+        available, failed = super().install_python_packages(
+            self.REQUIRED_PACKAGES
+        )
+        if failed and self.in_docker:
+            print(
+                f"[QSSTV] INFO: Add to requirements.txt: "
+                f"{', '.join(failed)}"
+            )
         return len(failed) == 0
 
-    def install_via_apt(self):
+    def _install_via_apt(self):
         """
-        Install QSSTV and dependencies via apt-get.
+        Install QSSTV via apt-get.
 
-        Installs QSSTV from official Debian/Ubuntu
-        package repositories along with required
-        system libraries.
+        Uses self._sudo prefix (empty for root, ['sudo']
+        for non-root with sudo, [] for Docker non-root).
 
         Returns:
             bool: True if installation successful
         """
         print("[QSSTV] Installing via apt-get...")
 
-        try:
-            # Update package list
-            print("[QSSTV] Updating package list...")
-            subprocess.run(
-                ['sudo', 'apt-get', 'update', '-q'],
-                check=True,
-                capture_output=True
-            )
+        if not shutil.which('apt-get'):
+            print("[QSSTV] apt-get not available")
+            return False
 
-            # Install QSSTV package
-            print("[QSSTV] Installing qsstv package...")
-            subprocess.run(
-                ['sudo', 'apt-get', 'install', '-y', 'qsstv'],
-                check=True,
-                capture_output=True
+        if self.in_docker and not self.is_root:
+            print(
+                "[QSSTV] INFO: Cannot apt-get in Docker "
+                "as non-root. Add to Dockerfile:"
             )
+            print(
+                "[QSSTV] INFO:   RUN apt-get update && "
+                "apt-get install -y qsstv"
+            )
+            return False
 
+        # Update package list
+        ok, _, stderr = self._run_system_command(
+            self._sudo + ['apt-get', 'update', '-q'],
+            timeout=120
+        )
+        if not ok:
+            print(
+                f"[QSSTV] apt-get update failed: "
+                f"{stderr[:150]}"
+            )
+            return False
+
+        # Install QSSTV
+        ok, _, stderr = self._run_system_command(
+            self._sudo + [
+                'apt-get', 'install', '-y', 'qsstv'
+            ],
+            timeout=300
+        )
+
+        if ok:
             print("[QSSTV] ✓ Installed via apt-get")
             return True
 
-        except subprocess.CalledProcessError as e:
-            print(f"[QSSTV] apt-get failed: {e}")
-            print("[QSSTV] Trying source build...")
-            return self.build_from_source()
+        print(f"[QSSTV] apt-get failed: {stderr[:200]}")
+        return False
 
-    def install_via_dnf(self):
+    def _install_via_dnf(self):
         """
         Install QSSTV via dnf (Fedora/RHEL).
 
@@ -215,18 +320,29 @@ class QSStvInstaller:
         """
         print("[QSSTV] Installing via dnf...")
 
-        try:
-            subprocess.run(
-                ['sudo', 'dnf', 'install', '-y', 'qsstv'],
-                check=True,
-                capture_output=True
+        if not shutil.which('dnf'):
+            return False
+
+        if self.in_docker and not self.is_root:
+            print(
+                "[QSSTV] INFO: Add to Dockerfile: "
+                "RUN dnf install -y qsstv"
             )
+            return False
+
+        ok, _, stderr = self._run_system_command(
+            self._sudo + ['dnf', 'install', '-y', 'qsstv'],
+            timeout=300
+        )
+
+        if ok:
             print("[QSSTV] ✓ Installed via dnf")
             return True
-        except subprocess.CalledProcessError:
-            return self.build_from_source()
 
-    def install_via_pacman(self):
+        print(f"[QSSTV] dnf failed: {stderr[:200]}")
+        return False
+
+    def _install_via_pacman(self):
         """
         Install QSSTV via pacman (Arch Linux).
 
@@ -237,114 +353,142 @@ class QSStvInstaller:
         """
         print("[QSSTV] Installing via pacman...")
 
-        try:
-            subprocess.run(
-                ['sudo', 'pacman', '-S', '--noconfirm', 'qsstv'],
-                check=True,
-                capture_output=True
+        if not shutil.which('pacman'):
+            return False
+
+        if self.in_docker and not self.is_root:
+            print(
+                "[QSSTV] INFO: Add to Dockerfile: "
+                "RUN pacman -S --noconfirm qsstv"
             )
+            return False
+
+        ok, _, stderr = self._run_system_command(
+            self._sudo + [
+                'pacman', '-S', '--noconfirm', 'qsstv'
+            ],
+            timeout=300
+        )
+
+        if ok:
             print("[QSSTV] ✓ Installed via pacman")
             return True
-        except subprocess.CalledProcessError:
-            # Try AUR
-            if shutil.which('yay'):
-                try:
-                    subprocess.run(
-                        ['yay', '-S', '--noconfirm', 'qsstv'],
-                        check=True,
-                        capture_output=True
-                    )
-                    print("[QSSTV] ✓ Installed via yay (AUR)")
-                    return True
-                except subprocess.CalledProcessError:
-                    pass
 
-            return self.build_from_source()
+        if shutil.which('yay'):
+            ok, _, stderr = self._run_system_command(
+                ['yay', '-S', '--noconfirm', 'qsstv'],
+                timeout=300
+            )
+            if ok:
+                print("[QSSTV] ✓ Installed via yay (AUR)")
+                return True
+
+        print(f"[QSSTV] pacman failed: {stderr[:200]}")
+        return False
 
     def build_from_source(self):
         """
         Build and install QSSTV from GitHub source.
 
-        Clones the QSSTV repository, installs build
-        dependencies, and compiles with cmake.
+        Used as fallback when package managers fail.
+        Not available in Docker as non-root.
 
         Returns:
-            bool: True if build successful
+            bool: True if build and install successful
         """
+        if self.in_docker and not self.is_root:
+            print(
+                "[QSSTV] INFO: Cannot build from source "
+                "in Docker as non-root."
+            )
+            print(
+                "[QSSTV] INFO: Add to Dockerfile: "
+                "RUN apt-get install -y qsstv"
+            )
+            return False
+
         print("[QSSTV] Building from source...")
-        build_dir = os.path.join(self.plugin_dir, '_qsstv_build')
+        build_dir = os.path.join(
+            os.path.expanduser('~'), '_qsstv_build'
+        )
 
         try:
-            # Install build dependencies
-            if shutil.which('apt-get'):
-                print("[QSSTV] Installing build dependencies...")
-                subprocess.run(
-                    ['sudo', 'apt-get', 'install', '-y'] +
-                    self.BUILD_DEPS_APT,
-                    check=True,
-                    capture_output=True
+            if shutil.which('apt-get') and \
+                    (self.is_root or self.sudo_available):
+                ok, _, _ = self._run_system_command(
+                    self._sudo + [
+                        'apt-get', 'install', '-y'
+                    ] + self.BUILD_DEPS_APT,
+                    timeout=300
                 )
 
-            # Clean previous build
             if os.path.exists(build_dir):
                 shutil.rmtree(build_dir)
 
-            # Clone repository
-            print("[QSSTV] Cloning QSSTV repository...")
-            subprocess.run(
-                ['git', 'clone', '--depth', '1',
-                 self.QSSTV_REPO, build_dir],
-                check=True,
-                capture_output=True,
+            ok, _, stderr = self._run_system_command(
+                [
+                    'git', 'clone', '--depth', '1',
+                    self.QSSTV_REPO, build_dir
+                ],
                 timeout=120
             )
+            if not ok:
+                print(
+                    f"[QSSTV] Clone failed: {stderr}"
+                )
+                return False
 
-            # Create cmake build directory
             cmake_dir = os.path.join(build_dir, 'build')
             os.makedirs(cmake_dir, exist_ok=True)
 
-            # Run cmake configuration
-            print("[QSSTV] Configuring with cmake...")
-            subprocess.run(
-                ['cmake', '..', '-DCMAKE_INSTALL_PREFIX=/usr/local'],
-                check=True,
-                capture_output=True,
-                cwd=cmake_dir
+            ok, _, stderr = self._run_system_command(
+                [
+                    'cmake', '..',
+                    '-DCMAKE_INSTALL_PREFIX=/usr/local'
+                ],
+                timeout=120
             )
+            if not ok:
+                print(
+                    f"[QSSTV] cmake failed: {stderr[:200]}"
+                )
+                return False
 
-            # Build with available CPU cores
             cpu_count = os.cpu_count() or 2
-            print(f"[QSSTV] Building ({cpu_count} cores)...")
-            subprocess.run(
+            ok, _, stderr = self._run_system_command(
                 ['make', f'-j{cpu_count}'],
-                check=True,
-                capture_output=True,
-                cwd=cmake_dir,
                 timeout=600
             )
+            if not ok:
+                print(
+                    f"[QSSTV] make failed: {stderr[:200]}"
+                )
+                return False
 
-            # Install
-            print("[QSSTV] Installing...")
-            self._run_system_command(
-                self._sudo + ['apt-get', ...],
-                timeout=300
+            ok, _, stderr = self._run_system_command(
+                self._sudo + ['make', 'install'],
+                timeout=120
             )
+            if not ok:
+                print(
+                    f"[QSSTV] install failed: "
+                    f"{stderr[:200]}"
+                )
+                return False
 
-            print("[QSSTV] ✓ Built and installed from source")
+            print("[QSSTV] ✓ Built from source")
             return True
 
-        except subprocess.TimeoutExpired:
-            print("[QSSTV] ERROR: Build timed out")
-            return False
-        except subprocess.CalledProcessError as e:
-            print(f"[QSSTV] ERROR: Build failed: {e}")
-            return False
         except Exception as e:
-            print(f"[QSSTV] ERROR: {e}")
+            print(f"[QSSTV] Source build error: {e}")
+            traceback.print_exc()
             return False
+
         finally:
             if os.path.exists(build_dir):
-                shutil.rmtree(build_dir, ignore_errors=True)
+                shutil.rmtree(
+                    build_dir, ignore_errors=True
+                )
 
     def get_version(self):
         """
@@ -356,73 +500,51 @@ class QSStvInstaller:
         binary = shutil.which(self.QSSTV_BINARY)
         if not binary:
             return None
-
         try:
             result = subprocess.run(
                 [binary, '--version'],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=10
             )
-            if result.returncode == 0:
-                return result.stdout.strip()
-            # QSSTV may output version to stderr
-            return result.stderr.strip() or 'installed'
+            output = (result.stdout + result.stderr).strip()
+            return output[:50] if output else 'installed'
         except Exception:
             return 'installed'
 
     def write_install_marker(self, method, version=None):
-        """
-        Write installation marker file.
-
-        Args:
-            method: Installation method used
-            version: QSSTV version string
-        """
-        marker_data = {
-            'installed': True,
-            'method': method,
-            'version': version,
-            'platform': platform.platform(),
-            'arch': platform.machine(),
-            'binary_path': shutil.which(self.QSSTV_BINARY)
-        }
-
-        try:
-            with open(self.INSTALL_MARKER, 'w') as f:
-                json.dump(marker_data, f, indent=2)
-            print("[QSSTV] ✓ Installation marker written")
-        except Exception as e:
-            print(f"[QSSTV] WARNING: Marker write failed: {e}")
+        """Write installation marker."""
+        self.write_marker(
+            self.INSTALL_MARKER,
+            extra_data={
+                'method': method,
+                'version': version,
+                'binary': shutil.which(self.QSSTV_BINARY),
+                'platform': platform.platform(),
+            }
+        )
 
     def get_install_info(self):
-        """
-        Read installation marker data.
-
-        Returns:
-            dict: Installation details or empty dict
-        """
-        if not os.path.exists(self.INSTALL_MARKER):
-            return {}
-        try:
-            with open(self.INSTALL_MARKER, 'r') as f:
-                return json.load(f)
-        except Exception:
-            return {}
+        """Read installation marker."""
+        return self.read_marker(self.INSTALL_MARKER)
 
     def run(self):
         """
         Execute the complete installation process.
 
+        In Docker as non-root: logs Dockerfile
+        instructions and returns False.
+
+        Outside Docker: tries apt-get, dnf, pacman,
+        then source build in order.
+
         Returns:
-            bool: True if installation successful
+            bool: True if installed or already present
         """
-        # Already installed
         if self.is_installed():
             print("[QSSTV] ✓ Already installed")
             return True
 
-        # QSSTV already in PATH
         if shutil.which(self.QSSTV_BINARY):
             version = self.get_version()
             self.write_install_marker('existing', version)
@@ -433,35 +555,70 @@ class QSStvInstaller:
         print("[QSSTV] Starting first-run installation")
         print("[QSSTV] ==========================================")
 
+        # Docker non-root: cannot install system packages
+        if self.in_docker and not self.is_root:
+            print(
+                "\n[QSSTV] ======================================"
+            )
+            print("[QSSTV] DOCKER INSTALLATION REQUIRED")
+            print(
+                "[QSSTV] ======================================"
+            )
+            print(
+                "[QSSTV] Add to Dockerfile and rebuild:"
+            )
+            print()
+            print(
+                "[QSSTV]   RUN apt-get update && \\"
+            )
+            print(
+                "[QSSTV]       apt-get install -y qsstv && \\"
+            )
+            print(
+                "[QSSTV]       rm -rf /var/lib/apt/lists/*"
+            )
+            print()
+            print(
+                "[QSSTV]   docker compose build --no-cache"
+            )
+            print(
+                "[QSSTV] ======================================"
+            )
+            return False
+
         # Step 1: Python packages
         print("\n[QSSTV] Step 1: Python packages...")
         self.install_python_packages()
 
-        # Step 2: QSSTV
-        print("\n[QSSTV] Step 2: Installing QSSTV...")
+        # Step 2: Install QSSTV
+        print(
+            f"\n[QSSTV] Step 2: Installing QSSTV "
+            f"(pkg mgr: "
+            f"{self._package_manager or 'none'})..."
+        )
         success = False
 
-        if self.package_manager == 'apt-get':
-            success = self.install_via_apt()
-        elif self.package_manager in ('dnf', 'yum'):
-            success = self.install_via_dnf()
-        elif self.package_manager == 'pacman':
-            success = self.install_via_pacman()
-        else:
+        if self._package_manager == 'apt-get':
+            success = self._install_via_apt()
+        elif self._package_manager in ('dnf', 'yum'):
+            success = self._install_via_dnf()
+        elif self._package_manager == 'pacman':
+            success = self._install_via_pacman()
+
+        if not success:
+            print(
+                "[QSSTV] Package manager failed, "
+                "trying source build..."
+            )
             success = self.build_from_source()
 
         if not success:
             print("[QSSTV] ERROR: Installation failed")
-            print("[QSSTV] Manual install: https://github.com/ON4QZ/QSSTV")
             return False
 
-        # Update binary path
-        self.qsstv_binary_path = shutil.which(self.QSSTV_BINARY)
-
-        # Write marker
         version = self.get_version()
         self.write_install_marker(
-            self.package_manager or 'source',
+            self._package_manager or 'source',
             version
         )
 
