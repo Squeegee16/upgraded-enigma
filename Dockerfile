@@ -82,6 +82,10 @@ ENV PYTHONUNBUFFERED=1 \
 # Each comment must be on its own line BEFORE the package.
 # Blank lines between packages also break the RUN command.
 # ============================================================
+    RUN echo "=== autopoint diagnosis ===" && dpkg -L gettext | grep autopoint || true && \
+    find / -name autopoint 2>/dev/null | head -5 || true && \
+    which autopoint || echo "autopoint NOT in PATH" && \
+    echo "PATH=$PATH"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     curl \
@@ -108,96 +112,66 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# Build flarq from source
-#
-# flarq is the ARQ file transfer companion for FLdigi.
-# It is NOT available as a Debian Bookworm package and
-# must be built from the combined fldigi/flarq repository.
-#
-# The repository contains both fldigi and flarq and uses
-# a single top-level autotools build system.
-# We configure with --without-fldigi to build flarq only.
-#
-# Build dependencies installed in previous RUN block.
-# Additional deps needed here:
-#   gettext      - provides autopoint (required by autoreconf)
-#   autoconf-archive - provides additional m4 macros
-#   libtool      - required by autoreconf -fi
+# Build flarq from source.
+# Single combined RUN block ensures all tools are in PATH
+# and the build environment is consistent.
 # ============================================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gettext \
-    autoconf \
-    autoconf-archive \
-    automake \
-    libtool \
-    libfltk1.3-dev \
-    libpulse-dev \
-    libasound2-dev \
-    libsamplerate-dev \
-    libsndfile1-dev \
-    portaudio19-dev \
-    libxinerama-dev \
-    libxfixes-dev \
-    libxcursor-dev \
-    libfontconfig1-dev \
-    libjpeg-dev \
-    && rm -rf /var/lib/apt/lists/*
-
 RUN set -eux; \
     \
-    # Clone the combined fldigi/flarq repository
-    # Do NOT use --depth 1 here because autoreconf
-    # needs the full git history for version detection
-    echo "Cloning fldigi/flarq repository..."; \
-    cd /tmp && \
-    git clone \
+    echo "=== Installing build dependencies ==="; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        gettext \
+        autoconf \
+        automake \
+        libtool \
+        pkg-config \
+        libfltk1.3-dev \
+        libpulse-dev \
+        libasound2-dev \
+        libsamplerate-dev \
+        libsndfile1-dev \
+        portaudio19-dev \
+        libxinerama-dev \
+        libxfixes-dev \
+        libxcursor-dev \
+        libfontconfig1-dev \
+        libjpeg-dev; \
+    rm -rf /var/lib/apt/lists/*; \
+    \
+    echo "=== Verifying tools ==="; \
+    echo "PATH: $PATH"; \
+    ls -la /usr/bin/autopoint || \
+        dpkg -L gettext | grep autopoint || \
+        find /usr -name autopoint 2>/dev/null; \
+    \
+    echo "=== Cloning repository ==="; \
+    cd /tmp; \
+    git clone --depth 1 \
         https://git.code.sf.net/p/fldigi/fldigi \
         fldigi-src; \
-    \
     cd /tmp/fldigi-src; \
-    echo "Repository contents:"; \
-    ls -la; \
-    echo "configure.ac first 30 lines:"; \
-    head -30 configure.ac; \
     \
-    # Run autoreconf with all required tools now installed.
-    # -f forces regeneration even if files exist.
-    # -i installs missing auxiliary files.
-    # -v shows verbose output for debugging.
-    echo "Running autoreconf..."; \
-    autoreconf -fiv; \
+    echo "=== Running autoreconf ==="; \
+    autoreconf -fi; \
     \
-    # Configure the build.
-    # --without-fldigi builds only flarq, not fldigi.
-    # If --without-fldigi is not supported by this version,
-    # the full build will proceed (fldigi already installed
-    # so this just adds flarq).
-    echo "Configuring..."; \
-    ./configure \
-        --prefix=/usr/local \
-        --without-fldigi \
-        --disable-fldigi \
-    || ./configure --prefix=/usr/local; \
+    echo "=== Configuring ==="; \
+    ./configure --prefix=/usr/local; \
     \
-    # Build only the flarq binary.
-    # If the above configure worked, only flarq is built.
-    # If not, the full project builds (slower but correct).
-    echo "Building..."; \
+    echo "=== Building ==="; \
     make -j$(nproc); \
     \
-    # Install
-    echo "Installing..."; \
+    echo "=== Installing ==="; \
     make install; \
     \
-    # Verify flarq binary was installed
-    echo "Verifying flarq installation..."; \
-    which flarq && flarq --version || \
-    find /usr/local/bin -name 'flarq' -ls || \
-    echo "WARNING: flarq binary not found after install"; \
+    echo "=== Result ==="; \
+    ls -la /usr/local/bin/flarq && \
+        flarq --version || \
+        echo "WARNING: flarq binary not found"; \
     \
-    # Clean up
-    cd / && rm -rf /tmp/fldigi-src; \
-    echo "flarq build complete"
+    cd /; \
+    rm -rf /tmp/fldigi-src; \
+    echo "Done"
 # -------------------------------------------------------
 # Install Go from official distribution
 #
