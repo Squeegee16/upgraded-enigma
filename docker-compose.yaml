@@ -71,6 +71,7 @@ services:
       - TZ=${TZ:-UTC}
       - PLUGIN_SKIP_PIP_INSTALL=true
       - OPENWEBRX_URL=http://openwebrx:8073
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
 
     volumes:
       - app_data:/data
@@ -80,8 +81,15 @@ services:
     # Uncomment serial devices when real hardware is connected.
     #
     # devices:
-    #   - /dev/ttyUSB0:/dev/ttyUSB0   # GPS
-    #   - /dev/ttyUSB1:/dev/ttyUSB1   # Radio CAT
+    #  - /dev/ttyUSB0:/dev/ttyUSB0   # GPS
+      - /dev/ttyUSB1:/dev/ttyUSB1   # Radio CAT
+         # Uncomment to pass host audio to container:
+      - /run/user/1000/pulse:/run/user/1000/pulse:ro
+      - /dev/snd:/dev/snd
+
+    # Uncomment for real audio device access:
+    devices:
+      - /dev/snd:/dev/snd
 
     networks:
       - hamradio_net
@@ -169,6 +177,7 @@ services:
     # or 3 for tighter security in production.
     devices:
       - /dev/bus/usb:/dev/bus/usb
+      #- /dev/snd:/dev/snd
 
     # group_add grants the container user access to the
     # plugdev group (GID 46 on Debian/Ubuntu) which owns
@@ -191,6 +200,7 @@ services:
 
     environment:
       - TZ=${TZ:-UTC}
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
 
     logging:
       driver: "json-file"
