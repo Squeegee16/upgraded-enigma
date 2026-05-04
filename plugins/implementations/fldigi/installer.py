@@ -1,29 +1,32 @@
 """
 FLdigi Installer
 =================
-Handles first-run installation of FLdigi and its dependencies.
+Handles first-run installation of FLdigi and dependencies.
 
-FLdigi Installation Methods:
-    1. apt-get (Debian/Ubuntu) - Recommended
-    2. dnf/yum (RedHat/Fedora/CentOS)
+Docker Deployment Notes:
+    FLdigi is a system application that requires root to
+    install via apt-get. In Docker, the runtime user
+    (hamradio, UID 1000) cannot run apt-get.
+
+    FLdigi MUST be installed in the Dockerfile at build
+    time. This installer detects Docker and informs the
+    user rather than attempting a doomed installation.
+
+    Add to Dockerfile:
+        RUN apt-get update && apt-get install -y fldigi
+
+    This installer handles:
+        - Docker detection (skip system installs)
+        - Non-Docker: apt/dnf/pacman/source installation
+        - Python package availability checks
+
+FLdigi Installation Methods (outside Docker):
+    1. apt-get (Debian/Ubuntu) — fldigi package
+    2. dnf (Fedora/RHEL)
     3. pacman (Arch Linux)
-    4. Build from source (fallback via GitHub)
-
-Python Dependencies:
-    - requests: HTTP client for any web API calls
-    - psutil: Process management and monitoring
-
-FLdigi XML-RPC:
-    FLdigi exposes an XML-RPC interface on port 7362.
-    This plugin communicates via Python's built-in
-    xmlrpc.client module - no extra packages needed.
+    4. Build from source (GitHub fallback)
 
 Source: https://github.com/w1hkj/fldigi/
-
-Note on macOS/Windows:
-    This plugin targets Linux only. FLdigi binaries
-    for other platforms are available from:
-    http://www.w1hkj.com/
 """
 
 import os
@@ -32,16 +35,94 @@ import json
 import shutil
 import platform
 import subprocess
-from pathlib import Path
+import traceback
+from datetime import datetime
+
+try:
+    from plugins.implementations.base_installer import (
+        BaseInstaller
+    )
+except ImportError:
+    class BaseInstaller:
+        """Minimal inline fallback for BaseInstaller."""
+
+        def __init__(self):
+            try:
+                self.is_root = (os.getuid() == 0)
+            except AttributeError:
+                self.is_root = False
+
+            self.sudo_available = (
+                shutil.which('sudo') is not None
+            )
+            self._sudo = (
+                []
+                if (self.is_root or not self.sudo_available)
+                else ['sudo']
+            )
+            self.in_docker = (
+                os.environ.get(
+                    'PLUGIN_SKIP_PIP_INSTALL', ''
+                ).lower() == 'true' or
+                os.path.exists('/.dockerenv')
+            )
+
+        def pip_install(self, package):
+            if self.in_docker:
+                return True
+            try:
+                subprocess.run(
+                    [sys.executable, '-m', 'pip',
+                     'install', '--quiet', package],
+                    check=True,
+                    capture_output=True,
+                    timeout=120
+                )
+                return True
+            except Exception:
+                return False
+
+        def install_python_packages(self, packages):
+            failed = []
+            for pkg in packages:
+                if not self.pip_install(pkg):
+                    failed.append(pkg)
+            return len(packages) - len(failed), failed
+
+        def write_marker(self, path, extra_data=None):
+            data = {
+                'installed': True,
+                'timestamp': datetime.utcnow().isoformat(),
+                'in_docker': self.in_docker,
+            }
+            if extra_data and isinstance(extra_data, dict):
+                data.update(extra_data)
+            try:
+                marker_dir = os.path.dirname(path)
+                if marker_dir:
+                    os.makedirs(marker_dir, exist_ok=True)
+                with open(path, 'w') as f:
+                    json.dump(data, f, indent=2)
+            except Exception as e:
+                print(f"[FLdigi] Marker write error: {e}")
+
+        def read_marker(self, path):
+            if not os.path.exists(path):
+                return {}
+            try:
+                with open(path, 'r') as f:
+                    return json.load(f)
+            except Exception:
+                return {}
 
 
-class FldigiInstaller:
+class FldigiInstaller(BaseInstaller):
     """
     Manages FLdigi installation and dependency verification.
 
-    Detects the system package manager and installs FLdigi
-    via the most appropriate method. Tracks installation
-    state via a JSON marker file to prevent re-installation.
+    Extends BaseInstaller to handle Docker environments
+    where apt-get cannot be run at runtime. In Docker,
+    FLdigi must be pre-installed in the image.
     """
 
     # Installation state marker
@@ -50,16 +131,19 @@ class FldigiInstaller:
         '.installed'
     )
 
-    # FLdigi package names per package manager
-    PACKAGE_NAMES = {
-        'apt-get': 'fldigi',
-        'dnf': 'fldigi',
-        'yum': 'fldigi',
-        'pacman': 'fldigi',
-        'zypper': 'fldigi',
-    }
+    # FLdigi binary name
+    FLDIGI_BINARY = 'fldigi'
 
-    # Build dependencies for compiling from source
+    # GitHub repository for source builds
+    FLDIGI_REPO = 'https://github.com/w1hkj/fldigi.git'
+
+    # Required Python packages
+    REQUIRED_PACKAGES = [
+        'requests',
+        'psutil',
+    ]
+
+    # apt build dependencies for source compilation
     BUILD_DEPS_APT = [
         'build-essential',
         'autoconf',
@@ -81,32 +165,25 @@ class FldigiInstaller:
         'git',
     ]
 
-    # Required Python packages
-    REQUIRED_PACKAGES = [
-        'requests',
-        'psutil',
-    ]
-
-    # FLdigi binary name
-    FLDIGI_BINARY = 'fldigi'
-
-    # GitHub source repository
-    FLDIGI_REPO = 'https://github.com/w1hkj/fldigi.git'
-
     def __init__(self):
         """
-        Initialize installer with system detection.
-
-        Detects available package managers and determines
-        the best installation strategy.
+        Initialise installer with environment detection.
         """
-        self.plugin_dir = os.path.dirname(__file__)
-        self.package_manager = self._detect_package_manager()
+        super().__init__()
+
+        # Detect package manager
+        self._package_manager = (
+            self._detect_package_manager()
+        )
         self.fldigi_binary = shutil.which(self.FLDIGI_BINARY)
 
         print(
-            f"[FLdigi] Package manager: "
-            f"{self.package_manager or 'not found'}"
+            f"[FLdigi] Installer init | "
+            f"Docker: {self.in_docker} | "
+            f"Root: {self.is_root} | "
+            f"sudo: {self.sudo_available} | "
+            f"pkg mgr: {self._package_manager or 'none'} | "
+            f"fldigi: {self.fldigi_binary or 'not found'}"
         )
 
     def _detect_package_manager(self):
@@ -116,148 +193,192 @@ class FldigiInstaller:
         Returns:
             str: Package manager name or None
         """
-        managers = [
-            'apt-get', 'dnf', 'yum', 'pacman', 'zypper'
-        ]
-
-        for manager in managers:
-            if shutil.which(manager):
-                return manager
-
+        for mgr in ['apt-get', 'dnf', 'yum', 'pacman']:
+            if shutil.which(mgr):
+                return mgr
         return None
 
-    def is_installed(self):
+    def _run_system_command(self, cmd, timeout=300):
         """
-        Check if FLdigi is installed and marker exists.
+        Run a system command safely.
+
+        Handles FileNotFoundError (e.g. missing sudo)
+        without raising an unhandled exception.
+
+        Args:
+            cmd: Command list to execute
+            timeout: Maximum seconds to wait
 
         Returns:
-            bool: True if FLdigi is available
-        """
-        # Check marker file
-        if not os.path.exists(self.INSTALL_MARKER):
-            return False
-
-        # Verify binary is available
-        return shutil.which(self.FLDIGI_BINARY) is not None
-
-    def is_running(self):
-        """
-        Check if FLdigi process is currently running.
-
-        Returns:
-            bool: True if FLdigi is running
+            tuple: (success: bool, stdout: str, stderr: str)
         """
         try:
             result = subprocess.run(
-                ['pgrep', '-x', self.FLDIGI_BINARY],
+                cmd,
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=timeout
             )
-            return result.returncode == 0
-        except Exception:
+            stdout = result.stdout or ''
+            stderr = result.stderr or ''
+            return result.returncode == 0, stdout, stderr
+
+        except FileNotFoundError as e:
+            return (
+                False, '',
+                f"Command not found: {cmd[0]} — {e}"
+            )
+        except subprocess.TimeoutExpired:
+            return False, '', f"Timed out after {timeout}s"
+        except Exception as e:
+            return False, '', str(e)
+
+    def is_installed(self):
+        """
+        Check if FLdigi is installed.
+
+        Returns:
+            bool: True if marker exists and binary found
+        """
+        if not os.path.exists(self.INSTALL_MARKER):
             return False
+        return shutil.which(self.FLDIGI_BINARY) is not None
 
     def install_python_packages(self):
         """
-        Install required Python packages via pip.
+        Install required Python packages.
+
+        In Docker, only checks availability.
+        Outside Docker, attempts pip install.
 
         Returns:
-            bool: True if all packages installed successfully
+            bool: True if all packages available
         """
-        print("[FLdigi] Installing Python packages...")
-        failed = []
+        print("[FLdigi] Checking Python packages...")
+        available, failed = super().install_python_packages(
+            self.REQUIRED_PACKAGES
+        )
 
-        for package in self.REQUIRED_PACKAGES:
-            try:
-                subprocess.run(
-                    [sys.executable, '-m', 'pip',
-                     'install', '--quiet', package],
-                    check=True,
-                    capture_output=True
-                )
-                print(f"[FLdigi] ✓ {package}")
-            except subprocess.CalledProcessError as e:
-                print(f"[FLdigi] WARNING: {package} failed: {e}")
-                failed.append(package)
+        if failed and self.in_docker:
+            print(
+                f"[FLdigi] INFO: Add to requirements.txt: "
+                f"{', '.join(failed)}"
+            )
+        elif failed:
+            print(
+                f"[FLdigi] WARNING: Failed: {failed}"
+            )
 
         return len(failed) == 0
 
     def install_via_apt(self):
         """
-        Install FLdigi via apt-get package manager.
+        Install FLdigi via apt-get.
 
-        Also installs optional companion tools:
-        - flarq: FLdigi ARQ file transfer companion
-        - flmsg: FLdigi message forms companion
+        Uses self._sudo prefix which is correctly set
+        based on whether we are root, have sudo, or
+        are in a Docker container.
+
+        In Docker as non-root without sudo:
+            self._sudo = [] and self.is_root = False
+            apt-get will fail with permission denied
+            The correct fix is to add fldigi to the
+            Dockerfile RUN apt-get block.
 
         Returns:
             bool: True if installation successful
         """
         print("[FLdigi] Installing via apt-get...")
 
-        try:
-            # Update package list
-            print("[FLdigi] Updating package list...")
-            subprocess.run(
-                ['sudo', 'apt-get', 'update', '-q'],
-                check=True,
-                capture_output=True
+        if not shutil.which('apt-get'):
+            print("[FLdigi] apt-get not available")
+            return False
+
+        # In Docker as non-root, we cannot run apt-get
+        if self.in_docker and not self.is_root:
+            print(
+                "[FLdigi] INFO: Cannot apt-get in Docker "
+                "as non-root user."
             )
-
-            # Install FLdigi and companion applications
-            packages = ['fldigi']
-
-            # Try to install optional companions
-            # flarq is the ARQ file transfer companion
-            # flmsg is the message forms companion
-            optional_packages = ['flarq', 'flmsg', 'flamp']
-
-            print(f"[FLdigi] Installing: {', '.join(packages)}")
-            subprocess.run(
-                ['sudo', 'apt-get', 'install', '-y'] + packages,
-                check=True,
-                capture_output=True
+            print(
+                "[FLdigi] INFO: Add fldigi to the "
+                "Dockerfile and rebuild:"
             )
+            print(
+                "[FLdigi] INFO:   RUN apt-get update && "
+                "apt-get install -y fldigi"
+            )
+            print(
+                "[FLdigi] INFO:   docker compose build "
+                "--no-cache"
+            )
+            return False
 
-            # Install optional packages (non-fatal if fail)
-            for pkg in optional_packages:
-                try:
-                    subprocess.run(
-                        ['sudo', 'apt-get', 'install', '-y', pkg],
-                        check=True,
-                        capture_output=True
-                    )
-                    print(f"[FLdigi] ✓ Optional: {pkg}")
-                except subprocess.CalledProcessError:
-                    print(f"[FLdigi] INFO: {pkg} not available (optional)")
+        # Outside Docker or running as root:
+        # attempt installation with correct prefix
 
-            print("[FLdigi] ✓ FLdigi installed via apt-get")
+        # Step 1: Update package list
+        print("[FLdigi] Updating package list...")
+        ok, _, stderr = self._run_system_command(
+            self._sudo + ['apt-get', 'update', '-q'],
+            timeout=120
+        )
+        if not ok:
+            print(
+                f"[FLdigi] apt-get update failed: "
+                f"{stderr[:150]}"
+            )
+            return False
+
+        # Step 2: Install fldigi
+        print("[FLdigi] Installing fldigi package...")
+        ok, _, stderr = self._run_system_command(
+            self._sudo + [
+                'apt-get', 'install', '-y', 'fldigi'
+            ],
+            timeout=300
+        )
+
+        if ok:
+            print("[FLdigi] ✓ Installed via apt-get")
             return True
 
-        except subprocess.CalledProcessError as e:
-            print(f"[FLdigi] ERROR: apt-get failed: {e}")
-            return False
+        print(
+            f"[FLdigi] apt-get install failed: "
+            f"{stderr[:200]}"
+        )
+        return False
 
     def install_via_dnf(self):
         """
-        Install FLdigi via dnf (Fedora/RHEL 8+).
+        Install FLdigi via dnf (Fedora/RHEL).
 
         Returns:
             bool: True if installation successful
         """
         print("[FLdigi] Installing via dnf...")
 
-        try:
-            subprocess.run(
-                ['sudo', 'dnf', 'install', '-y', 'fldigi'],
-                check=True,
-                capture_output=True
-            )
-            print("[FLdigi] ✓ FLdigi installed via dnf")
-            return True
-        except subprocess.CalledProcessError as e:
-            print(f"[FLdigi] ERROR: dnf failed: {e}")
+        if not shutil.which('dnf'):
             return False
+
+        if self.in_docker and not self.is_root:
+            print(
+                "[FLdigi] INFO: Add to Dockerfile: "
+                "RUN dnf install -y fldigi"
+            )
+            return False
+
+        ok, _, stderr = self._run_system_command(
+            self._sudo + ['dnf', 'install', '-y', 'fldigi'],
+            timeout=300
+        )
+
+        if ok:
+            print("[FLdigi] ✓ Installed via dnf")
+            return True
+
+        print(f"[FLdigi] dnf failed: {stderr[:200]}")
+        return False
 
     def install_via_pacman(self):
         """
@@ -268,185 +389,226 @@ class FldigiInstaller:
         """
         print("[FLdigi] Installing via pacman...")
 
-        try:
-            subprocess.run(
-                ['sudo', 'pacman', '-S', '--noconfirm', 'fldigi'],
-                check=True,
-                capture_output=True
-            )
-            print("[FLdigi] ✓ FLdigi installed via pacman")
-            return True
-        except subprocess.CalledProcessError as e:
-            print(f"[FLdigi] ERROR: pacman failed: {e}")
+        if not shutil.which('pacman'):
             return False
 
-    def install_from_source(self):
+        if self.in_docker and not self.is_root:
+            print(
+                "[FLdigi] INFO: Add to Dockerfile: "
+                "RUN pacman -S --noconfirm fldigi"
+            )
+            return False
+
+        ok, _, stderr = self._run_system_command(
+            self._sudo + [
+                'pacman', '-S', '--noconfirm', 'fldigi'
+            ],
+            timeout=300
+        )
+
+        if ok:
+            print("[FLdigi] ✓ Installed via pacman")
+            return True
+
+        print(
+            f"[FLdigi] pacman failed: {stderr[:200]}"
+        )
+        return False
+
+    def build_from_source(self):
         """
         Build and install FLdigi from GitHub source.
 
         Used as a fallback when package managers fail.
-        Clones the repository, configures, and builds
-        using autotools.
+        Requires autotools build chain and development
+        libraries.
 
         Returns:
             bool: True if build and install successful
         """
-        print("[FLdigi] Building from source...")
+        if self.in_docker and not self.is_root:
+            print(
+                "[FLdigi] INFO: Cannot build from source "
+                "in Docker as non-root."
+            )
+            print(
+                "[FLdigi] INFO: Add to Dockerfile:"
+            )
+            print(
+                "[FLdigi] INFO:   # Install FLdigi build deps"
+            )
+            print(
+                "[FLdigi] INFO:   RUN apt-get install -y "
+                "fldigi"
+            )
+            return False
 
-        build_dir = os.path.join(self.plugin_dir, '_fldigi_build')
+        print("[FLdigi] Building from source...")
+        build_dir = os.path.join(
+            self._get_temp_dir(), 'fldigi_build'
+        )
 
         try:
-            # Install build dependencies
-            if shutil.which('apt-get'):
-                print("[FLdigi] Installing build dependencies...")
-                subprocess.run(
-                    ['sudo', 'apt-get', 'install', '-y'] +
-                    self.BUILD_DEPS_APT,
-                    check=True,
-                    capture_output=True
-                )
+            if self.is_root or self.sudo_available:
+                if shutil.which('apt-get'):
+                    print(
+                        "[FLdigi] Installing build deps..."
+                    )
+                    self._run_system_command(
+                        self._sudo + [
+                            'apt-get', 'install', '-y'
+                        ] + self.BUILD_DEPS_APT,
+                        timeout=300
+                    )
 
-            # Clone repository
-            print("[FLdigi] Cloning FLdigi repository...")
             if os.path.exists(build_dir):
                 shutil.rmtree(build_dir)
 
-            subprocess.run(
-                ['git', 'clone', '--depth', '1',
-                 self.FLDIGI_REPO, build_dir],
-                check=True,
-                capture_output=True,
+            print("[FLdigi] Cloning repository...")
+            ok, _, stderr = self._run_system_command(
+                [
+                    'git', 'clone', '--depth', '1',
+                    self.FLDIGI_REPO, build_dir
+                ],
                 timeout=120
             )
 
-            # Bootstrap autotools
+            if not ok:
+                print(
+                    f"[FLdigi] Clone failed: {stderr}"
+                )
+                return False
+
             print("[FLdigi] Running bootstrap...")
-            subprocess.run(
+            ok, _, stderr = self._run_system_command(
                 ['./bootstrap'],
-                check=True,
-                capture_output=True,
-                cwd=build_dir
+                timeout=60
             )
+            if not ok:
+                ok, _, stderr = self._run_system_command(
+                    ['autoreconf', '-fi'],
+                    timeout=60
+                )
 
-            # Configure build
-            print("[FLdigi] Configuring build...")
-            subprocess.run(
+            print("[FLdigi] Configuring...")
+            ok, _, stderr = self._run_system_command(
                 ['./configure', '--prefix=/usr/local'],
-                check=True,
-                capture_output=True,
-                cwd=build_dir
+                timeout=120
             )
+            if not ok:
+                print(
+                    f"[FLdigi] Configure failed: "
+                    f"{stderr[:200]}"
+                )
+                return False
 
-            # Build (use all available CPU cores)
             cpu_count = os.cpu_count() or 2
-            print(f"[FLdigi] Building ({cpu_count} cores)...")
-            subprocess.run(
+            print(
+                f"[FLdigi] Building ({cpu_count} cores)..."
+            )
+            ok, _, stderr = self._run_system_command(
                 ['make', f'-j{cpu_count}'],
-                check=True,
-                capture_output=True,
-                cwd=build_dir,
-                timeout=600  # 10 minute timeout
+                timeout=600
             )
+            if not ok:
+                print(
+                    f"[FLdigi] make failed: {stderr[:200]}"
+                )
+                return False
 
-            # Install
             print("[FLdigi] Installing...")
-            subprocess.run(
-                ['sudo', 'make', 'install'],
-                check=True,
-                capture_output=True,
-                cwd=build_dir
+            ok, _, stderr = self._run_system_command(
+                self._sudo + ['make', 'install'],
+                timeout=120
             )
+            if not ok:
+                print(
+                    f"[FLdigi] make install failed: "
+                    f"{stderr[:200]}"
+                )
+                return False
 
-            print("[FLdigi] ✓ FLdigi built and installed from source")
+            print("[FLdigi] ✓ Built from source")
             return True
 
-        except subprocess.TimeoutExpired:
-            print("[FLdigi] ERROR: Build timed out")
-            return False
-        except subprocess.CalledProcessError as e:
-            print(f"[FLdigi] ERROR: Build failed: {e}")
-            return False
         except Exception as e:
-            print(f"[FLdigi] ERROR: {e}")
+            print(f"[FLdigi] Source build error: {e}")
+            traceback.print_exc()
             return False
+
         finally:
-            # Clean up build directory
             if os.path.exists(build_dir):
                 shutil.rmtree(build_dir, ignore_errors=True)
 
-    def get_fldigi_version(self):
+    def _get_temp_dir(self):
         """
-        Get installed FLdigi version string.
+        Get a writable temp directory.
+
+        Returns:
+            str: Path to a writable temp directory
+        """
+        import tempfile
+        return tempfile.gettempdir()
+
+    def get_version(self):
+        """
+        Get installed FLdigi version.
 
         Returns:
             str: Version string or None
         """
+        binary = shutil.which(self.FLDIGI_BINARY)
+        if not binary:
+            return None
+
         try:
             result = subprocess.run(
-                [self.FLDIGI_BINARY, '--version'],
+                [binary, '--version'],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=10
             )
-            if result.returncode == 0:
-                # Parse version from output
-                for line in result.stdout.split('\n'):
-                    if 'fldigi' in line.lower():
-                        return line.strip()
-                return result.stdout.strip()
+            output = (result.stdout + result.stderr).strip()
+            for line in output.splitlines():
+                if 'fldigi' in line.lower():
+                    return line.strip()
+            return output[:50] if output else 'installed'
         except Exception:
-            pass
-        return None
+            return 'installed'
 
     def write_install_marker(self, method, version=None):
-        """
-        Write installation marker with details.
-
-        Args:
-            method: Installation method used
-            version: FLdigi version string
-        """
-        marker_data = {
-            'installed': True,
-            'method': method,
-            'version': version,
-            'platform': platform.platform(),
-            'arch': platform.machine(),
-            'python_version': sys.version,
-            'fldigi_binary': shutil.which(self.FLDIGI_BINARY)
-        }
-
-        try:
-            with open(self.INSTALL_MARKER, 'w') as f:
-                json.dump(marker_data, f, indent=2)
-            print("[FLdigi] ✓ Installation marker written")
-        except Exception as e:
-            print(f"[FLdigi] WARNING: Could not write marker: {e}")
+        """Write installation marker."""
+        self.write_marker(
+            self.INSTALL_MARKER,
+            extra_data={
+                'method': method,
+                'version': version,
+                'binary': shutil.which(self.FLDIGI_BINARY),
+                'platform': platform.platform(),
+            }
+        )
 
     def get_install_info(self):
-        """
-        Read installation marker data.
-
-        Returns:
-            dict: Installation details or empty dict
-        """
-        if not os.path.exists(self.INSTALL_MARKER):
-            return {}
-        try:
-            with open(self.INSTALL_MARKER, 'r') as f:
-                return json.load(f)
-        except Exception:
-            return {}
+        """Read installation marker."""
+        return self.read_marker(self.INSTALL_MARKER)
 
     def run(self):
         """
         Execute the complete installation process.
 
-        Checks for existing installation, installs Python
-        packages and FLdigi via the best available method.
+        Docker behaviour:
+            In Docker as non-root, system package installs
+            are not possible. This method detects Docker,
+            logs clear instructions, and returns False
+            so the plugin UI shows an appropriate message.
+
+            To fix: add fldigi to the Dockerfile and rebuild.
+
+        Non-Docker behaviour:
+            Tries apt-get, dnf, pacman, then source build.
 
         Returns:
-            bool: True if installation successful or pre-existing
+            bool: True if installed or already present
         """
         # Already installed
         if self.is_installed():
@@ -455,48 +617,113 @@ class FldigiInstaller:
 
         # FLdigi already in PATH but no marker
         if shutil.which(self.FLDIGI_BINARY):
-            print("[FLdigi] FLdigi found in PATH")
-            version = self.get_fldigi_version()
+            version = self.get_version()
             self.write_install_marker('existing', version)
+            print(
+                f"[FLdigi] ✓ Found in PATH: "
+                f"{shutil.which(self.FLDIGI_BINARY)}"
+            )
             return True
 
         print("[FLdigi] ==========================================")
         print("[FLdigi] Starting first-run installation")
         print("[FLdigi] ==========================================")
 
+        # -------------------------------------------------------
+        # Docker non-root: cannot install system packages
+        # -------------------------------------------------------
+        if self.in_docker and not self.is_root:
+            print(
+                "\n[FLdigi] =========================================="
+            )
+            print(
+                "[FLdigi] DOCKER INSTALLATION REQUIRED"
+            )
+            print(
+                "[FLdigi] =========================================="
+            )
+            print(
+                "[FLdigi] FLdigi cannot be installed at "
+                "runtime in Docker."
+            )
+            print(
+                "[FLdigi] Add the following to your "
+                "Dockerfile and rebuild:"
+            )
+            print()
+            print(
+                "[FLdigi]   # Install FLdigi digital modes"
+            )
+            print(
+                "[FLdigi]   RUN apt-get update && \\"
+            )
+            print(
+                "[FLdigi]       apt-get install -y \\"
+            )
+            print(
+                "[FLdigi]       fldigi \\"
+            )
+            print(
+                "[FLdigi]       flmsg \\"
+            )
+            print(
+                "[FLdigi]       flarq \\"
+            )
+            print(
+                "[FLdigi]       && rm -rf /var/lib/apt/lists/*"
+            )
+            print()
+            print(
+                "[FLdigi]   Then rebuild:"
+            )
+            print(
+                "[FLdigi]   docker compose build --no-cache"
+            )
+            print(
+                "[FLdigi] =========================================="
+            )
+            return False
+
+        # -------------------------------------------------------
         # Step 1: Python packages
+        # -------------------------------------------------------
         print("\n[FLdigi] Step 1: Python packages...")
         self.install_python_packages()
 
+        # -------------------------------------------------------
         # Step 2: Install FLdigi
-        print("\n[FLdigi] Step 2: Installing FLdigi...")
+        # -------------------------------------------------------
+        print(
+            f"\n[FLdigi] Step 2: Installing FLdigi "
+            f"(pkg mgr: {self._package_manager or 'none'})..."
+        )
         success = False
 
-        if self.package_manager == 'apt-get':
+        if self._package_manager == 'apt-get':
             success = self.install_via_apt()
-        elif self.package_manager in ('dnf', 'yum'):
+        elif self._package_manager in ('dnf', 'yum'):
             success = self.install_via_dnf()
-        elif self.package_manager == 'pacman':
+        elif self._package_manager == 'pacman':
             success = self.install_via_pacman()
 
-        # Fall back to source build
         if not success:
-            print("[FLdigi] Package install failed, trying source...")
-            success = self.install_from_source()
+            print(
+                "[FLdigi] Package manager install failed, "
+                "trying source build..."
+            )
+            success = self.build_from_source()
 
         if not success:
-            print("[FLdigi] ERROR: All installation methods failed")
-            print("[FLdigi] Please install FLdigi manually:")
-            print("[FLdigi] https://github.com/w1hkj/fldigi/")
+            print(
+                "\n[FLdigi] ERROR: All installation methods "
+                "failed"
+            )
             return False
 
-        # Step 3: Update binary path
-        self.fldigi_binary = shutil.which(self.FLDIGI_BINARY)
-
-        # Step 4: Write marker
-        version = self.get_fldigi_version()
+        # Write marker
+        version = self.get_version()
         self.write_install_marker(
-            self.package_manager or 'source',
+            self._package_manager or 'source',
             version
         )
 
