@@ -360,57 +360,170 @@ class FldigiManager:
             finally:
                 self._xvfb_process = None
 
+def _setup_audio_environment(self):
+        """
+        Set up virtual audio environment for FLdigi.
+
+        In Docker without real audio hardware, FLdigi
+        needs a virtual audio device to start successfully.
+
+        This method:
+            1. Checks if PulseAudio is running
+            2. Starts PulseAudio with null sink if needed
+            3. Creates ALSA config pointing to PulseAudio
+            4. Sets environment variables for audio
+
+        Returns:
+            dict: Environment variables for FLdigi process
+        """
+        env = os.environ.copy()
+        audio_setup_ok = False
+
+        # Check if PulseAudio is already running
+        pulse_check = subprocess.run(
+            ['pactl', 'info'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if pulse_check.returncode == 0:
+            # PulseAudio is running
+            self._add_log("✓ PulseAudio is available")
+
+            # Ensure null sink exists
+            subprocess.run(
+                [
+                    'pactl', 'load-module',
+                    'module-null-sink',
+                    'sink_name=fldigi_null',
+                    'sink_properties='
+                    'device.description=FLdigi_Null_Sink'
+                ],
+                capture_output=True,
+                timeout=5
+            )
+            audio_setup_ok = True
+
+        else:
+            # PulseAudio not running — try to start it
+            self._add_log(
+                "PulseAudio not running, attempting start..."
+            )
+
+            start_result = subprocess.run(
+                [
+                    'pulseaudio',
+                    '--start',
+                    '--exit-idle-time=-1',
+                    '--log-level=error'
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            if start_result.returncode == 0:
+                import time
+                time.sleep(1)
+
+                # Load null sink
+                subprocess.run(
+                    [
+                        'pactl', 'load-module',
+                        'module-null-sink',
+                        'sink_name=fldigi_null'
+                    ],
+                    capture_output=True,
+                    timeout=5
+                )
+                self._add_log("✓ PulseAudio started")
+                audio_setup_ok = True
+            else:
+                self._add_log(
+                    "PulseAudio unavailable — FLdigi may "
+                    "have audio issues",
+                    'warning'
+                )
+
+        # Write ALSA config for the user if it doesn't exist
+        asoundrc = os.path.expanduser('~/.asoundrc')
+        if not os.path.exists(asoundrc):
+            alsa_config = (
+                'pcm.!default {\n'
+                '    type pulse\n'
+                '    fallback "sysdefault"\n'
+                '}\n'
+                'ctl.!default {\n'
+                '    type pulse\n'
+                '    fallback "sysdefault"\n'
+                '}\n'
+                'pcm.null { type null }\n'
+            )
+            try:
+                with open(asoundrc, 'w') as f:
+                    f.write(alsa_config)
+                self._add_log(
+                    f"✓ ALSA config written: {asoundrc}"
+                )
+            except Exception as e:
+                self._add_log(
+                    f"ALSA config warning: {e}", 'warning'
+                )
+
+        # Set audio environment variables
+        if audio_setup_ok:
+            env['PULSE_LATENCY_MSEC'] = '30'
+            # Tell FLdigi to use PulseAudio
+            env['AUDIODEV'] = 'pulse'
+
+        return env
+
     def start_fldigi(self):
         """
-        Launch FLdigi with Xvfb display support.
+        Launch FLdigi with Xvfb display and virtual audio.
 
-        Steps:
-            1. Determine display (or start Xvfb)
-            2. Build FLdigi command with XML-RPC flags
-            3. Launch FLdigi process
-            4. Wait for XML-RPC to become available
-            5. Start log monitoring
+        Sets up both display (Xvfb) and audio (PulseAudio)
+        before launching FLdigi to ensure it can start
+        successfully in a Docker container.
 
         Returns:
             tuple: (success: bool, message: str)
         """
         with self._process_lock:
-            # Already running
             if self._process and \
                     self._process.poll() is None:
                 return False, "FLdigi already running"
 
-            # Check binary
             binary = shutil.which('fldigi')
             if not binary:
                 return False, (
                     "FLdigi binary not found. "
-                    "Add 'fldigi' to Dockerfile and rebuild: "
-                    "docker compose build --no-cache"
+                    "Add 'fldigi' to Dockerfile and rebuild."
                 )
 
             try:
-                # Get or create display
+                # Step 1: Get or create display
                 display = self._get_display()
                 self._status['display'] = display
-                self._add_log(
-                    f"Using display: {display}"
-                )
+                self._add_log(f"Display: {display}")
 
-                # Build FLdigi command
+                # Step 2: Set up audio environment
+                self._add_log(
+                    "Setting up audio environment..."
+                )
+                env = self._setup_audio_environment()
+                env['DISPLAY'] = display
+
+                # Step 3: Build command
                 cmd = self._build_fldigi_command(
                     binary, display
                 )
-
                 self._add_log(
-                    f"Launching FLdigi: {' '.join(cmd)}"
+                    f"Launching: {' '.join(cmd)}"
                 )
 
-                # Build environment
-                env = os.environ.copy()
-                env['DISPLAY'] = display
-
-                # Launch FLdigi
+                # Step 4: Launch FLdigi
                 self._process = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
@@ -427,38 +540,39 @@ class FldigiManager:
                     f"(PID: {self._process.pid})"
                 )
 
-                # Start output monitor (detects early exit)
+                # Step 5: Start output monitor
                 self._start_output_monitor()
 
-                # Wait for XML-RPC to become available
+                # Step 6: Wait for XML-RPC
                 connect_timeout = self.config.get(
                     'connect_timeout', 30
                 )
                 self._add_log(
                     f"Waiting for XML-RPC "
-                    f"(timeout: {connect_timeout}s)..."
+                    f"(up to {connect_timeout}s)..."
                 )
 
                 connected = False
                 for attempt in range(connect_timeout // 2):
+                    import time
                     time.sleep(2)
 
-                    # Check if process already died
+                    # Check process is still alive
                     if self._process.poll() is not None:
+                        exit_code = self._process.poll()
                         return False, (
-                            "FLdigi exited immediately. "
-                            "Check logs for details. "
-                            "Ensure a display is available "
-                            "(Xvfb is required in Docker)."
+                            f"FLdigi exited (code {exit_code}). "
+                            "Check audio/display configuration. "
+                            "See plugin logs for details."
                         )
 
                     if self.rpc.connect():
                         connected = True
                         version = self.rpc.get_version()
                         self._status['version'] = version
-                        self._status['xmlrpc_connected'] = (
-                            True
-                        )
+                        self._status[
+                            'xmlrpc_connected'
+                        ] = True
                         self._add_log(
                             f"✓ XML-RPC connected: "
                             f"FLdigi {version}"
@@ -475,9 +589,8 @@ class FldigiManager:
                     return (
                         True,
                         "FLdigi started but XML-RPC not "
-                        "responding. Check FLdigi XML-RPC "
-                        "settings (Configure → XML-RPC, "
-                        "port 7362)."
+                        "responding yet. "
+                        "Check FLdigi XML-RPC settings."
                     )
 
                 return (
@@ -486,46 +599,13 @@ class FldigiManager:
                     f"(PID: {self._process.pid})"
                 )
 
-            except FileNotFoundError:
-                msg = (
-                    f"FLdigi binary not found at {binary}. "
-                    "Rebuild Docker image."
-                )
-                self._add_log(msg, 'error')
-                return False, msg
-
             except Exception as e:
                 msg = f"Failed to start FLdigi: {str(e)}"
                 self._add_log(msg, 'error')
+                import traceback
+                traceback.print_exc()
                 return False, msg
-
-    def _build_fldigi_command(self, binary, display):
-        """
-        Build the FLdigi launch command.
-
-        Args:
-            binary: Path to fldigi executable
-            display: X11 display string
-
-        Returns:
-            list: Command and arguments
-        """
-        cmd = [binary]
-
-        # XML-RPC server configuration
-        cmd.extend([
-            '--xmlrpc-server-address',
-            self.config.get('xmlrpc_host', 'localhost'),
-            '--xmlrpc-server-port',
-            str(self.config.get('xmlrpc_port', 7362)),
-        ])
-
-        # Dedicated config directory to avoid conflicts
-        # with any system-level FLdigi installation
-        cmd.extend(['--config-dir', self.fldigi_home])
-
-        return cmd
-
+                
     def _start_output_monitor(self):
         """
         Monitor FLdigi stdout in background thread.
