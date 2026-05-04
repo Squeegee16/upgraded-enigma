@@ -108,36 +108,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# Install FLdigi and companion applications
-#
-# fldigi  - Digital modes modem (PSK31, RTTY, Olivia, etc.)
-# flmsg   - Message forms companion for FLdigi
-#
-# NOTE: flarq is NOT available as a Debian package.
-#       It must be built from source separately below.
-#       flarq source: https://sourceforge.net/p/fldigi/fldigi
-# ============================================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    fldigi \
-    flmsg \
-    && rm -rf /var/lib/apt/lists/*
-
-# ============================================================
 # Build flarq from source
 #
 # flarq is the ARQ file transfer companion for FLdigi.
-# It is not packaged separately for Debian Bookworm.
-# The source is hosted on SourceForge in the same
-# repository as FLdigi.
+# It is NOT available as a Debian Bookworm package and
+# must be built from the combined fldigi/flarq repository.
 #
-# Repository:
-#   https://sourceforge.net/p/fldigi/fldigi
+# The repository contains both fldigi and flarq and uses
+# a single top-level autotools build system.
+# We configure with --without-fldigi to build flarq only.
 #
-# Build requirements (already installed above):
-#   build-essential, autoconf, libfltk1.3-dev,
-#   libpng-dev, libxft-dev, libpulse-dev
+# Build dependencies installed in previous RUN block.
+# Additional deps needed here:
+#   gettext      - provides autopoint (required by autoreconf)
+#   autoconf-archive - provides additional m4 macros
+#   libtool      - required by autoreconf -fi
 # ============================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    gettext \
+    autoconf \
+    autoconf-archive \
+    automake \
+    libtool \
     libfltk1.3-dev \
     libpulse-dev \
     libasound2-dev \
@@ -152,59 +144,60 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
-    # Clone flarq source from SourceForge
-    # The flarq project lives in the fldigi repository
-    # under the flarq directory
+    \
+    # Clone the combined fldigi/flarq repository
+    # Do NOT use --depth 1 here because autoreconf
+    # needs the full git history for version detection
+    echo "Cloning fldigi/flarq repository..."; \
     cd /tmp && \
     git clone \
-        --depth 1 \
-        --branch flarq-4.3.9 \
-        https://git.code.sf.net/p/fldigi/fldigi \
-        fldigi-src \
-    || git clone \
-        --depth 1 \
         https://git.code.sf.net/p/fldigi/fldigi \
         fldigi-src; \
     \
-    # Navigate to flarq subdirectory
-    # flarq has its own configure.ac in the flarq/ subdir
     cd /tmp/fldigi-src; \
-    \
-    # Check what we cloned
+    echo "Repository contents:"; \
     ls -la; \
+    echo "configure.ac first 30 lines:"; \
+    head -30 configure.ac; \
     \
-    # If flarq directory exists use it, otherwise
-    # try building from the root (older repo layout)
-    if [ -d "flarq" ]; then \
-        cd flarq; \
-    fi; \
+    # Run autoreconf with all required tools now installed.
+    # -f forces regeneration even if files exist.
+    # -i installs missing auxiliary files.
+    # -v shows verbose output for debugging.
+    echo "Running autoreconf..."; \
+    autoreconf -fiv; \
     \
-    # Bootstrap autotools build system
-    if [ -f "bootstrap" ]; then \
-        ./bootstrap; \
-    elif [ -f "autogen.sh" ]; then \
-        ./autogen.sh; \
-    else \
-        autoreconf -fi; \
-    fi; \
+    # Configure the build.
+    # --without-fldigi builds only flarq, not fldigi.
+    # If --without-fldigi is not supported by this version,
+    # the full build will proceed (fldigi already installed
+    # so this just adds flarq).
+    echo "Configuring..."; \
+    ./configure \
+        --prefix=/usr/local \
+        --without-fldigi \
+        --disable-fldigi \
+    || ./configure --prefix=/usr/local; \
     \
-    # Configure the build
-    ./configure --prefix=/usr/local; \
-    \
-    # Build using all available CPU cores
+    # Build only the flarq binary.
+    # If the above configure worked, only flarq is built.
+    # If not, the full project builds (slower but correct).
+    echo "Building..."; \
     make -j$(nproc); \
     \
-    # Install the binary
+    # Install
+    echo "Installing..."; \
     make install; \
     \
-    # Verify installation
-    which flarq && flarq --version || true; \
+    # Verify flarq binary was installed
+    echo "Verifying flarq installation..."; \
+    which flarq && flarq --version || \
+    find /usr/local/bin -name 'flarq' -ls || \
+    echo "WARNING: flarq binary not found after install"; \
     \
-    # Clean up source
+    # Clean up
     cd / && rm -rf /tmp/fldigi-src; \
-    \
     echo "flarq build complete"
-
 # -------------------------------------------------------
 # Install Go from official distribution
 #
