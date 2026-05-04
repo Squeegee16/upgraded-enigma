@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+
+{% block title %}FLdigi - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-wave-square"></i> FLdigi Digital Modes</h2>
+    <div class="btn-group">
+        <a href="{{ url_for('FLdigi.modem') }}" class="btn btn-primary">
+            <i class="fas fa-microphone"></i> Modem
+        </a>
+        <a href="{{ url_for('FLdigi.logbook') }}" class="btn btn-info">
+            <i class="fas fa-book"></i> Contacts
+        </a>
+        <a href="{{ url_for('FLdigi.settings') }}" class="btn btn-secondary">
+            <i class="fas fa-cog"></i> Settings
+        </a>
+    </div>
+</div>
+
+{% if not install_complete %}
+<div class="alert alert-warning">
+    <h5><i class="fas fa-exclamation-triangle"></i> FLdigi Not Installed</h5>
+    {% if install_error %}<p>{{ install_error }}</p>{% endif %}
+    <button class="btn btn-warning" id="install-btn" onclick="installFldigi()">
+        <i class="fas fa-download"></i> Install FLdigi
+    </button>
+    <div id="install-progress" class="mt-2" style="display:none;">
+        <div class="spinner-border spinner-border-sm me-2"></div>
+        Installing... this may take several minutes.
+    </div>
+</div>
+{% endif %}
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-info-circle"></i> FLdigi Status</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between">
+                        Process
+                        <span class="badge {% if status.process_running %}bg-success{% else %}bg-secondary{% endif %}">
+                            {{ 'Running' if status.process_running else 'Stopped' }}
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        XML-RPC
+                        <span class="badge {% if status.xmlrpc_connected %}bg-success{% else %}bg-danger{% endif %}">
+                            {{ 'Connected' if status.xmlrpc_connected else 'Disconnected' }}
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        Mode
+                        <strong>{{ status.mode or config.get('default_mode', 'N/A') }}</strong>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        Frequency
+                        {% if status.frequency %}
+                        <strong>{{ "%.3f"|format(status.frequency / 1000000) }} MHz</strong>
+                        {% else %}
+                        <span class="text-muted">N/A</span>
+                        {% endif %}
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        TX/RX
+                        <span class="badge {% if status.trx_status == 'tx' %}bg-danger{% else %}bg-success{% endif %}">
+                            {{ (status.trx_status or 'rx')|upper }}
+                        </span>
+                    </li>
+                    {% if status.version %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        Version
+                        <small class="text-muted">{{ status.version }}</small>
+                    </li>
+                    {% endif %}
+                </ul>
+
+                <div class="mt-3 d-grid gap-2">
+                    {% if status.xmlrpc_connected %}
+                    <button class="btn btn-danger btn-sm" onclick="stopFldigi()">
+                        <i class="fas fa-stop"></i> Stop FLdigi
+                    </button>
+                    {% if status.trx_status == 'tx' %}
+                    <button class="btn btn-warning btn-sm" onclick="abortTx()">
+                        <i class="fas fa-ban"></i> Abort TX
+                    </button>
+                    {% endif %}
+                    {% else %}
+                    <button class="btn btn-success btn-sm" onclick="connectFldigi()"
+                            {% if not install_complete %}disabled{% endif %}>
+                        <i class="fas fa-link"></i> Connect to FLdigi
+                    </button>
+                    <button class="btn btn-primary btn-sm" onclick="startFldigi()"
+                            {% if not install_complete %}disabled{% endif %}>
+                        <i class="fas fa-play"></i> Start FLdigi
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-broadcast-tower"></i> Mode Control</h5>
+            </div>
+            <div class="card-body">
+                <label class="form-label">Select Mode:</label>
+                <select class="form-select mb-3" id="mode-select"
+                        {% if not status.xmlrpc_connected %}disabled{% endif %}>
+                    {% for mode in modes %}
+                    <option value="{{ mode }}" {% if mode == status.mode %}selected{% endif %}>
+                        {{ mode }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <button class="btn btn-success w-100 mb-3" onclick="setMode()"
+                        {% if not status.xmlrpc_connected %}disabled{% endif %}>
+                    <i class="fas fa-check"></i> Set Mode
+                </button>
+
+                <label class="form-label">Frequency (Hz):</label>
+                <div class="input-group mb-3">
+                    <input type="number" class="form-control" id="freq-input"
+                           value="{{ status.frequency or config.get('default_frequency', 14070000) }}"
+                           {% if not status.xmlrpc_connected %}disabled{% endif %}>
+                    <button class="btn btn-outline-secondary" onclick="setFrequency()"
+                            {% if not status.xmlrpc_connected %}disabled{% endif %}>
+                        Set
+                    </button>
+                </div>
+
+                <div class="d-flex flex-wrap gap-1">
+                    <button class="btn btn-outline-primary btn-sm" onclick="quickFreq(14070000)">20m PSK</button>
+                    <button class="btn btn-outline-primary btn-sm" onclick="quickFreq(14080000)">20m RTTY</button>
+                    <button class="btn btn-outline-primary btn-sm" onclick="quickFreq(7040000)">40m PSK</button>
+                    <button class="btn btn-outline-primary btn-sm" onclick="quickFreq(3580000)">80m PSK</button>
+                    <button class="btn btn-outline-primary btn-sm" onclick="quickFreq(144144000)">2m</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-warning">
+                <h5 class="mb-0"><i class="fas fa-paper-plane"></i> Quick TX</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <textarea class="form-control" id="tx-text" rows="5"
+                              placeholder="Text to transmit..."
+                              {% if not status.xmlrpc_connected %}disabled{% endif %}></textarea>
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox"
+                           id="transmit-now" checked>
+                    <label class="form-check-label" for="transmit-now">
+                        Transmit immediately
+                    </label>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-warning flex-fill" onclick="sendText()"
+                            {% if not status.xmlrpc_connected %}disabled{% endif %}>
+                        <i class="fas fa-paper-plane"></i> Send
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="clearTx()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white d-flex justify-content-between">
+                <h6 class="mb-0"><i class="fas fa-terminal"></i> Plugin Log</h6>
+                <button class="btn btn-outline-light btn-sm" onclick="refreshLogs()">
+                    <i class="fas fa-sync"></i> Refresh
+                </button>
+            </div>
+            <div id="log-container"
+                 style="height:200px; overflow-y:auto; background:#1e1e1e;
+                        padding:8px; font-family:monospace; font-size:0.8rem;">
+                {% for log in logs %}
+                <div class="{% if log.level == 'error' %}text-danger{% elif log.level == 'warning' %}text-warning{% else %}text-success{% endif %}">
+                    <small>{{ log.timestamp[11:19] }}</small> {{ log.message }}
+                </div>
+                {% else %}
+                <div class="text-muted">No log entries</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index:11">
+    <div id="fldigi-toast" class="toast align-items-center text-white" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toast-msg">Done</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                    data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function showToast(msg, type) {
+    const el = document.getElementById('fldigi-toast');
+    document.getElementById('toast-msg').textContent = msg;
+    el.className = `toast align-items-center text-white bg-${type}`;
+    new bootstrap.Toast(el, {delay: 4000}).show();
+}
+
+function apiPost(url, data, cb) {
+    $.ajax({
+        url: url, method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data || {}),
+        success: cb,
+        error: () => showToast('Server error', 'danger')
+    });
+}
+
+function startFldigi() {
+    showToast('Starting FLdigi...', 'info');
+    apiPost('{{ url_for("FLdigi.api_start") }}', {}, function(data) {
+        showToast(
+            data.success ? 'FLdigi started!' : 'Failed: ' + data.message,
+            data.success ? 'success' : 'danger'
+        );
+        if (data.success) setTimeout(() => location.reload(), 3000);
+    });
+}
+
+function connectFldigi() {
+    showToast('Connecting to FLdigi...', 'info');
+    apiPost('{{ url_for("FLdigi.api_connect") }}', {}, function(data) {
+        showToast(
+            data.success ? data.message : 'Failed: ' + data.message,
+            data.success ? 'success' : 'warning'
+        );
+        if (data.success) setTimeout(() => location.reload(), 2000);
+    });
+}
+
+function stopFldigi() {
+    if (!confirm('Stop FLdigi?')) return;
+    apiPost('{{ url_for("FLdigi.api_stop") }}', {}, function(data) {
+        showToast(
+            data.success ? 'FLdigi stopped' : 'Failed',
+            data.success ? 'info' : 'danger'
+        );
+        if (data.success) setTimeout(() => location.reload(), 2000);
+    });
+}
+
+function setMode() {
+    const mode = document.getElementById('mode-select').value;
+    apiPost('{{ url_for("FLdigi.api_set_mode") }}', {mode: mode}, function(data) {
+        showToast(data.success ? `Mode: ${mode}` : 'Failed', data.success ? 'success' : 'danger');
+    });
+}
+
+function setFrequency() {
+    const freq = parseInt(document.getElementById('freq-input').value);
+    apiPost('{{ url_for("FLdigi.api_set_frequency") }}', {frequency: freq}, function(data) {
+        showToast(data.success ? data.message : 'Failed', data.success ? 'success' : 'danger');
+    });
+}
+
+function quickFreq(freq) {
+    document.getElementById('freq-input').value = freq;
+    setFrequency();
+}
+
+function sendText() {
+    const text = document.getElementById('tx-text').value;
+    const transmit = document.getElementById('transmit-now').checked;
+    if (!text.trim()) { showToast('Enter text to send', 'warning'); return; }
+    apiPost('{{ url_for("FLdigi.api_send_text") }}', {text: text, transmit: transmit}, function(data) {
+        showToast(data.success ? 'Text queued!' : 'Failed: ' + data.message,
+                  data.success ? 'success' : 'danger');
+    });
+}
+
+function clearTx() { document.getElementById('tx-text').value = ''; }
+
+function abortTx() {
+    apiPost('{{ url_for("FLdigi.api_abort") }}', {}, function(data) {
+        showToast('TX aborted', 'warning');
+        setTimeout(() => location.reload(), 1000);
+    });
+}
+
+function refreshLogs() {
+    $.get('{{ url_for("FLdigi.api_logs") }}?limit=50', function(data) {
+        const container = $('#log-container');
+        container.empty();
+        if (!data.logs || !data.logs.length) {
+            container.append('<div class="text-muted">No entries</div>');
+            return;
+        }
+        data.logs.forEach(function(log) {
+            const cls = log.level === 'error' ? 'text-danger'
+                      : log.level === 'warning' ? 'text-warning' : 'text-success';
+            container.append(`<div class="${cls}"><small>${log.timestamp.substring(11,19)}</small> ${log.message}</div>`);
+        });
+        container.scrollTop(container[0].scrollHeight);
+    });
+}
+
+function installFldigi() {
+    if (!confirm('Install FLdigi? This requires internet access.')) return;
+    document.getElementById('install-btn').disabled = true;
+    document.getElementById('install-progress').style.display = 'block';
+    $.ajax({
+        url: '{{ url_for("FLdigi.api_install") }}',
+        method: 'POST',
+        timeout: 600000,
+        success: function(data) {
+            if (data.success) {
+                showToast('FLdigi installed!', 'success');
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                showToast('Install failed: ' + data.message, 'danger');
+                document.getElementById('install-btn').disabled = false;
+                document.getElementById('install-progress').style.display = 'none';
+            }
+        },
+        error: function() {
+            showToast('Install error', 'danger');
+            document.getElementById('install-btn').disabled = false;
+            document.getElementById('install-progress').style.display = 'none';
+        }
+    });
+}
+
+$(document).ready(function() {
+    {% if status.xmlrpc_connected %}
+    setInterval(refreshLogs, 10000);
+    {% endif %}
+    const log = document.getElementById('log-container');
+    if (log) log.scrollTop = log.scrollHeight;
+});
+</script>
+{% endblock %}
