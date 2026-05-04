@@ -44,7 +44,26 @@ RUN python -m venv /opt/venv && \
     pip install --upgrade pip setuptools wheel && \
     pip install -r requirements.txt
 
-
+# ============================================================
+# Install virtual audio support for FLdigi in Docker.
+#
+# FLdigi requires audio I/O for digital mode modulation.
+# In Docker without real audio hardware we use:
+#   - ALSA null/dummy driver  (kernel module)
+#   - PulseAudio null sink    (virtual audio device)
+#
+# This allows FLdigi to start and XML-RPC to become
+# available. Real audio passthrough (from host) requires
+# additional docker-compose configuration.
+# ============================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pulseaudio \
+    pulseaudio-utils \
+    alsa-utils \
+    alsa-base \
+    libasound2 \
+    libasound2-plugins \
+    && rm -rf /var/lib/apt/lists/*
 # ============================================================
 # Stage 2: Runtime
 # ============================================================
