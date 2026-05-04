@@ -232,11 +232,10 @@ class SatDumpInstaller:
 
         try:
             # Install prerequisites
-            subprocess.run(
-                ['sudo', 'apt-get', 'install', '-y',
+            self._run_system_command(
+                self._sudo + ['sudo', 'apt-get', 'install', '-y',
                  'curl', 'apt-transport-https', 'gnupg'],
-                check=True,
-                capture_output=True
+                timeout=300
             )
 
             # Add SatDump repository key
