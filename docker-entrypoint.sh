@@ -317,6 +317,84 @@ else
     echo "    The plugin will retry when the page loads"
 fi
 # =================================================================
+# Start PulseAudio with a null sink for FLdigi audio
+# FLdigi requires an audio device to start. Without a real
+# sound card in Docker we create a virtual null sink.
+# This allows FLdigi to initialise and XML-RPC to start.
+# =================================================================
+echo -e "\n${YELLOW}[6c/7] Starting PulseAudio virtual audio...${NC}"
+
+# Kill any stale PulseAudio instance
+pulseaudio --kill 2>/dev/null || true
+rm -f /run/user/1000/pulse/pid 2>/dev/null || true
+rm -f /tmp/pulse-* 2>/dev/null || true
+
+# Start PulseAudio as a daemon with null output
+# --system=false  run as user daemon (not system-wide)
+# --exit-idle-time=-1  never exit due to inactivity
+# --log-level=error  suppress verbose ALSA warnings
+if command -v pulseaudio >/dev/null 2>&1; then
+    pulseaudio \
+        --start \
+        --log-target=syslog \
+        --log-level=error \
+        --exit-idle-time=-1 \
+        2>/dev/null
+
+    # Wait for PulseAudio to start
+    sleep 1
+
+    # Load the null sink module
+    # This creates a virtual audio device that accepts
+    # audio data without actually playing it
+    pactl load-module module-null-sink \
+        sink_name=fldigi_null \
+        sink_properties=device.description="FLdigi_Null_Sink" \
+        2>/dev/null && \
+        echo -e "${GREEN}  ✓ PulseAudio null sink created${NC}" || \
+        echo -e "${YELLOW}  ⚠ PulseAudio null sink failed${NC}"
+
+    # Set the null sink as default
+    pactl set-default-sink fldigi_null 2>/dev/null || true
+
+    echo -e "${GREEN}  ✓ PulseAudio started${NC}"
+else
+    echo -e "${YELLOW}  ⚠ PulseAudio not available${NC}"
+    echo "  FLdigi audio will be limited"
+fi
+
+# Create ALSA config to redirect to PulseAudio
+# This ensures ALSA applications (like FLdigi) use
+# PulseAudio as their backend automatically
+cat > /home/hamradio/.asoundrc << 'ASOUNDRC'
+# ALSA configuration redirecting to PulseAudio
+# This allows FLdigi to find an audio device via ALSA
+# even when no real hardware is present
+
+pcm.!default {
+    type pulse
+    fallback "sysdefault"
+    hint {
+        show on
+        description "Default ALSA Output (PulseAudio)"
+    }
+}
+
+ctl.!default {
+    type pulse
+    fallback "sysdefault"
+}
+
+# Null device fallback if PulseAudio is not available
+pcm.null {
+    type null
+}
+ASOUNDRC
+
+chmod 644 /home/hamradio/.asoundrc
+echo -e "${GREEN}  ✓ ALSA configured for PulseAudio${NC}"
+
+# =================================================================
 # Start Xvfb virtual display for GUI applications
 # FLdigi and QSSTV require an X11 display to launch.
 # Xvfb provides a virtual framebuffer with no real output.
