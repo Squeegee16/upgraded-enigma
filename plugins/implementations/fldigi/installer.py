@@ -610,12 +610,10 @@ class FldigiInstaller(BaseInstaller):
         Returns:
             bool: True if installed or already present
         """
-        # Already installed
         if self.is_installed():
             print("[FLdigi] ✓ Already installed")
             return True
 
-        # FLdigi already in PATH but no marker
         if shutil.which(self.FLDIGI_BINARY):
             version = self.get_version()
             self.write_install_marker('existing', version)
@@ -629,18 +627,13 @@ class FldigiInstaller(BaseInstaller):
         print("[FLdigi] Starting first-run installation")
         print("[FLdigi] ==========================================")
 
-        # -------------------------------------------------------
-        # Docker non-root: cannot install system packages
-        # -------------------------------------------------------
         if self.in_docker and not self.is_root:
             print(
-                "\n[FLdigi] =========================================="
+                "\n[FLdigi] ======================================"
             )
+            print("[FLdigi] DOCKER INSTALLATION REQUIRED")
             print(
-                "[FLdigi] DOCKER INSTALLATION REQUIRED"
-            )
-            print(
-                "[FLdigi] =========================================="
+                "[FLdigi] ======================================"
             )
             print(
                 "[FLdigi] FLdigi cannot be installed at "
@@ -651,9 +644,7 @@ class FldigiInstaller(BaseInstaller):
                 "Dockerfile and rebuild:"
             )
             print()
-            print(
-                "[FLdigi]   # Install FLdigi digital modes"
-            )
+            print("[FLdigi]   # Install FLdigi")
             print(
                 "[FLdigi]   RUN apt-get update && \\"
             )
@@ -667,35 +658,39 @@ class FldigiInstaller(BaseInstaller):
                 "[FLdigi]       flmsg \\"
             )
             print(
-                "[FLdigi]       flarq \\"
-            )
-            print(
-                "[FLdigi]       && rm -rf /var/lib/apt/lists/*"
+                "[FLdigi]       && rm -rf "
+                "/var/lib/apt/lists/*"
             )
             print()
             print(
-                "[FLdigi]   Then rebuild:"
+                "[FLdigi]   # flarq (optional ARQ transfers)"
             )
+            print(
+                "[FLdigi]   # Not packaged for Debian "
+                "Bookworm — build from source if needed:"
+            )
+            print(
+                "[FLdigi]   # https://sourceforge.net"
+                "/p/fldigi/fldigi"
+            )
+            print()
             print(
                 "[FLdigi]   docker compose build --no-cache"
             )
             print(
-                "[FLdigi] =========================================="
+                "[FLdigi] ======================================"
             )
             return False
 
-        # -------------------------------------------------------
         # Step 1: Python packages
-        # -------------------------------------------------------
         print("\n[FLdigi] Step 1: Python packages...")
         self.install_python_packages()
 
-        # -------------------------------------------------------
         # Step 2: Install FLdigi
-        # -------------------------------------------------------
         print(
             f"\n[FLdigi] Step 2: Installing FLdigi "
-            f"(pkg mgr: {self._package_manager or 'none'})..."
+            f"(pkg mgr: "
+            f"{self._package_manager or 'none'})..."
         )
         success = False
 
@@ -708,7 +703,7 @@ class FldigiInstaller(BaseInstaller):
 
         if not success:
             print(
-                "[FLdigi] Package manager install failed, "
+                "[FLdigi] Package manager failed, "
                 "trying source build..."
             )
             success = self.build_from_source()
@@ -720,6 +715,119 @@ class FldigiInstaller(BaseInstaller):
             )
             return False
 
+        version = self.get_version()
+        self.write_install_marker(
+            self._package_manager or 'source',
+            version
+        )
+
+        print("\n[FLdigi] ==========================================")
+        print("[FLdigi] ✓ Installation complete!")
+        if version:
+            print(f"[FLdigi]   Version: {version}")
+
+        # Check for optional companions
+        if shutil.which('flmsg'):
+            print("[FLdigi]   flmsg: ✓ available")
+        if shutil.which('flarq'):
+            print("[FLdigi]   flarq: ✓ available")
+        else:
+            print(
+                "[FLdigi]   flarq: not installed "
+                "(optional — ARQ file transfers only)"
+            )
+
+        print("[FLdigi] ==========================================\n")
+
+        return True
+
+    def install_via_apt(self):
+        """
+        Install FLdigi via apt-get.
+
+        Installs fldigi and flmsg.
+        flarq is not packaged for Debian Bookworm and
+        must be built from source if required.
+
+        Returns:
+            bool: True if fldigi installed successfully
+        """
+        print("[FLdigi] Installing via apt-get...")
+
+        if not shutil.which('apt-get'):
+            print("[FLdigi] apt-get not available")
+            return False
+
+        if self.in_docker and not self.is_root:
+            print(
+                "[FLdigi] INFO: Cannot apt-get in Docker "
+                "as non-root. Add to Dockerfile:"
+            )
+            print(
+                "[FLdigi] INFO:   RUN apt-get update && "
+                "apt-get install -y fldigi flmsg"
+            )
+            return False
+
+        # Update package list
+        print("[FLdigi] Updating package list...")
+        ok, _, stderr = self._run_system_command(
+            self._sudo + ['apt-get', 'update', '-q'],
+            timeout=120
+        )
+        if not ok:
+            print(
+                f"[FLdigi] apt-get update failed: "
+                f"{stderr[:150]}"
+            )
+            return False
+
+        # Install fldigi (required)
+        print("[FLdigi] Installing fldigi...")
+        ok, _, stderr = self._run_system_command(
+            self._sudo + [
+                'apt-get', 'install', '-y', 'fldigi'
+            ],
+            timeout=300
+        )
+
+        if not ok:
+            print(
+                f"[FLdigi] fldigi install failed: "
+                f"{stderr[:200]}"
+            )
+            return False
+
+        print("[FLdigi] ✓ fldigi installed")
+
+        # Install flmsg (optional companion)
+        ok, _, stderr = self._run_system_command(
+            self._sudo + [
+                'apt-get', 'install', '-y', 'flmsg'
+            ],
+            timeout=120
+        )
+        if ok:
+            print("[FLdigi] ✓ flmsg installed")
+        else:
+            print(
+                "[FLdigi] INFO: flmsg not available "
+                "(optional)"
+            )
+
+        # flarq is not in Debian Bookworm repositories
+        # Log a note but do not fail
+        print(
+            "[FLdigi] INFO: flarq is not packaged for "
+            "Debian Bookworm."
+        )
+        print(
+            "[FLdigi] INFO: Build from source if needed: "
+            "https://sourceforge.net/p/fldigi/fldigi"
+        )
+
+        return True
+       
         # Write marker
         version = self.get_version()
         self.write_install_marker(
