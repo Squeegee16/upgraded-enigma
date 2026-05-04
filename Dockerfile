@@ -110,6 +110,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpng-dev \
     libxft-dev \
     libudev-dev \
+    xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
