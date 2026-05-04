@@ -316,7 +316,33 @@ else
     echo "    (It may still be starting — this is normal)"
     echo "    The plugin will retry when the page loads"
 fi
+# =================================================================
+# Start Xvfb virtual display for GUI applications
+# FLdigi and QSSTV require an X11 display to launch.
+# Xvfb provides a virtual framebuffer with no real output.
+# =================================================================
+echo -e "\n${YELLOW}[6b/7] Starting virtual display (Xvfb)...${NC}"
 
+# Kill any existing Xvfb on display :99
+pkill -f "Xvfb :99" 2>/dev/null || true
+rm -f /tmp/.X99-lock 2>/dev/null || true
+
+# Start Xvfb on display :99
+Xvfb :99 -screen 0 1024x768x24 -nolisten tcp &
+XVFB_PID=$!
+
+# Wait briefly for Xvfb to initialise
+sleep 1
+
+# Verify Xvfb started
+if kill -0 $XVFB_PID 2>/dev/null; then
+    echo -e "${GREEN}  ✓ Xvfb started (PID: $XVFB_PID, DISPLAY=:99)${NC}"
+    export DISPLAY=:99
+else
+    echo -e "${YELLOW}  ⚠ Xvfb failed to start${NC}"
+    echo "  GUI applications (FLdigi, QSSTV) will not work"
+    echo "  without a display server."
+fi
 # =================================================================
 # [7/7] Starting application
 # =================================================================
