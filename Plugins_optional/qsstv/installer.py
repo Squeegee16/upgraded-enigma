@@ -325,11 +325,9 @@ class QSStvInstaller:
 
             # Install
             print("[QSSTV] Installing...")
-            subprocess.run(
-                ['sudo', 'make', 'install'],
-                check=True,
-                capture_output=True,
-                cwd=cmake_dir
+            self._run_system_command(
+                self._sudo + ['apt-get', ...],
+                timeout=300
             )
 
             print("[QSSTV] ✓ Built and installed from source")
