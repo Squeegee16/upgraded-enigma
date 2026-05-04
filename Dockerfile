@@ -74,11 +74,14 @@ ENV PYTHONUNBUFFERED=1 \
     # PATH includes Go bin, hamradio local bin, and venv
     PATH="/usr/local/go/bin:/home/hamradio/.local/bin:/home/hamradio/go/bin:/opt/venv/bin:$PATH"
 
-# -------------------------------------------------------
-# Install runtime system packages
-# NOTE: golang-go is NOT installed here — it is too old.
-#       Go is installed from official source below.
-# -------------------------------------------------------
+# ============================================================
+# Install runtime system dependencies
+#
+# IMPORTANT: Comments must NEVER appear after package names
+# on the same line in apt-get install blocks.
+# Each comment must be on its own line BEFORE the package.
+# Blank lines between packages also break the RUN command.
+# ============================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     curl \
@@ -99,12 +102,108 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     apt-transport-https \
     usbutils \
-        # FLdigi digital modes application
-    fldigi \
-    # FLdigi companion applications (optional)
-    flmsg \
-    flarq \
+    libpng-dev \
+    libxft-dev \
+    libudev-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# Install FLdigi and companion applications
+#
+# fldigi  - Digital modes modem (PSK31, RTTY, Olivia, etc.)
+# flmsg   - Message forms companion for FLdigi
+#
+# NOTE: flarq is NOT available as a Debian package.
+#       It must be built from source separately below.
+#       flarq source: https://sourceforge.net/p/fldigi/fldigi
+# ============================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fldigi \
+    flmsg \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# Build flarq from source
+#
+# flarq is the ARQ file transfer companion for FLdigi.
+# It is not packaged separately for Debian Bookworm.
+# The source is hosted on SourceForge in the same
+# repository as FLdigi.
+#
+# Repository:
+#   https://sourceforge.net/p/fldigi/fldigi
+#
+# Build requirements (already installed above):
+#   build-essential, autoconf, libfltk1.3-dev,
+#   libpng-dev, libxft-dev, libpulse-dev
+# ============================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libfltk1.3-dev \
+    libpulse-dev \
+    libasound2-dev \
+    libsamplerate-dev \
+    libsndfile1-dev \
+    portaudio19-dev \
+    libxinerama-dev \
+    libxfixes-dev \
+    libxcursor-dev \
+    libfontconfig1-dev \
+    libjpeg-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    # Clone flarq source from SourceForge
+    # The flarq project lives in the fldigi repository
+    # under the flarq directory
+    cd /tmp && \
+    git clone \
+        --depth 1 \
+        --branch flarq-4.3.9 \
+        https://git.code.sf.net/p/fldigi/fldigi \
+        fldigi-src \
+    || git clone \
+        --depth 1 \
+        https://git.code.sf.net/p/fldigi/fldigi \
+        fldigi-src; \
+    \
+    # Navigate to flarq subdirectory
+    # flarq has its own configure.ac in the flarq/ subdir
+    cd /tmp/fldigi-src; \
+    \
+    # Check what we cloned
+    ls -la; \
+    \
+    # If flarq directory exists use it, otherwise
+    # try building from the root (older repo layout)
+    if [ -d "flarq" ]; then \
+        cd flarq; \
+    fi; \
+    \
+    # Bootstrap autotools build system
+    if [ -f "bootstrap" ]; then \
+        ./bootstrap; \
+    elif [ -f "autogen.sh" ]; then \
+        ./autogen.sh; \
+    else \
+        autoreconf -fi; \
+    fi; \
+    \
+    # Configure the build
+    ./configure --prefix=/usr/local; \
+    \
+    # Build using all available CPU cores
+    make -j$(nproc); \
+    \
+    # Install the binary
+    make install; \
+    \
+    # Verify installation
+    which flarq && flarq --version || true; \
+    \
+    # Clean up source
+    cd / && rm -rf /tmp/fldigi-src; \
+    \
+    echo "flarq build complete"
 
 # -------------------------------------------------------
 # Install Go from official distribution
