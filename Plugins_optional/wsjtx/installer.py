@@ -3,26 +3,25 @@ WSJT-X Installer
 =================
 Handles first-run installation of WSJT-X and dependencies.
 
-WSJT-X Installation Methods:
-    1. apt-get (Debian/Ubuntu) - Recommended
-       Installs wsjtx package from official repos
-    2. dnf/yum (RedHat/Fedora/CentOS)
-    3. Flatpak (Universal Linux)
-       flatpak install wsjtx
-    4. AppImage (Direct download from WSJT-X)
-       Downloaded from physics.princeton.edu
+Docker Deployment Notes:
+    WSJT-X is a system application that requires root to
+    install. In Docker the runtime user (hamradio, UID 1000)
+    cannot run apt-get or sudo.
 
-Python Dependencies:
-    - requests: HTTP client
-    - psutil: Process management
+    WSJT-X MUST be installed in the Dockerfile at build time.
+    Add to Dockerfile before USER hamradio:
 
-UDP Communication:
-    WSJT-X uses Python struct and socket modules for
-    UDP communication - no extra packages required.
+        RUN apt-get update && apt-get install -y wsjtx
 
-Note:
-    WSJT-X requires a sound card and radio interface.
-    For testing, it can run in demo mode without hardware.
+    This installer detects Docker and logs clear instructions
+    rather than attempting a doomed runtime install.
+
+WSJT-X Installation Methods (outside Docker):
+    1. apt-get (Debian/Ubuntu)
+    2. dnf (Fedora/RHEL)
+    3. pacman + yay AUR (Arch Linux)
+    4. Flatpak from Flathub
+    5. AppImage direct download
 
 Source: https://github.com/WSJTX/wsjtx
 Download: https://physics.princeton.edu/pulsar/k1jt/wsjtx.html
@@ -35,19 +34,97 @@ import shutil
 import platform
 import subprocess
 import urllib.request
-from pathlib import Path
+import traceback
+from datetime import datetime
+
+try:
+    from plugins.implementations.base_installer import (
+        BaseInstaller
+    )
+except ImportError:
+    class BaseInstaller:
+        """Minimal inline fallback for BaseInstaller."""
+
+        def __init__(self):
+            try:
+                self.is_root = (os.getuid() == 0)
+            except AttributeError:
+                self.is_root = False
+
+            self.sudo_available = (
+                shutil.which('sudo') is not None
+            )
+            self._sudo = (
+                []
+                if (self.is_root or not self.sudo_available)
+                else ['sudo']
+            )
+            self.in_docker = (
+                os.environ.get(
+                    'PLUGIN_SKIP_PIP_INSTALL', ''
+                ).lower() == 'true' or
+                os.path.exists('/.dockerenv')
+            )
+
+        def pip_install(self, package):
+            if self.in_docker:
+                return True
+            try:
+                subprocess.run(
+                    [sys.executable, '-m', 'pip',
+                     'install', '--quiet', package],
+                    check=True,
+                    capture_output=True,
+                    timeout=120
+                )
+                return True
+            except Exception:
+                return False
+
+        def install_python_packages(self, packages):
+            failed = []
+            for pkg in packages:
+                if not self.pip_install(pkg):
+                    failed.append(pkg)
+            return len(packages) - len(failed), failed
+
+        def write_marker(self, path, extra_data=None):
+            data = {
+                'installed': True,
+                'timestamp': datetime.utcnow().isoformat(),
+                'in_docker': self.in_docker,
+            }
+            if extra_data and isinstance(extra_data, dict):
+                data.update(extra_data)
+            try:
+                marker_dir = os.path.dirname(path)
+                if marker_dir:
+                    os.makedirs(marker_dir, exist_ok=True)
+                with open(path, 'w') as f:
+                    json.dump(data, f, indent=2)
+            except Exception as e:
+                print(f"[WSJTX] Marker write error: {e}")
+
+        def read_marker(self, path):
+            if not os.path.exists(path):
+                return {}
+            try:
+                with open(path, 'r') as f:
+                    return json.load(f)
+            except Exception:
+                return {}
 
 
-class WSJTXInstaller:
+class WSJTXInstaller(BaseInstaller):
     """
     Manages WSJT-X installation and verification.
 
-    Supports multiple installation methods and tracks
-    installation state via a JSON marker file to prevent
-    repeated installation on subsequent runs.
+    Extends BaseInstaller for Docker-aware handling.
+    In Docker as non-root, all system installs are
+    skipped with clear Dockerfile instructions logged.
     """
 
-    # Installation marker file
+    # Installation state marker
     INSTALL_MARKER = os.path.join(
         os.path.dirname(__file__),
         '.installed'
@@ -61,38 +138,36 @@ class WSJTXInstaller:
         'https://physics.princeton.edu/pulsar/k1jt/'
     )
 
-    # Required Python packages for the plugin
+    # Flathub application ID
+    FLATPAK_APP_ID = 'org.physics.wsjtx'
+
+    # Required Python packages
     REQUIRED_PACKAGES = [
         'requests',
         'psutil',
     ]
 
-    # Package names per package manager
-    PACKAGES = {
-        'apt-get': ['wsjtx'],
-        'dnf': ['wsjtx'],
-        'yum': ['wsjtx'],
-        'pacman': ['wsjtx'],
-        'zypper': ['wsjtx'],
-    }
-
     def __init__(self):
         """
-        Initialize installer with system detection.
-
-        Detects available package managers and the current
-        system architecture for download selection.
+        Initialise installer with environment detection.
         """
-        self.plugin_dir = os.path.dirname(__file__)
-        self.package_manager = self._detect_package_manager()
-        self.arch = platform.machine()
-        self.wsjtx_binary_path = shutil.which(self.WSJTX_BINARY)
+        super().__init__()
+
+        self._package_manager = (
+            self._detect_package_manager()
+        )
+        self._arch = platform.machine()
+        self.wsjtx_binary_path = shutil.which(
+            self.WSJTX_BINARY
+        )
 
         print(
-            f"[WSJTX] Package manager: "
-            f"{self.package_manager or 'not found'}"
+            f"[WSJTX] Installer init | "
+            f"Docker: {self.in_docker} | "
+            f"Root: {self.is_root} | "
+            f"sudo: {self.sudo_available} | "
+            f"pkg mgr: {self._package_manager or 'none'}"
         )
-        print(f"[WSJTX] Architecture: {self.arch}")
 
     def _detect_package_manager(self):
         """
@@ -101,277 +176,338 @@ class WSJTXInstaller:
         Returns:
             str: Package manager name or None
         """
-        for manager in ['apt-get', 'dnf', 'yum', 'pacman', 'zypper']:
-            if shutil.which(manager):
-                return manager
+        for mgr in [
+            'apt-get', 'dnf', 'yum', 'pacman', 'zypper'
+        ]:
+            if shutil.which(mgr):
+                return mgr
         return None
 
-    def is_installed(self):
+    def _run_system_command(self, cmd, timeout=300):
         """
-        Check if WSJT-X is installed and marker exists.
+        Run a system command safely.
+
+        Handles FileNotFoundError (missing sudo or binary)
+        without raising an unhandled exception.
+
+        Args:
+            cmd: Command list to execute
+            timeout: Maximum seconds to wait
 
         Returns:
-            bool: True if WSJT-X is available
-        """
-        if not os.path.exists(self.INSTALL_MARKER):
-            return False
-
-        # Check binary availability
-        return shutil.which(self.WSJTX_BINARY) is not None
-
-    def is_running(self):
-        """
-        Check if WSJT-X process is currently running.
-
-        Returns:
-            bool: True if WSJT-X process is active
+            tuple: (success: bool, stdout: str, stderr: str)
         """
         try:
             result = subprocess.run(
-                ['pgrep', '-x', self.WSJTX_BINARY],
+                cmd,
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=timeout
             )
-            return result.returncode == 0
-        except Exception:
+            return (
+                result.returncode == 0,
+                result.stdout or '',
+                result.stderr or ''
+            )
+        except FileNotFoundError as e:
+            return (
+                False, '',
+                f"Command not found: {cmd[0]} — {e}"
+            )
+        except subprocess.TimeoutExpired:
+            return False, '', f"Timed out after {timeout}s"
+        except Exception as e:
+            return False, '', str(e)
+
+    def is_installed(self):
+        """
+        Check if WSJT-X is installed.
+
+        Returns:
+            bool: True if marker exists and binary found
+        """
+        if not os.path.exists(self.INSTALL_MARKER):
             return False
+        return shutil.which(self.WSJTX_BINARY) is not None
 
     def install_python_packages(self):
         """
-        Install required Python packages via pip.
+        Install required Python packages.
 
         Returns:
-            bool: True if all packages installed
+            bool: True if all packages available
         """
-        print("[WSJTX] Installing Python packages...")
-        failed = []
-
-        for package in self.REQUIRED_PACKAGES:
-            try:
-                subprocess.run(
-                    [sys.executable, '-m', 'pip',
-                     'install', '--quiet', package],
-                    check=True,
-                    capture_output=True
-                )
-                print(f"[WSJTX] ✓ {package}")
-            except subprocess.CalledProcessError as e:
-                print(f"[WSJTX] WARNING: {package} failed: {e}")
-                failed.append(package)
-
+        print("[WSJTX] Checking Python packages...")
+        available, failed = super().install_python_packages(
+            self.REQUIRED_PACKAGES
+        )
+        if failed and self.in_docker:
+            print(
+                f"[WSJTX] INFO: Add to requirements.txt: "
+                f"{', '.join(failed)}"
+            )
         return len(failed) == 0
 
-    def install_via_apt(self):
+    def _install_via_apt(self):
         """
         Install WSJT-X via apt-get.
 
-        On some Debian/Ubuntu systems the wsjtx package
-        may be in the 'hamradio' section or require
-        additional repositories.
+        Uses self._sudo prefix which is empty for root,
+        ['sudo'] for non-root with sudo, or [] for
+        non-root without sudo (Docker).
 
         Returns:
             bool: True if installation successful
         """
         print("[WSJTX] Installing via apt-get...")
 
-        try:
-            # Update package list
-            subprocess.run(
-                ['sudo', 'apt-get', 'update', '-q'],
-                check=True,
-                capture_output=True
-            )
+        if not shutil.which('apt-get'):
+            print("[WSJTX] apt-get not available")
+            return False
 
-            # Attempt direct installation
-            subprocess.run(
-                ['sudo', 'apt-get', 'install', '-y', 'wsjtx'],
-                check=True,
-                capture_output=True
+        if self.in_docker and not self.is_root:
+            print(
+                "[WSJTX] INFO: Cannot apt-get in Docker "
+                "as non-root. Add to Dockerfile:"
             )
+            print(
+                "[WSJTX] INFO:   RUN apt-get update && "
+                "apt-get install -y wsjtx"
+            )
+            return False
 
+        # Update package list
+        ok, _, stderr = self._run_system_command(
+            self._sudo + ['apt-get', 'update', '-q'],
+            timeout=120
+        )
+        if not ok:
+            print(
+                f"[WSJTX] apt-get update failed: "
+                f"{stderr[:150]}"
+            )
+            return False
+
+        # Install WSJT-X
+        ok, _, stderr = self._run_system_command(
+            self._sudo + [
+                'apt-get', 'install', '-y', 'wsjtx'
+            ],
+            timeout=300
+        )
+
+        if ok:
             print("[WSJTX] ✓ Installed via apt-get")
             return True
 
-        except subprocess.CalledProcessError:
-            print("[WSJTX] apt install failed, trying alternatives...")
-            return self._install_via_flatpak()
+        print(
+            f"[WSJTX] apt-get failed: {stderr[:200]}"
+        )
+        # Fall through to Flatpak
+        return self._install_via_flatpak()
 
-    def install_via_dnf(self):
+    def _install_via_dnf(self):
         """
-        Install WSJT-X via dnf package manager.
+        Install WSJT-X via dnf (Fedora/RHEL).
 
         Returns:
             bool: True if installation successful
         """
         print("[WSJTX] Installing via dnf...")
 
-        try:
-            # Enable ham radio repo if needed
-            subprocess.run(
-                ['sudo', 'dnf', 'install', '-y', 'wsjtx'],
-                check=True,
-                capture_output=True
+        if not shutil.which('dnf'):
+            return False
+
+        if self.in_docker and not self.is_root:
+            print(
+                "[WSJTX] INFO: Add to Dockerfile: "
+                "RUN dnf install -y wsjtx"
             )
+            return False
+
+        ok, _, stderr = self._run_system_command(
+            self._sudo + ['dnf', 'install', '-y', 'wsjtx'],
+            timeout=300
+        )
+
+        if ok:
             print("[WSJTX] ✓ Installed via dnf")
             return True
-        except subprocess.CalledProcessError:
-            print("[WSJTX] dnf install failed, trying Flatpak...")
-            return self._install_via_flatpak()
 
-    def install_via_pacman(self):
+        print(f"[WSJTX] dnf failed: {stderr[:200]}")
+        return self._install_via_flatpak()
+
+    def _install_via_pacman(self):
         """
         Install WSJT-X via pacman (Arch Linux).
-
-        Tries AUR via yay if direct pacman fails.
 
         Returns:
             bool: True if installation successful
         """
         print("[WSJTX] Installing via pacman...")
 
-        try:
-            subprocess.run(
-                ['sudo', 'pacman', '-S', '--noconfirm', 'wsjtx'],
-                check=True,
-                capture_output=True
+        if not shutil.which('pacman'):
+            return False
+
+        if self.in_docker and not self.is_root:
+            print(
+                "[WSJTX] INFO: Add to Dockerfile: "
+                "RUN pacman -S --noconfirm wsjtx"
             )
+            return False
+
+        ok, _, stderr = self._run_system_command(
+            self._sudo + [
+                'pacman', '-S', '--noconfirm', 'wsjtx'
+            ],
+            timeout=300
+        )
+
+        if ok:
             print("[WSJTX] ✓ Installed via pacman")
             return True
-        except subprocess.CalledProcessError:
-            # Try AUR via yay
-            if shutil.which('yay'):
-                try:
-                    subprocess.run(
-                        ['yay', '-S', '--noconfirm', 'wsjtx'],
-                        check=True,
-                        capture_output=True
-                    )
-                    print("[WSJTX] ✓ Installed via yay (AUR)")
-                    return True
-                except subprocess.CalledProcessError:
-                    pass
 
-            return self._install_via_flatpak()
+        # Try AUR via yay
+        if shutil.which('yay'):
+            ok, _, stderr = self._run_system_command(
+                ['yay', '-S', '--noconfirm', 'wsjtx'],
+                timeout=300
+            )
+            if ok:
+                print("[WSJTX] ✓ Installed via yay (AUR)")
+                return True
+
+        return self._install_via_flatpak()
 
     def _install_via_flatpak(self):
         """
-        Install WSJT-X via Flatpak.
+        Install WSJT-X via Flatpak from Flathub.
 
-        Flatpak provides a universal Linux installation
-        method that works across distributions.
+        Creates a wrapper script at ~/.local/bin/wsjtx
+        so the plugin can launch WSJT-X normally.
 
         Returns:
             bool: True if installation successful
         """
-        print("[WSJTX] Trying Flatpak installation...")
+        print("[WSJTX] Installing via Flatpak...")
 
-        # Check if flatpak is available
         if not shutil.which('flatpak'):
             print("[WSJTX] Flatpak not available")
             return self._install_appimage()
 
-        try:
-            # Add Flathub if not already added
-            subprocess.run(
-                ['flatpak', 'remote-add', '--if-not-exists',
-                 'flathub',
-                 'https://flathub.org/repo/flathub.flatpakrepo'],
-                check=True,
-                capture_output=True
+        # Add Flathub remote
+        self._run_system_command(
+            [
+                'flatpak', 'remote-add',
+                '--if-not-exists', 'flathub',
+                'https://flathub.org/repo/flathub.flatpakrepo'
+            ],
+            timeout=30
+        )
+
+        # Install WSJT-X
+        ok, _, stderr = self._run_system_command(
+            [
+                'flatpak', 'install',
+                '-y', 'flathub', self.FLATPAK_APP_ID
+            ],
+            timeout=300
+        )
+
+        if not ok:
+            print(
+                f"[WSJTX] Flatpak failed: {stderr[:200]}"
             )
-
-            # Install WSJT-X from Flathub
-            subprocess.run(
-                ['flatpak', 'install', '-y', 'flathub',
-                 'org.physics.wsjtx'],
-                check=True,
-                capture_output=True,
-                timeout=300
-            )
-
-            # Create wrapper script
-            wrapper_path = os.path.expanduser('~/.local/bin/wsjtx')
-            os.makedirs(os.path.dirname(wrapper_path), exist_ok=True)
-
-            wrapper_content = (
-                '#!/bin/bash\n'
-                'exec flatpak run org.physics.wsjtx "$@"\n'
-            )
-
-            with open(wrapper_path, 'w') as f:
-                f.write(wrapper_content)
-
-            os.chmod(wrapper_path, 0o755)
-
-            print("[WSJTX] ✓ Installed via Flatpak")
-            return True
-
-        except subprocess.CalledProcessError as e:
-            print(f"[WSJTX] Flatpak failed: {e}")
             return self._install_appimage()
+
+        # Create wrapper script
+        wrapper_dir = os.path.expanduser('~/.local/bin')
+        os.makedirs(wrapper_dir, exist_ok=True)
+        wrapper_path = os.path.join(wrapper_dir, 'wsjtx')
+
+        try:
+            with open(wrapper_path, 'w') as f:
+                f.write(
+                    '#!/bin/bash\n'
+                    f'exec flatpak run '
+                    f'{self.FLATPAK_APP_ID} "$@"\n'
+                )
+            os.chmod(wrapper_path, 0o755)
+            print(
+                f"[WSJTX] ✓ Flatpak wrapper: "
+                f"{wrapper_path}"
+            )
+        except Exception as e:
+            print(
+                f"[WSJTX] Wrapper error (non-fatal): {e}"
+            )
+
+        print("[WSJTX] ✓ Installed via Flatpak")
+        return True
 
     def _install_appimage(self):
         """
         Download and install WSJT-X AppImage.
 
-        Downloads the AppImage from the official WSJT-X
-        distribution site and sets it up as a runnable
-        application with a wrapper script.
+        Downloads the AppImage for the current architecture
+        and creates a wrapper script.
 
         Returns:
             bool: True if installation successful
         """
-        print("[WSJTX] Downloading WSJT-X AppImage...")
+        print("[WSJTX] Downloading AppImage...")
 
         try:
-            # Determine architecture for download
-            arch = 'x86_64' if self.arch == 'x86_64' else 'aarch64'
-
-            # AppImage URL pattern
-            # Check actual URL from official site
+            arch = 'x86_64' if self._arch == 'x86_64' \
+                else 'aarch64'
             appimage_url = (
                 f"{self.WSJTX_DOWNLOAD_BASE}"
                 f"wsjtx_2.7.0_Linux_{arch}.AppImage"
             )
 
-            # Download directory
-            install_dir = os.path.expanduser('~/.local/share/wsjtx')
+            install_dir = os.path.expanduser(
+                '~/.local/share/wsjtx'
+            )
             os.makedirs(install_dir, exist_ok=True)
-
             appimage_path = os.path.join(
                 install_dir, 'wsjtx.AppImage'
             )
 
-            print(f"[WSJTX] Downloading from {appimage_url}...")
-            urllib.request.urlretrieve(appimage_url, appimage_path)
-
-            # Make executable
+            print(
+                f"[WSJTX] Downloading from {appimage_url}"
+            )
+            urllib.request.urlretrieve(
+                appimage_url, appimage_path
+            )
             os.chmod(appimage_path, 0o755)
 
-            # Create wrapper script in PATH
+            # Create wrapper script
             wrapper_dir = os.path.expanduser('~/.local/bin')
             os.makedirs(wrapper_dir, exist_ok=True)
-
             wrapper_path = os.path.join(wrapper_dir, 'wsjtx')
-            wrapper_content = (
-                f'#!/bin/bash\n'
-                f'exec "{appimage_path}" "$@"\n'
-            )
 
             with open(wrapper_path, 'w') as f:
-                f.write(wrapper_content)
-
+                f.write(
+                    f'#!/bin/bash\n'
+                    f'exec "{appimage_path}" "$@"\n'
+                )
             os.chmod(wrapper_path, 0o755)
 
             print(
-                f"[WSJTX] ✓ AppImage installed: {appimage_path}"
+                f"[WSJTX] ✓ AppImage installed: "
+                f"{appimage_path}"
             )
             return True
 
         except Exception as e:
-            print(f"[WSJTX] AppImage install failed: {e}")
-            print("[WSJTX] Please install WSJT-X manually:")
-            print("[WSJTX] https://physics.princeton.edu/pulsar/k1jt/wsjtx.html")
+            print(
+                f"[WSJTX] AppImage failed: {e}"
+            )
+            print(
+                "[WSJTX] Manual install: "
+                "https://physics.princeton.edu/"
+                "pulsar/k1jt/wsjtx.html"
+            )
             return False
 
     def get_version(self):
@@ -384,7 +520,6 @@ class WSJTXInstaller:
         binary = shutil.which(self.WSJTX_BINARY)
         if not binary:
             return None
-
         try:
             result = subprocess.run(
                 [binary, '--version'],
@@ -392,64 +527,45 @@ class WSJTXInstaller:
                 text=True,
                 timeout=5
             )
-            if result.returncode == 0:
-                return result.stdout.strip()
+            output = (result.stdout + result.stderr).strip()
+            return output[:50] if output else 'installed'
         except Exception:
-            pass
-        return None
+            return 'installed'
 
     def write_install_marker(self, method, version=None):
-        """
-        Write installation marker with metadata.
-
-        Args:
-            method: Installation method used
-            version: WSJT-X version string
-        """
-        marker_data = {
-            'installed': True,
-            'method': method,
-            'version': version,
-            'platform': platform.platform(),
-            'arch': self.arch,
-            'binary_path': shutil.which(self.WSJTX_BINARY)
-        }
-
-        try:
-            with open(self.INSTALL_MARKER, 'w') as f:
-                json.dump(marker_data, f, indent=2)
-            print("[WSJTX] ✓ Installation marker written")
-        except Exception as e:
-            print(f"[WSJTX] WARNING: Marker write failed: {e}")
+        """Write installation marker."""
+        self.write_marker(
+            self.INSTALL_MARKER,
+            extra_data={
+                'method': method,
+                'version': version,
+                'binary': shutil.which(self.WSJTX_BINARY),
+                'platform': platform.platform(),
+                'arch': self._arch,
+            }
+        )
 
     def get_install_info(self):
-        """
-        Read installation marker data.
-
-        Returns:
-            dict: Installation details or empty dict
-        """
-        if not os.path.exists(self.INSTALL_MARKER):
-            return {}
-        try:
-            with open(self.INSTALL_MARKER, 'r') as f:
-                return json.load(f)
-        except Exception:
-            return {}
+        """Read installation marker."""
+        return self.read_marker(self.INSTALL_MARKER)
 
     def run(self):
         """
         Execute the complete installation process.
 
+        In Docker as non-root: logs Dockerfile
+        instructions and returns False.
+
+        Outside Docker: tries apt-get, dnf, pacman,
+        Flatpak, then AppImage in order.
+
         Returns:
-            bool: True if installation successful
+            bool: True if installed or already present
         """
-        # Already installed
         if self.is_installed():
             print("[WSJTX] ✓ Already installed")
             return True
 
-        # Check if already in PATH
         if shutil.which(self.WSJTX_BINARY):
             version = self.get_version()
             self.write_install_marker('existing', version)
@@ -460,20 +576,55 @@ class WSJTXInstaller:
         print("[WSJTX] Starting first-run installation")
         print("[WSJTX] ==========================================")
 
+        # Docker non-root: cannot install system packages
+        if self.in_docker and not self.is_root:
+            print(
+                "\n[WSJTX] ======================================"
+            )
+            print("[WSJTX] DOCKER INSTALLATION REQUIRED")
+            print(
+                "[WSJTX] ======================================"
+            )
+            print(
+                "[WSJTX] Add to Dockerfile and rebuild:"
+            )
+            print()
+            print(
+                "[WSJTX]   RUN apt-get update && \\"
+            )
+            print(
+                "[WSJTX]       apt-get install -y wsjtx && \\"
+            )
+            print(
+                "[WSJTX]       rm -rf /var/lib/apt/lists/*"
+            )
+            print()
+            print(
+                "[WSJTX]   docker compose build --no-cache"
+            )
+            print(
+                "[WSJTX] ======================================"
+            )
+            return False
+
         # Step 1: Python packages
         print("\n[WSJTX] Step 1: Python packages...")
         self.install_python_packages()
 
-        # Step 2: WSJT-X
-        print("\n[WSJTX] Step 2: Installing WSJT-X...")
+        # Step 2: Install WSJT-X
+        print(
+            f"\n[WSJTX] Step 2: Installing WSJT-X "
+            f"(pkg mgr: "
+            f"{self._package_manager or 'none'})..."
+        )
         success = False
 
-        if self.package_manager == 'apt-get':
-            success = self.install_via_apt()
-        elif self.package_manager in ('dnf', 'yum'):
-            success = self.install_via_dnf()
-        elif self.package_manager == 'pacman':
-            success = self.install_via_pacman()
+        if self._package_manager == 'apt-get':
+            success = self._install_via_apt()
+        elif self._package_manager in ('dnf', 'yum'):
+            success = self._install_via_dnf()
+        elif self._package_manager == 'pacman':
+            success = self._install_via_pacman()
         else:
             success = self._install_via_flatpak()
 
@@ -481,10 +632,9 @@ class WSJTXInstaller:
             print("[WSJTX] ERROR: Installation failed")
             return False
 
-        # Write marker
         version = self.get_version()
         self.write_install_marker(
-            self.package_manager or 'flatpak',
+            self._package_manager or 'flatpak',
             version
         )
 
