@@ -45,26 +45,6 @@ RUN python -m venv /opt/venv && \
     pip install -r requirements.txt
 
 # ============================================================
-# Install virtual audio support for FLdigi in Docker.
-#
-# FLdigi requires audio I/O for digital mode modulation.
-# In Docker without real audio hardware we use:
-#   - ALSA null/dummy driver  (kernel module)
-#   - PulseAudio null sink    (virtual audio device)
-#
-# This allows FLdigi to start and XML-RPC to become
-# available. Real audio passthrough (from host) requires
-# additional docker-compose configuration.
-# ============================================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    pulseaudio \
-    pulseaudio-utils \
-    alsa-utils \
-    alsa-base \
-    libasound2 \
-    libasound2-plugins \
-    && rm -rf /var/lib/apt/lists/*
-# ============================================================
 # Stage 2: Runtime
 # ============================================================
 FROM python:3.11-slim-bookworm
@@ -101,10 +81,11 @@ ENV PYTHONUNBUFFERED=1 \
 # Each comment must be on its own line BEFORE the package.
 # Blank lines between packages also break the RUN command.
 # ============================================================
-    RUN echo "=== autopoint diagnosis ===" && dpkg -L gettext | grep autopoint || true && \
+RUN echo "=== autopoint diagnosis ===" && dpkg -L gettext | grep autopoint || true && \
     find / -name autopoint 2>/dev/null | head -5 || true && \
     which autopoint || echo "autopoint NOT in PATH" && \
     echo "PATH=$PATH"
+    
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     curl \
@@ -382,6 +363,88 @@ ENV GOPATH=/home/hamradio/go \
     CARGO_HOME=/home/hamradio/.cargo \
     RUSTUP_HOME=/home/hamradio/.rustup \
     PATH="/home/hamradio/.cargo/bin:/home/hamradio/.local/bin:/home/hamradio/go/bin:/usr/local/go/bin:/opt/venv/bin:$PATH"
+
+# ============================================================
+# Install audio support for FLdigi
+#
+# FLdigi requires audio I/O for digital mode operations.
+# In Docker we use:
+#   PulseAudio  - virtual audio server with null sink
+#   ALSA        - hardware abstraction (points to PulseAudio)
+#
+# For real audio hardware on the Docker host, see the
+# docker-compose.yml audio passthrough configuration.
+# ============================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pulseaudio \
+    pulseaudio-utils \
+    alsa-utils \
+    alsa-base \
+    libasound2 \
+    libasound2-plugins \
+    libpulse0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create PulseAudio config for the hamradio user.
+# This config runs PulseAudio as a per-user daemon
+# with a null output sink (virtual audio device).
+RUN mkdir -p /home/hamradio/.config/pulse && \
+    cat > /home/hamradio/.config/pulse/default.pa << 'PULSE_CONFIG'
+# PulseAudio configuration for FLdigi in Docker
+# Loads the null sink as the default audio output
+
+# Load standard modules
+.include /etc/pulse/default.pa
+
+# Load null sink for FLdigi operation
+# This virtual device accepts audio without hardware
+load-module module-null-sink \
+    sink_name=fldigi_null \
+    sink_properties=device.description="FLdigi_Virtual_Sink"
+
+# Set null sink as default output
+set-default-sink fldigi_null
+
+# Set null source as default input
+load-module module-null-source \
+    source_name=fldigi_null_source \
+    source_properties=device.description="FLdigi_Virtual_Source"
+
+set-default-source fldigi_null_source
+PULSE_CONFIG
+
+    # Create ALSA config pointing to PulseAudio
+    cat > /home/hamradio/.asoundrc << 'ALSA_CONFIG'
+# ALSA configuration for Docker
+# Routes all ALSA audio through PulseAudio
+
+pcm.!default {
+    type pulse
+    fallback "sysdefault"
+    hint {
+        show on
+        description "Default ALSA via PulseAudio"
+    }
+}
+
+ctl.!default {
+    type pulse
+    fallback "sysdefault"
+}
+
+# Virtual null device fallback
+pcm.null {
+    type null
+}
+
+pcm.pulse {
+    type pulse
+}
+ALSA_CONFIG
+
+    chown -R hamradio:hamradio \
+        /home/hamradio/.config \
+        /home/hamradio/.asoundrc
 # -------------------------------------------------------
 # Switch to non-root user
 # ALL subsequent RUN, COPY, CMD, ENTRYPOINT run as hamradio
