@@ -60,7 +60,52 @@
                     </div>
                 </div>
             </div>
+            <!-- Display Settings card in settings.html -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Display Settings</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.display.label(class="form-label") }}
+                            {{ form.display(class="form-control",
+                                           placeholder="Leave blank for auto-detect") }}
+                            <small class="text-muted">
+                                {{ form.display.description }}
+                            </small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Xvfb Status</label>
+                            <div class="form-control-plaintext">
+                                {% if status.display %}
+                                <span class="text-success">
+                                    <i class="fas fa-check-circle me-1"></i>
+                                    Display: {{ status.display }}
+                                </span>
+                                {% else %}
+                                <span class="text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Auto-detect on start
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
             
+                    <div class="alert alert-info small mb-0">
+                        <i class="fas fa-info-circle me-1"></i>
+                        <strong>Docker:</strong>
+                        FLdigi requires a display. Xvfb (virtual
+                        framebuffer) is used automatically in Docker.
+                        Leave display blank for auto-detection.
+                        <br>
+                        <strong>Host:</strong>
+                        Set to <code>:0</code> to use the host display,
+                        or <code>:99</code> for Xvfb.
+                    </div>
+                </div>
+            </div>
             <!-- Default Operating Settings -->
             <div class="card mb-4">
                 <div class="card-header"><h5>Default Operating Settings</h5></div>
