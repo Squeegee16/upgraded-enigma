@@ -371,7 +371,7 @@ class FldigiPlugin(BasePlugin):
                         'launch_mode', 'connect'
                     )
                     form.display.data = cfg.get(
-                        'display', ':0'
+                        'display', ''
                     )
                     form.default_mode.data = cfg.get(
                         'default_mode', 'BPSK31'
@@ -404,7 +404,7 @@ class FldigiPlugin(BasePlugin):
                         'xmlrpc_host': form.xmlrpc_host.data,
                         'xmlrpc_port': form.xmlrpc_port.data,
                         'launch_mode': form.launch_mode.data,
-                        'display': form.display.data or ':0',
+                        'display': form.display.data or '',
                         'default_mode': form.default_mode.data,
                         'default_frequency': (
                             form.default_frequency.data
@@ -442,18 +442,35 @@ class FldigiPlugin(BasePlugin):
                         url_for(f'{self.name}.settings')
                     )
 
+                # -----------------------------------------------
+                # FIX: Pass status to template context.
+                # Previously status was missing from the
+                # render_template() call causing
+                # 'status is undefined' in the template.
+                # -----------------------------------------------
+                status = (
+                    self.manager.get_status()
+                    if self.manager else {}
+                )
+
                 return render_template(
                     'fldigi/settings.html',
                     plugin=self,
                     form=form,
+                    status=status,                  # ← ADDED
                     install_complete=self.install_complete,
-                    install_error=self.install_error
+                    install_error=self.install_error,
+                    config=(
+                        self.manager.config
+                        if self.manager else {}
+                    )
                 )
 
             except Exception as e:
                 print(
                     f"[{self.name}] ERROR in settings: {e}"
                 )
+                import traceback
                 traceback.print_exc()
                 return render_template(
                     'errors/500.html',
