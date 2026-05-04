@@ -99,6 +99,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     apt-transport-https \
     usbutils \
+        # FLdigi digital modes application
+    fldigi \
+    # FLdigi companion applications (optional)
+    flmsg \
+    flarq \
     && rm -rf /var/lib/apt/lists/*
 
 # -------------------------------------------------------
