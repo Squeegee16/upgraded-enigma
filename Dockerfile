@@ -445,6 +445,14 @@ ALSA_CONFIG
     chown -R hamradio:hamradio \
         /home/hamradio/.config \
         /home/hamradio/.asoundrc
+
+# Create X11 Unix socket directory with world-writable
+# permissions so non-root users (hamradio) can run
+# Xvfb and other X11 applications.
+# This must be done as root before USER hamradio.
+RUN mkdir -p /tmp/.X11-unix && \
+    chmod 1777 /tmp/.X11-unix && \
+    chown root:root /tmp/.X11-unix
 # -------------------------------------------------------
 # Switch to non-root user
 # ALL subsequent RUN, COPY, CMD, ENTRYPOINT run as hamradio
