@@ -75,6 +75,268 @@ services:
 
     volumes:
       - app_data:/data
+      # Audio access via PulseAudio socket (read-only)
+      - /run/user/1000/pulse:/run/user/1000/pulse:ro
+
+    # Uncomment to pass serial devices when real hardware is connected:
+    # devices:
+    #   - /dev/ttyUSB0:/dev/ttyUSB0   # GPS
+    #   - /dev/ttyUSB1:/dev/ttyUSB1   # Radio CAT
+
+    networks:
+      - hamradio_net
+
+    depends_on:
+      - openwebrx
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:5000/')
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    labels:
+      - "com.hamradio.service=app"
+      - "com.hamradio.version=0.2.0"
+
+
+  # ==========================================================
+  # OpenWebRX SDR Receiver - Official Docker Image
+  #
+  # This container receives EXCLUSIVE access to the RTL-SDR
+  # USB device. The app communicates with it via HTTP API
+  # at http://openwebrx:8073 (internal Docker network).
+  # ==========================================================
+  openwebrx:
+    image: jketterl/openwebrx:stable
+
+    container_name: hamradio_openwebrx
+    restart: unless-stopped
+
+    ports:
+      - "8073:8073"
+
+    volumes:
+      - openwebrx_data:/var/lib/openwebrx
+
+    # RTL-SDR USB device passthrough.
+    #
+    # IMPORTANT: Only ONE container should have the RTL-SDR
+    # device at a time. This is passed to openwebrx only.
+    #
+    # The device path /dev/bus/usb/BUS/DEVICE is specific
+    # to your hardware. Find it with:
+    #   lsusb | grep -i realtek
+    #   # Example output:
+    #   # Bus 001 Device 003: ID 0bda:2838 Realtek...
+    #   # Device path = /dev/bus/usb/001/003
+    #
+    # Option 1: Pass the entire USB bus (simpler, less secure)
+    # devices:
+    #   - /dev/bus/usb:/dev/bus/usb
+    #
+    # Option 2: Pass specific device node (more secure)
+    # devices:
+    #   - /dev/bus/usb/001/003:/dev/bus/usb/001/003
+    #
+    # Option 3: Pass the rtlsdr symlink (requires udev rule)
+    # devices:
+    #   - /dev/rtlsdr0:/dev/rtlsdr0
+    #
+    # Using Option 1 for compatibility. Change to Option 2
+    # or 3 for tighter security in production.
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+      #- /dev/snd:/dev/snd
+
+    # group_add grants the container user access to the
+    # plugdev group (GID 46 on Debian/Ubuntu) which owns
+    # the RTL-SDR device node via udev rules.
+    # This avoids needing privileged: true for USB access.
+    group_add:
+      - plugdev
+
+    # privileged: true grants all Linux capabilities.
+    # Required if group_add alone is insufficient.
+    # Try with privileged: false first (group_add only),
+    # then enable if openwebrx cannot open the device.
+    privileged: true
+
+    networks:
+      - hamradio_net
+
+    cap_add:
+      - SYS_NICE
+
+    environment:
+      - TZ=${TZ:-UTC}
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    labels:
+      - "com.hamradio.service=openwebrx"
+
+
+  # ==========================================================
+  # Database Backup Service
+  # ==========================================================
+  backup:
+    image: alpine:latest
+    container_name: hamradio_backup
+    restart: unless-stopped
+
+    environment:
+      - BACKUP_INTERVAL=${BACKUP_INTERVAL:-86400}
+      - BACKUP_RETENTION=${BACKUP_RETENTION:-7}
+
+    volumes:
+      - app_data:/data:rw
+
+    command: >
+      sh -c '
+      echo "Backup service starting...";
+      echo "Interval: $${BACKUP_INTERVAL}s | Retention: $${BACKUP_RETENTION}d";
+      mkdir -p /data/backups;
+      while true; do
+        if [ -f /data/db/ham_radio.db ]; then
+          TS=$$(date +%Y%m%d_%H%M%S);
+          BF="/data/backups/ham_radio_$${TS}.db";
+          if cp /data/db/ham_radio.db "$${BF}"; then
+            gzip "$${BF}";
+            echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Created: $${BF}.gz";
+          else
+            echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] ERROR: backup failed";
+          fi;
+          find /data/backups \
+            -name "ham_radio_*.db.gz" \
+            -mtime +$${BACKUP_RETENTION} \
+            -delete;
+          echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Pruned backups older than $${BACKUP_RETENTION}d";
+        else
+          echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] DB not found at /data/db/ham_radio.db";
+        fi;
+        sleep $${BACKUP_INTERVAL};
+      done
+      '
+
+    networks:
+      - hamradio_net
+
+    depends_on:
+      - app
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+    labels:
+      - "com.hamradio.service=backup"
+# Ham Radio Operator Web Application - Docker Compose
+# =====================================================
+# RTL-SDR USB device sharing strategy:
+#
+#   The RTL-SDR dongle can only be used by ONE process
+#   at a time. Assign it to EITHER app OR openwebrx,
+#   not both simultaneously.
+#
+#   Option A (recommended): Give RTL-SDR to openwebrx.
+#     The app plugin communicates with openwebrx via HTTP.
+#     The app's mock SDR device is used for the dashboard.
+#
+#   Option B: Give RTL-SDR to the app container.
+#     OpenWebRX will not be able to use the dongle.
+#
+#   This file implements Option A.
+
+version: '3.8'
+
+volumes:
+  app_data:
+    driver: local
+  openwebrx_data:
+    driver: local
+
+networks:
+  hamradio_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+services:
+
+  # ==========================================================
+  # Main Ham Radio Application
+  # ==========================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: hamradio_app
+    restart: unless-stopped
+
+    ports:
+      - "5000:5000"
+
+    environment:
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - FLASK_DEBUG=${FLASK_DEBUG:-0}
+      - DATABASE_URL=sqlite:////data/db/ham_radio.db
+      # SDR is handled by openwebrx sidecar.
+      # The app uses mock SDR for the dashboard device card.
+      # Set to false only if attaching a SECOND RTL-SDR
+      # dongle directly to the app container.
+      - USE_MOCK_DEVICES=${USE_MOCK_DEVICES:-true}
+      - GPS_SERIAL_PORT=${GPS_SERIAL_PORT:-/dev/ttyUSB0}
+      - GPS_BAUD_RATE=${GPS_BAUD_RATE:-9600}
+      - RADIO_MODEL=${RADIO_MODEL:-1035}
+      - RADIO_PORT=${RADIO_PORT:-/dev/ttyUSB1}
+      - RADIO_BAUD_RATE=${RADIO_BAUD_RATE:-38400}
+      - SDR_DEVICE_INDEX=${SDR_DEVICE_INDEX:-0}
+      - SDR_SAMPLE_RATE=${SDR_SAMPLE_RATE:-2048000}
+      - USE_SSL=${USE_SSL:-true}
+      - SSL_CERT=/data/certs/cert.pem
+      - SSL_KEY=/data/certs/key.pem
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=5000
+      - VALIDATE_CALLSIGNS=${VALIDATE_CALLSIGNS:-false}
+      - TZ=${TZ:-UTC}
+      - PLUGIN_SKIP_PIP_INSTALL=true
+      - OPENWEBRX_URL=http://openwebrx:8073
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+
+    volumes:
+      - app_data:/data
 
     # GPS and Radio serial ports for the app container.
     # RTL-SDR is NOT passed to the app — it goes to openwebrx.
