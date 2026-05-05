@@ -376,19 +376,24 @@ ENV GOPATH=/home/hamradio/go \
 # docker-compose.yml audio passthrough configuration.
 # ============================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    pulseaudio \
-    pulseaudio-utils \
     alsa-utils \
-    alsa-base \
+    #alsa-base \
     libasound2 \
     libasound2-plugins \
     libpulse0 \
+    #libasound2t64 \
+    libc6 \
+    #libglib2.0-0t64 \
+    apulse \
+    pulseaudio \
+    pulseaudio-utils \
+    pavucontrol \
     && rm -rf /var/lib/apt/lists/*
 
 # Create PulseAudio config for the hamradio user.
 # This config runs PulseAudio as a per-user daemon
 # with a null output sink (virtual audio device).
-RUN mkdir -p /home/hamradio/.config/pulse && \
+RUN mkdir -p /home/hamradio/.config/pulse 
     cat > /home/hamradio/.config/pulse/default.pa << 'PULSE_CONFIG'
 # PulseAudio configuration for FLdigi in Docker
 # Loads the null sink as the default audio output
