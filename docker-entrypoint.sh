@@ -137,11 +137,67 @@ else
     echo -e "${GREEN}✓ Database exists: $DB_PATH${NC}"
 fi
 
-# =================================================================
-# [6/7] RTL-SDR device detection
-# =================================================================
-echo -e "\n${YELLOW}[6/7] Detecting devices...${NC}"
+# ---------------------------------------------------------------
+# RTL-SDR detection
+# ---------------------------------------------------------------
+echo -e "\n${BLUE}--- RTL-SDR Status ---${NC}"
 
+if [ -d "/dev/bus/usb" ]; then
+    echo -e "${GREEN}  ✓ /dev/bus/usb accessible${NC}"
+
+    USB_COUNT=$(find /dev/bus/usb -type c 2>/dev/null \
+        | wc -l)
+    echo "  USB device nodes: ${USB_COUNT}"
+
+    # Check for RTL-SDR via lsusb
+    if command -v lsusb >/dev/null 2>&1; then
+        RTL_USB=$(lsusb 2>/dev/null | \
+            grep -iE "0bda:2832|0bda:2838|0bda:2839|\
+realtek" || true)
+        if [ -n "$RTL_USB" ]; then
+            echo -e "${GREEN}  ✓ RTL-SDR detected:${NC}"
+            echo "    $RTL_USB"
+        else
+            echo -e "${YELLOW}  ⚠ RTL-SDR not found via lsusb${NC}"
+        fi
+    fi
+
+    # Test with rtl_test if available
+    if command -v rtl_test >/dev/null 2>&1; then
+        RTL_RESULT=$(timeout 3 rtl_test -t 2>&1 || true)
+        if echo "$RTL_RESULT" | grep -q "Found.*device"; then
+            echo -e "${GREEN}  ✓ RTL-SDR responds to rtl_test${NC}"
+            echo "  RTL-SDR available for plugins"
+        elif echo "$RTL_RESULT" | grep -q "No supported"; then
+            echo -e "${YELLOW}  ⚠ No RTL-SDR found by rtl_test${NC}"
+        fi
+    fi
+
+    # RTL-SDR symlink from udev rules
+    if ls /dev/rtlsdr* >/dev/null 2>&1; then
+        echo -e "${GREEN}  ✓ RTL-SDR symlink: \
+$(ls /dev/rtlsdr*)${NC}"
+    fi
+
+    # NOTE: RTL-SDR usage depends on which plugins are loaded.
+    # If OpenWebRX plugin is active it takes exclusive access.
+    # If OpenWebRX is not used, the RTL-SDR is available
+    # directly to other plugins (SDR Monitor, SatDump etc.)
+    echo "  RTL-SDR will be assigned to whichever"
+    echo "  plugin starts first. OpenWebRX sidecar"
+    echo "  container (if running) has priority."
+
+else
+    echo -e "${YELLOW}  ⚠ /dev/bus/usb not accessible${NC}"
+    echo "  To enable USB device access, add to"
+    echo "  docker-compose.yml app service:"
+    echo "    devices:"
+    echo "      - /dev/bus/usb:/dev/bus/usb"
+    echo "    privileged: true"
+    echo ""
+    echo "  RTL-SDR will use mock device until"
+    echo "  USB passthrough is configured."
+fi
 # ---------------------------------------------------------------
 # RTL-SDR detection and diagnosis
 # ---------------------------------------------------------------
