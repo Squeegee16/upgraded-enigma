@@ -453,29 +453,53 @@ echo -e "${GREEN}  ✓ ALSA configured for PulseAudio${NC}"
 # =================================================================
 # Start Xvfb virtual display for GUI applications
 # FLdigi and QSSTV require an X11 display to launch.
-# Xvfb provides a virtual framebuffer with no real output.
 # =================================================================
 echo -e "\n${YELLOW}[6b/7] Starting virtual display (Xvfb)...${NC}"
 
-# Kill any existing Xvfb on display :99
-pkill -f "Xvfb :99" 2>/dev/null || true
-rm -f /tmp/.X99-lock 2>/dev/null || true
+# Ensure X11 socket directory exists with correct permissions
+# This is needed because /tmp/.X11-unix may not exist yet
+mkdir -p /tmp/.X11-unix 2>/dev/null || true
+chmod 1777 /tmp/.X11-unix 2>/dev/null || true
 
-# Start Xvfb on display :99
-Xvfb :99 -screen 0 1024x768x24 -nolisten tcp &
-XVFB_PID=$!
+XVFB_DISPLAY=:99
+XVFB_STARTED=false
 
-# Wait briefly for Xvfb to initialise
-sleep 1
+if command -v Xvfb >/dev/null 2>&1; then
+    # Remove stale lock and socket files
+    rm -f /tmp/.X99-lock 2>/dev/null || true
+    rm -f /tmp/.X11-unix/X99 2>/dev/null || true
 
-# Verify Xvfb started
-if kill -0 $XVFB_PID 2>/dev/null; then
-    echo -e "${GREEN}  ✓ Xvfb started (PID: $XVFB_PID, DISPLAY=:99)${NC}"
-    export DISPLAY=:99
+    # Start Xvfb
+    Xvfb ${XVFB_DISPLAY} \
+        -screen 0 1024x768x24 \
+        -nolisten tcp \
+        -ac \
+        +extension GLX \
+        2>/tmp/xvfb.log &
+    XVFB_PID=$!
+
+    # Wait for Xvfb to initialise (up to 5 seconds)
+    for i in 1 2 3 4 5; do
+        sleep 1
+        if [ -S "/tmp/.X11-unix/X99" ] || \
+           [ -f "/tmp/.X99-lock" ]; then
+            XVFB_STARTED=true
+            break
+        fi
+    done
+
+    if [ "$XVFB_STARTED" = "true" ]; then
+        export DISPLAY=${XVFB_DISPLAY}
+        echo -e "${GREEN}  ✓ Xvfb started on ${XVFB_DISPLAY}${NC}"
+    else
+        echo -e "${YELLOW}  ⚠ Xvfb did not start${NC}"
+        cat /tmp/xvfb.log 2>/dev/null | head -5
+        echo "  GUI plugins (FLdigi, QSSTV) may not work"
+        echo "  but the application will continue"
+    fi
 else
-    echo -e "${YELLOW}  ⚠ Xvfb failed to start${NC}"
-    echo "  GUI applications (FLdigi, QSSTV) will not work"
-    echo "  without a display server."
+    echo -e "${YELLOW}  ⚠ Xvfb not installed${NC}"
+    echo "  Add to Dockerfile: apt-get install -y xvfb"
 fi
 # =================================================================
 # [7/7] Starting application
