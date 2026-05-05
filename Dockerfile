@@ -447,7 +447,7 @@ pcm.pulse {
 }
 ALSA_CONFIG
 
-    chown -R hamradio:hamradio \
+RUN chown -R hamradio:hamradio \
         /home/hamradio/.config \
         /home/hamradio/.asoundrc
 
