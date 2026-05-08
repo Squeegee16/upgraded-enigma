@@ -60,8 +60,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      platforms:
-        - linux/arm64
+
     container_name: hamradio_app
     restart: unless-stopped
 
@@ -169,8 +168,7 @@ services:
   # ==========================================================
   openwebrx:
     image: jketterl/openwebrx:stable
-    platforms:
-      - linux/arm64
+
     container_name: hamradio_openwebrx
     restart: unless-stopped
 
