@@ -43,7 +43,6 @@ RUN python -m venv /opt/venv && \
     . /opt/venv/bin/activate && \
     pip install --upgrade pip setuptools wheel && \
     pip install -r requirements.txt
-
 # ============================================================
 # Stage 2: Runtime
 # ============================================================
@@ -53,44 +52,32 @@ LABEL maintainer="Ham Radio App Team"
 LABEL description="Ham Radio Operator Web Application"
 LABEL version="0.2.0"
 
-# Go version to install from official distribution.
-# Must be >= the version required by go.mod in any plugin.
-# GrayWolf requires 1.26.x — using latest stable.
-# Check https://go.dev/dl/ for current version.
-ARG GO_VERSION=1.26.2
-ARG GO_ARCH=amd64
+# Go version to install.
+# Must be >= the version required by any plugin's go.mod
+# GrayWolf requires Go 1.26.x
+# Check https://go.dev/dl/ for latest stable version
+ARG GO_VERSION=1.22.3
 
+# TARGETARCH is automatically set by Docker buildx
+# to match the build target platform:
+#   linux/amd64  -> amd64  (x86_64 PC)
+#   linux/arm64  -> arm64  (Raspberry Pi 4/5, Apple M1)
+ARG TARGETARCH
+
+# Runtime environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     FLASK_APP=app.py \
     FLASK_ENV=production \
-    PLUGIN_SKIP_PIP_INSTALL=true \
-    # Go environment — paths under hamradio home
-    GOROOT=/usr/local/go \
-    GOPATH=/home/hamradio/go \
-    GOCACHE=/home/hamradio/.cache/go-build \
-    GOMODCACHE=/home/hamradio/go/pkg/mod \
-    # PATH includes Go bin, hamradio local bin, and venv
-    PATH="/usr/local/go/bin:/home/hamradio/.local/bin:/home/hamradio/go/bin:/opt/venv/bin:$PATH"
+    PLUGIN_SKIP_PIP_INSTALL=true
 
-# ============================================================
-# Install runtime system dependencies
-#
-# IMPORTANT: Comments must NEVER appear after package names
-# on the same line in apt-get install blocks.
-# Each comment must be on its own line BEFORE the package.
-# Blank lines between packages also break the RUN command.
-# ============================================================
-RUN echo "=== autopoint diagnosis ===" && dpkg -L gettext | grep autopoint || true && \
-    find / -name autopoint 2>/dev/null | head -5 || true && \
-    which autopoint || echo "autopoint NOT in PATH" && \
-    echo "PATH=$PATH"
-    
+# Install runtime system packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     curl \
     autoconf \
-    autopoint \
+    automake \
+    libtool \
     build-essential \
     cmake \
     git \
@@ -111,99 +98,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxft-dev \
     libudev-dev \
     xvfb \
+    x11-utils \
+    pulseaudio \
+    pulseaudio-utils \
+    alsa-utils \
+    alsa-base \
+    libasound2 \
+    libasound2-plugins \
+    libpulse0 \
     && rm -rf /var/lib/apt/lists/*
 
-# ============================================================
-# Build flarq from source.
-# Single combined RUN block ensures all tools are in PATH
-# and the build environment is consistent.
-# ============================================================
-RUN set -eux; \
-    \
-    echo "=== Installing build dependencies ==="; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-        gettext \
-        autoconf \
-        automake \
-        libtool \
-        pkg-config \
-        libfltk1.3-dev \
-        libpulse-dev \
-        libasound2-dev \
-        libsamplerate-dev \
-        libsndfile1-dev \
-        portaudio19-dev \
-        libxinerama-dev \
-        libxfixes-dev \
-        libxcursor-dev \
-        libfontconfig1-dev \
-        libjpeg-dev; \
-    rm -rf /var/lib/apt/lists/*; \
-    \
-    echo "=== Verifying tools ==="; \
-    echo "PATH: $PATH"; \
-    ls -la /usr/bin/autopoint || \
-        dpkg -L gettext | grep autopoint || \
-        find /usr -name autopoint 2>/dev/null; \
-    \
-    echo "=== Cloning repository ==="; \
-    cd /tmp; \
-    git clone --depth 1 \
-        https://git.code.sf.net/p/fldigi/fldigi \
-        fldigi-src; \
-    cd /tmp/fldigi-src; \
-    \
-    echo "=== Running autoreconf ==="; \
-    autoreconf -fi; \
-    \
-    echo "=== Configuring ==="; \
-    ./configure --prefix=/usr/local; \
-    \
-    echo "=== Building ==="; \
-    make -j$(nproc); \
-    \
-    echo "=== Installing ==="; \
-    make install; \
-    \
-    echo "=== Result ==="; \
-    ls -la /usr/local/bin/flarq && \
-        flarq --version || \
-        echo "WARNING: flarq binary not found"; \
-    \
-    cd /; \
-    rm -rf /tmp/fldigi-src; \
-    echo "Done"
-# -------------------------------------------------------
-# Install Go from official distribution
-#
-# Why not apt golang-go?
-#   Debian Bookworm ships Go 1.19 which is too old for
-#   many modern Go modules. GrayWolf requires Go 1.26+.
-#   The official Go tarball always has the current version.
-#
-# Installation method:
-#   1. Download go${VERSION}.linux-amd64.tar.gz from go.dev
-#   2. Extract to /usr/local/go
-#   3. Add /usr/local/go/bin to PATH (done in ENV above)
-#   4. Verify with 'go version'
-# -------------------------------------------------------
-RUN set -eux; \
-    GO_URL="https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"; \
-    echo "Downloading Go ${GO_VERSION} from ${GO_URL}"; \
-    wget -q "${GO_URL}" -O /tmp/go.tar.gz; \
-    # Remove any existing Go installation
-    rm -rf /usr/local/go; \
-    # Extract to /usr/local
-    tar -C /usr/local -xzf /tmp/go.tar.gz; \
-    rm /tmp/go.tar.gz; \
-    # Verify installation
-    /usr/local/go/bin/go version; \
-    echo "Go ${GO_VERSION} installed successfully"
+# Install FLdigi and companion applications
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fldigi \
+    flmsg \
+    && rm -rf /var/lib/apt/lists/*
 
-# -------------------------------------------------------
 # Build SoapySDR from source
-# -------------------------------------------------------
 RUN cd /tmp && \
     git clone https://github.com/pothosware/SoapySDR.git && \
     cd SoapySDR && \
@@ -216,9 +127,7 @@ RUN cd /tmp && \
     cd / && \
     rm -rf /tmp/SoapySDR
 
-# -------------------------------------------------------
 # Build Hamlib from source
-# -------------------------------------------------------
 RUN cd /tmp && \
     wget -q \
         https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download \
@@ -232,9 +141,7 @@ RUN cd /tmp && \
     cd / && \
     rm -rf /tmp/hamlib-4.7.0 /tmp/hamlib-4.7.0.tar.gz
 
-# -------------------------------------------------------
 # Build RTL-SDR from source
-# -------------------------------------------------------
 RUN cd /tmp && \
     git clone https://github.com/osmocom/rtl-sdr.git && \
     cd rtl-sdr && \
@@ -247,21 +154,63 @@ RUN cd /tmp && \
     cd / && \
     rm -rf /tmp/rtl-sdr
 
-# -------------------------------------------------------
-# Copy and configure entrypoint script AS ROOT
-# Must happen BEFORE USER hamradio
-# -------------------------------------------------------
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# ============================================================
+# Install Go from official distribution
+#
+# Uses TARGETARCH (set by Docker buildx) to select the
+# correct binary for the build platform architecture.
+# This supports both x86_64 (amd64) and ARM64 (Pi 4/5).
+# ============================================================
+RUN set -eux; \
+    \
+    case "${TARGETARCH}" in \
+        "amd64")  GO_ARCH="amd64" ;; \
+        "arm64")  GO_ARCH="arm64" ;; \
+        "arm")    GO_ARCH="armv6l" ;; \
+        "386")    GO_ARCH="386" ;; \
+        *) \
+            MACHINE=$(uname -m); \
+            case "$MACHINE" in \
+                "x86_64")  GO_ARCH="amd64" ;; \
+                "aarch64") GO_ARCH="arm64" ;; \
+                "armv7l")  GO_ARCH="armv6l" ;; \
+                "armv6l")  GO_ARCH="armv6l" ;; \
+                *) echo "Unsupported: $MACHINE"; exit 1 ;; \
+            esac ;; \
+    esac; \
+    \
+    echo "Platform: ${TARGETARCH:-runtime-detect}"; \
+    echo "Go arch:  ${GO_ARCH}"; \
+    echo "Machine:  $(uname -m)"; \
+    \
+    GO_URL="https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"; \
+    echo "Downloading: ${GO_URL}"; \
+    wget -q "${GO_URL}" -O /tmp/go.tar.gz; \
+    \
+    GO_SIZE=$(stat -c%s /tmp/go.tar.gz 2>/dev/null || echo 0); \
+    echo "File size: ${GO_SIZE} bytes"; \
+    if [ "${GO_SIZE}" -lt 10000000 ]; then \
+        echo "ERROR: Download too small (${GO_SIZE} bytes)"; \
+        exit 1; \
+    fi; \
+    \
+    rm -rf /usr/local/go; \
+    tar -C /usr/local -xzf /tmp/go.tar.gz; \
+    rm /tmp/go.tar.gz; \
+    /usr/local/go/bin/go version; \
+    echo "Go installed successfully"
 
-# -------------------------------------------------------
-# Copy RTL-SDR kernel module blacklist AS ROOT
-# -------------------------------------------------------
-COPY blacklist-rtl.conf /etc/modprobe.d/blacklist-rtl.conf
+# Install Rust for building graywolf-modem
+RUN curl --proto '=https' --tlsv1.2 \
+        -sSf https://sh.rustup.rs \
+        | sh -s -- -y --no-modify-path \
+        --default-toolchain stable 2>&1 && \
+    /root/.cargo/bin/rustup --version && \
+    /root/.cargo/bin/cargo --version
 
-# -------------------------------------------------------
-# Create non-root runtime user
-# -------------------------------------------------------
+# Copy Rust to hamradio user (done after user creation below)
+
+# Create non-root user
 RUN groupadd -r hamradio -g 1000 && \
     useradd -r \
         -g hamradio \
@@ -272,9 +221,7 @@ RUN groupadd -r hamradio -g 1000 && \
         hamradio && \
     usermod -a -G plugdev hamradio 2>/dev/null || true
 
-# -------------------------------------------------------
-# Create data and application directories
-# -------------------------------------------------------
+# Create data directories
 RUN mkdir -p \
         /data/db \
         /data/certs \
@@ -286,13 +233,12 @@ RUN mkdir -p \
     && chown -R hamradio:hamradio /data /app \
     && chmod -R 755 /data
 
-# -------------------------------------------------------
-# Pre-create Go workspace directories for hamradio user
-#
-# These must exist and be owned by hamradio before the
-# container starts. Without them go build fails with
-# permission errors when trying to create cache dirs.
-# -------------------------------------------------------
+# Create X11 socket directory for Xvfb
+RUN mkdir -p /tmp/.X11-unix && \
+    chmod 1777 /tmp/.X11-unix && \
+    chown root:root /tmp/.X11-unix
+
+# Pre-create Go directories for hamradio user
 RUN mkdir -p \
         /home/hamradio/go/bin \
         /home/hamradio/go/pkg \
@@ -301,17 +247,30 @@ RUN mkdir -p \
         /home/hamradio/.local/bin \
     && chown -R hamradio:hamradio /home/hamradio
 
-# -------------------------------------------------------
-# Copy venv from builder (readable by all users)
-# -------------------------------------------------------
+# Copy Rust installation to hamradio user
+RUN cp -r /root/.cargo /home/hamradio/.cargo 2>/dev/null || true && \
+    cp -r /root/.rustup /home/hamradio/.rustup 2>/dev/null || true && \
+    chown -R hamradio:hamradio \
+        /home/hamradio/.cargo \
+        /home/hamradio/.rustup 2>/dev/null || true
+
+# Copy venv from builder
 COPY --from=builder /opt/venv /opt/venv
 RUN chmod -R a+rX /opt/venv
 
+# Set all environment variables
+# Must come after Go and Rust installation
+ENV GOROOT=/usr/local/go \
+    GOPATH=/home/hamradio/go \
+    GOCACHE=/home/hamradio/.cache/go-build \
+    GOMODCACHE=/home/hamradio/go/pkg/mod \
+    CARGO_HOME=/home/hamradio/.cargo \
+    RUSTUP_HOME=/home/hamradio/.rustup \
+    PATH="/usr/local/go/bin:/home/hamradio/.cargo/bin:/home/hamradio/.local/bin:/home/hamradio/go/bin:/opt/venv/bin:$PATH"
+
 WORKDIR /app
 
-# -------------------------------------------------------
-# Copy application source files (owned by hamradio)
-# -------------------------------------------------------
+# Copy application source files
 COPY --chown=hamradio:hamradio requirements.txt .
 COPY --chown=hamradio:hamradio config.py .
 COPY --chown=hamradio:hamradio secret_key_manager.py .
@@ -325,143 +284,14 @@ COPY --chown=hamradio:hamradio devices ./devices/
 COPY --chown=hamradio:hamradio callsign_db ./callsign_db/
 COPY --chown=hamradio:hamradio templates ./templates/
 COPY --chown=hamradio:hamradio static ./static/
+COPY --chown=hamradio:hamradio blacklist-rtl.conf /etc/modprobe.d/blacklist-rtl.conf
 
-# -------------------------------------------------------
-# Create plugin implementations directory
-# -------------------------------------------------------
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 RUN mkdir -p /app/plugins/implementations && \
     chown -R hamradio:hamradio /app/plugins
-# -------------------------------------------------------
-# Install Rust toolchain for building graywolf-modem.
-# graywolf-modem is a Rust binary required by GrayWolf.
-# Must be installed as root and made available to
-# the hamradio user via PATH.
-# -------------------------------------------------------
-RUN curl --proto '=https' --tlsv1.2 \
-        -sSf https://sh.rustup.rs \
-        | sh -s -- -y --no-modify-path \
-        --default-toolchain stable 2>&1 && \
-    echo "✓ Rust installed" && \
-    /root/.cargo/bin/rustup --version && \
-    /root/.cargo/bin/cargo --version
 
-# Make Rust available system-wide so the hamradio user
-# can use cargo during GrayWolf installation
-RUN cp -r /root/.cargo /home/hamradio/.cargo 2>/dev/null || \
-    true && \
-    cp -r /root/.rustup /home/hamradio/.rustup 2>/dev/null \
-    || true && \
-    chown -R hamradio:hamradio \
-        /home/hamradio/.cargo \
-        /home/hamradio/.rustup 2>/dev/null || true
-
-ENV CARGO_HOME=/home/hamradio/.cargo \
-    RUSTUP_HOME=/home/hamradio/.rustup
-ENV GOPATH=/home/hamradio/go \
-    GOCACHE=/home/hamradio/.cache/go-build \
-    GOMODCACHE=/home/hamradio/go/pkg/mod \
-    CARGO_HOME=/home/hamradio/.cargo \
-    RUSTUP_HOME=/home/hamradio/.rustup \
-    PATH="/home/hamradio/.cargo/bin:/home/hamradio/.local/bin:/home/hamradio/go/bin:/usr/local/go/bin:/opt/venv/bin:$PATH"
-
-# ============================================================
-# Install audio support for FLdigi
-#
-# FLdigi requires audio I/O for digital mode operations.
-# In Docker we use:
-#   PulseAudio  - virtual audio server with null sink
-#   ALSA        - hardware abstraction (points to PulseAudio)
-#
-# For real audio hardware on the Docker host, see the
-# docker-compose.yml audio passthrough configuration.
-# ============================================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    alsa-utils \
-    #alsa-base \
-    libasound2 \
-    libasound2-plugins \
-    libpulse0 \
-    #libasound2t64 \
-    libc6 \
-    #libglib2.0-0t64 \
-    apulse \
-    pulseaudio \
-    pulseaudio-utils \
-    pavucontrol \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create PulseAudio config for the hamradio user.
-# This config runs PulseAudio as a per-user daemon
-# with a null output sink (virtual audio device).
-RUN mkdir -p /home/hamradio/.config/pulse 
-RUN cat > /home/hamradio/.config/pulse/default.pa << 'PULSE_CONFIG'
-# PulseAudio configuration for FLdigi in Docker
-# Loads the null sink as the default audio output
-
-# Load standard modules
-.include /etc/pulse/default.pa
-
-# Load null sink for FLdigi operation
-# This virtual device accepts audio without hardware
-load-module module-null-sink \
-    sink_name=fldigi_null \
-    sink_properties=device.description="FLdigi_Virtual_Sink"
-
-# Set null sink as default output
-set-default-sink fldigi_null
-
-# Set null source as default input
-load-module module-null-source \
-    source_name=fldigi_null_source \
-    source_properties=device.description="FLdigi_Virtual_Source"
-
-set-default-source fldigi_null_source
-PULSE_CONFIG
-
-    # Create ALSA config pointing to PulseAudio
-RUN cat > /home/hamradio/.asoundrc << 'ALSA_CONFIG'
-# ALSA configuration for Docker
-# Routes all ALSA audio through PulseAudio
-
-pcm.!default {
-    type pulse
-    fallback "sysdefault"
-    hint {
-        show on
-        description "Default ALSA via PulseAudio"
-    }
-}
-
-ctl.!default {
-    type pulse
-    fallback "sysdefault"
-}
-
-# Virtual null device fallback
-pcm.null {
-    type null
-}
-
-pcm.pulse {
-    type pulse
-}
-ALSA_CONFIG
-
-RUN chown -R hamradio:hamradio \
-        /home/hamradio/.config \
-        /home/hamradio/.asoundrc
-
-# Create X11 Unix socket directory with world-writable
-# permissions so non-root users (hamradio) can run
-# Xvfb and other X11 applications.
-# This must be done as root before USER hamradio.
-RUN mkdir -p /tmp/.X11-unix && \
-    chmod 1777 /tmp/.X11-unix && \
-    chown root:root /tmp/.X11-unix
-# -------------------------------------------------------
-# Switch to non-root user
-# ALL subsequent RUN, COPY, CMD, ENTRYPOINT run as hamradio
-# -------------------------------------------------------
 USER hamradio
 
 EXPOSE 5000
