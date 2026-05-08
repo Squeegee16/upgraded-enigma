@@ -360,7 +360,23 @@ and is the recommended production deployment method.\
 # Raspberry Pi Docker (ARM)
 <details>
 The application runs on Raspberry Pi 4 with Docker:
+# Build specifically for ARM64 (Raspberry Pi 4/5)
+docker compose build
 
+# OR explicitly specify platform
+docker buildx build \
+    --platform linux/arm64 \
+    -t hamradio-app:latest \
+    .
+
+# Verify Go architecture inside container after build
+docker compose run --rm app go version
+# Expected: go version go1.22.3 linux/arm64
+
+# Verify the binary architecture
+docker compose run --rm app \
+    file /usr/local/go/bin/go
+# Expected: ELF 64-bit LSB executable, ARM aarch64
 ### Ensure 64-bit OS (required)
     uname -m  # Should show aarch64
 
