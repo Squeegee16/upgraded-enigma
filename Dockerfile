@@ -394,7 +394,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # This config runs PulseAudio as a per-user daemon
 # with a null output sink (virtual audio device).
 RUN mkdir -p /home/hamradio/.config/pulse 
-    cat > /home/hamradio/.config/pulse/default.pa << 'PULSE_CONFIG'
+RUN cat > /home/hamradio/.config/pulse/default.pa << 'PULSE_CONFIG'
 # PulseAudio configuration for FLdigi in Docker
 # Loads the null sink as the default audio output
 
