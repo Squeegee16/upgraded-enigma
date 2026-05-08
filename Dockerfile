@@ -197,45 +197,72 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# Package Group 7: FLdigi build dependencies
+# Package Group 7: FLdigi complete build dependencies
 #
-# fldigi is built from source because:
-#   1. Not available in all ARM64/Bookworm repositories
-#   2. Building from source ensures correct architecture
-#   3. Latest version with all features
-#
-# flmsg installed from apt if available.
+# All -dev packages that configure/make need must be
+# installed BEFORE attempting the build.
+# Installing them in one block ensures they are all
+# present when autoreconf and configure run.
 # ============================================================
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        libfltk1.3-dev \
-        libjpeg-dev \
-        libpng-dev \
-        gettext \
-        intltool \
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    libfltk1.3-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libxft-dev \
+    libxinerama-dev \
+    libxfixes-dev \
+    libxcursor-dev \
+    libfontconfig1-dev \
+    libxext-dev \
+    libsamplerate-dev \
+    libsndfile1-dev \
+    portaudio19-dev \
+    libpulse-dev \
+    libasound2-dev \
+    libhamlib-dev \
+    gettext \
+    intltool \
+    autoconf \
+    automake \
+    libtool \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
 # Build FLdigi from source
 #
-# FLdigi is the primary digital modes modem application.
-# The combined fldigi/flarq repository is cloned from
-# SourceForge and built with autotools.
+# Exit code 2 means make failed. The build is split into
+# explicit numbered steps with configure output saved to
+# a log file so errors are visible in docker build output.
 #
-# Both fldigi AND flarq are built and installed because
-# they share a single build system.
-#
-# Steps:
-#   1. Clone combined fldigi/flarq repository
-#   2. Run autoreconf to generate configure script
-#   3. Configure with standard prefix /usr/local
-#   4. Build with all available CPU cores
-#   5. Install both fldigi and flarq binaries
-#   6. Verify installation
+# --without-flarq is tried first to speed up the build.
+# If that flag is not supported, the full build runs.
 # ============================================================
 RUN set -eux; \
-    echo "=== Building FLdigi from source ==="; \
     \
+    echo "=== Step 1: Verify all build tools are present ==="; \
+    for tool in autoconf automake libtool pkg-config \
+                autopoint aclocal; do \
+        if command -v "$tool" >/dev/null 2>&1; then \
+            echo "  ✓ $tool: $(${tool} --version 2>&1 | head -1)"; \
+        else \
+            echo "  ✗ $tool: NOT FOUND"; \
+            exit 1; \
+        fi; \
+    done; \
+    \
+    echo "=== Step 2: Verify all required libraries ==="; \
+    for lib in fltk libpng libjpeg libxft libpulse \
+               portaudio-2.0 samplerate sndfile; do \
+        if pkg-config --exists "$lib" 2>/dev/null; then \
+            echo "  ✓ $lib: $(pkg-config --modversion $lib 2>/dev/null)"; \
+        else \
+            echo "  ✗ $lib: NOT FOUND via pkg-config"; \
+        fi; \
+    done; \
+    \
+    echo "=== Step 3: Clone fldigi/flarq repository ==="; \
     cd /tmp; \
     git clone \
         --depth 1 \
@@ -245,37 +272,62 @@ RUN set -eux; \
     cd /tmp/fldigi-src; \
     echo "Repository contents:"; \
     ls -la; \
+    echo "configure.ac version line:"; \
+    grep -E "FLDIGI_MAJOR|FLDIGI_MINOR|FLDIGI_PATCH" \
+        configure.ac | head -5; \
     \
-    echo "Running autoreconf..."; \
-    autoreconf -fi; \
+    echo "=== Step 4: Run autoreconf ==="; \
+    autoreconf -fi 2>&1; \
+    echo "autoreconf exit code: $?"; \
     \
-    echo "Configuring..."; \
-    ./configure --prefix=/usr/local; \
+    echo "=== Step 5: Configure ==="; \
+    ./configure \
+        --prefix=/usr/local \
+        --disable-flarq \
+        2>&1 | tee /tmp/fldigi-configure.log; \
+    CONFIGURE_EXIT=$?; \
+    echo "configure exit code: ${CONFIGURE_EXIT}"; \
+    if [ "${CONFIGURE_EXIT}" -ne 0 ]; then \
+        echo "=== configure FAILED — last 30 lines of log ==="; \
+        tail -30 /tmp/fldigi-configure.log; \
+        exit "${CONFIGURE_EXIT}"; \
+    fi; \
     \
-    echo "Building with $(nproc) cores..."; \
-    make -j$(nproc); \
+    echo "=== Step 6: Show configure summary ==="; \
+    echo "--- Libraries found ---"; \
+    grep -E "checking|yes|no" /tmp/fldigi-configure.log \
+        | grep -v "^$" | tail -40 || true; \
     \
-    echo "Installing..."; \
-    make install; \
+    echo "=== Step 7: Build ==="; \
+    CPU_COUNT=$(nproc); \
+    echo "Building with ${CPU_COUNT} cores..."; \
+    make -j${CPU_COUNT} 2>&1 | tee /tmp/fldigi-make.log; \
+    MAKE_EXIT=$?; \
+    echo "make exit code: ${MAKE_EXIT}"; \
+    if [ "${MAKE_EXIT}" -ne 0 ]; then \
+        echo "=== make FAILED — last 50 lines ==="; \
+        tail -50 /tmp/fldigi-make.log; \
+        exit "${MAKE_EXIT}"; \
+    fi; \
     \
-    echo "Verifying fldigi..."; \
-    which fldigi && fldigi --version 2>&1 | head -3 \
-        || echo "WARNING: fldigi not found after install"; \
+    echo "=== Step 8: Install ==="; \
+    make install 2>&1; \
     \
-    echo "Verifying flarq..."; \
-    which flarq && flarq --version 2>&1 | head -3 \
-        || echo "INFO: flarq not installed (optional)"; \
+    echo "=== Step 9: Verify ==="; \
+    if command -v fldigi >/dev/null 2>&1; then \
+        echo "  ✓ fldigi installed:"; \
+        fldigi --version 2>&1 | head -3; \
+    else \
+        echo "  ✗ fldigi not found after install"; \
+        find /usr/local/bin -name "fldigi*" 2>/dev/null; \
+        exit 1; \
+    fi; \
     \
     cd /; \
-    rm -rf /tmp/fldigi-src; \
+    rm -rf /tmp/fldigi-src \
+           /tmp/fldigi-configure.log \
+           /tmp/fldigi-make.log; \
     echo "=== FLdigi build complete ==="
-
-# Install flmsg if available via apt (optional companion)
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends flmsg \
-    || echo "INFO: flmsg not available in repos — skipping" && \
-    rm -rf /var/lib/apt/lists/*
-
 # ============================================================
 # Build SoapySDR from source
 #
