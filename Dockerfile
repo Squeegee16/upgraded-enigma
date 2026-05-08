@@ -419,7 +419,7 @@ set-default-source fldigi_null_source
 PULSE_CONFIG
 
     # Create ALSA config pointing to PulseAudio
-    cat > /home/hamradio/.asoundrc << 'ALSA_CONFIG'
+RUN cat > /home/hamradio/.asoundrc << 'ALSA_CONFIG'
 # ALSA configuration for Docker
 # Routes all ALSA audio through PulseAudio
 
