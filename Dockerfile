@@ -197,72 +197,111 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# Package Group 7: FLdigi complete build dependencies
+# Install FLdigi build dependencies AND build from source
 #
-# All -dev packages that configure/make need must be
-# installed BEFORE attempting the build.
-# Installing them in one block ensures they are all
-# present when autoreconf and configure run.
-# ============================================================
-RUN apt-get update && apt-get install -y \
-    --no-install-recommends \
-    libfltk1.3-dev \
-    libpng-dev \
-    libjpeg-dev \
-    libxft-dev \
-    libxinerama-dev \
-    libxfixes-dev \
-    libxcursor-dev \
-    libfontconfig1-dev \
-    libxext-dev \
-    libsamplerate-dev \
-    libsndfile1-dev \
-    portaudio19-dev \
-    libpulse-dev \
-    libasound2-dev \
-    libhamlib-dev \
-    gettext \
-    intltool \
-    autoconf \
-    automake \
-    libtool \
-    pkg-config \
-    && rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# Build FLdigi from source
+# All dependencies are installed in the same RUN block as
+# the build to guarantee they are present when needed.
 #
-# Exit code 2 means make failed. The build is split into
-# explicit numbered steps with configure output saved to
-# a log file so errors are visible in docker build output.
+# FLdigi is built from the combined fldigi/flarq repository
+# hosted on SourceForge. Both fldigi and flarq share a
+# single autotools build system.
 #
-# --without-flarq is tried first to speed up the build.
-# If that flag is not supported, the full build runs.
+# Required libraries:
+#   libfltk1.3-dev    - FLTK GUI toolkit
+#   libpng-dev        - PNG image support
+#   libjpeg-dev       - JPEG image support
+#   libxft-dev        - X11 font rendering
+#   libxinerama-dev   - Multi-monitor support
+#   libxfixes-dev     - X11 fixes extension
+#   libxcursor-dev    - X11 cursor support
+#   libfontconfig1-dev- Font configuration
+#   libxext-dev       - X11 extensions
+#   libsamplerate-dev - Audio sample rate conversion
+#   libsndfile-dev    - Audio file I/O
+#   portaudio19-dev   - Cross-platform audio I/O
+#   libpulse-dev      - PulseAudio integration
+#   libasound2-dev    - ALSA audio integration
+#   libhamlib-dev     - Radio control library
+#   gettext           - Internationalization tools
+#   autopoint         - Part of gettext, needed by autoreconf
+#   autoconf          - Build configuration tool
+#   automake          - Makefile generator
+#   libtool           - Library build tool
+#   pkg-config        - Library detection tool
+#   intltool          - Internationalization tool
 # ============================================================
 RUN set -eux; \
     \
-    echo "=== Step 1: Verify all build tools are present ==="; \
+    echo "=== Installing FLdigi build dependencies ==="; \
+    apt-get update; \
+    \
+    # Core autotools (must all be present for autoreconf)
+    apt-get install -y --no-install-recommends \
+        autoconf \
+        automake \
+        libtool \
+        pkg-config \
+        gettext \
+        intltool; \
+    \
+    # Verify autotools are all installed before continuing
     for tool in autoconf automake libtool pkg-config \
                 autopoint aclocal; do \
         if command -v "$tool" >/dev/null 2>&1; then \
-            echo "  ✓ $tool: $(${tool} --version 2>&1 | head -1)"; \
+            echo "  ✓ $tool: $(${tool} --version 2>&1 \
+                | head -1)"; \
         else \
-            echo "  ✗ $tool: NOT FOUND"; \
+            echo "  ✗ MISSING: $tool"; \
+            echo "  Run: apt-get install -y autoconf \
+automake libtool pkg-config gettext"; \
             exit 1; \
         fi; \
     done; \
     \
-    echo "=== Step 2: Verify all required libraries ==="; \
-    for lib in fltk libpng libjpeg libxft libpulse \
-               portaudio-2.0 samplerate sndfile; do \
+    # Graphics and display libraries
+    apt-get install -y --no-install-recommends \
+        libfltk1.3-dev \
+        libpng-dev \
+        libjpeg-dev \
+        libxft-dev \
+        libxinerama-dev \
+        libxfixes-dev \
+        libxcursor-dev \
+        libfontconfig1-dev \
+        libxext-dev; \
+    \
+    # Audio libraries
+    apt-get install -y --no-install-recommends \
+        libsamplerate-dev \
+        libsndfile-dev \
+        portaudio19-dev \
+        libpulse-dev \
+        libasound2-dev; \
+    \
+    # Optional: Hamlib radio control integration
+    # FLdigi can use Hamlib for radio CAT control.
+    # Try installing the dev package; skip if unavailable.
+    apt-get install -y --no-install-recommends \
+        libhamlib-dev \
+    || echo "INFO: libhamlib-dev not available — \
+FLdigi will build without Hamlib integration"; \
+    \
+    rm -rf /var/lib/apt/lists/*; \
+    \
+    echo "=== Verifying all required libraries ==="; \
+    for lib in fltk libpng libjpeg libxft \
+               libpulse portaudio-2.0 \
+               samplerate sndfile; do \
         if pkg-config --exists "$lib" 2>/dev/null; then \
-            echo "  ✓ $lib: $(pkg-config --modversion $lib 2>/dev/null)"; \
+            VER=$(pkg-config --modversion "$lib" \
+                2>/dev/null || echo "unknown"); \
+            echo "  ✓ $lib: $VER"; \
         else \
-            echo "  ✗ $lib: NOT FOUND via pkg-config"; \
+            echo "  ✗ $lib: not found via pkg-config"; \
         fi; \
     done; \
     \
-    echo "=== Step 3: Clone fldigi/flarq repository ==="; \
+    echo "=== Cloning fldigi/flarq repository ==="; \
     cd /tmp; \
     git clone \
         --depth 1 \
@@ -272,61 +311,81 @@ RUN set -eux; \
     cd /tmp/fldigi-src; \
     echo "Repository contents:"; \
     ls -la; \
-    echo "configure.ac version line:"; \
+    echo "FLdigi version from configure.ac:"; \
     grep -E "FLDIGI_MAJOR|FLDIGI_MINOR|FLDIGI_PATCH" \
         configure.ac | head -5; \
     \
-    echo "=== Step 4: Run autoreconf ==="; \
+    echo "=== Running autoreconf ==="; \
     autoreconf -fi 2>&1; \
-    echo "autoreconf exit code: $?"; \
+    echo "autoreconf completed"; \
     \
-    echo "=== Step 5: Configure ==="; \
+    echo "=== Configuring (fldigi only, no flarq) ==="; \
     ./configure \
         --prefix=/usr/local \
         --disable-flarq \
-        2>&1 | tee /tmp/fldigi-configure.log; \
-    CONFIGURE_EXIT=$?; \
+        2>&1 | tee /tmp/configure.log; \
+    CONFIGURE_EXIT=${PIPESTATUS[0]}; \
     echo "configure exit code: ${CONFIGURE_EXIT}"; \
+    \
     if [ "${CONFIGURE_EXIT}" -ne 0 ]; then \
-        echo "=== configure FAILED — last 30 lines of log ==="; \
-        tail -30 /tmp/fldigi-configure.log; \
+        echo "=== configure FAILED — full log ==="; \
+        cat /tmp/configure.log; \
+        echo ""; \
+        echo "=== Missing libraries (configure summary) ==="; \
+        grep -E "no$|not found|missing|error" \
+            /tmp/configure.log | head -30 || true; \
         exit "${CONFIGURE_EXIT}"; \
     fi; \
     \
-    echo "=== Step 6: Show configure summary ==="; \
-    echo "--- Libraries found ---"; \
-    grep -E "checking|yes|no" /tmp/fldigi-configure.log \
-        | grep -v "^$" | tail -40 || true; \
+    echo "=== Configure succeeded — library summary ==="; \
+    grep -E "checking for.*\.\.\." /tmp/configure.log \
+        | tail -30 || true; \
     \
-    echo "=== Step 7: Build ==="; \
+    echo "=== Building FLdigi ==="; \
     CPU_COUNT=$(nproc); \
-    echo "Building with ${CPU_COUNT} cores..."; \
-    make -j${CPU_COUNT} 2>&1 | tee /tmp/fldigi-make.log; \
-    MAKE_EXIT=$?; \
+    echo "Using ${CPU_COUNT} cores"; \
+    make -j${CPU_COUNT} 2>&1 | tee /tmp/make.log; \
+    MAKE_EXIT=${PIPESTATUS[0]}; \
     echo "make exit code: ${MAKE_EXIT}"; \
+    \
     if [ "${MAKE_EXIT}" -ne 0 ]; then \
-        echo "=== make FAILED — last 50 lines ==="; \
-        tail -50 /tmp/fldigi-make.log; \
+        echo "=== make FAILED — last 60 lines ==="; \
+        tail -60 /tmp/make.log; \
+        echo ""; \
+        echo "=== Error lines only ==="; \
+        grep -iE "^.*error:.*$" /tmp/make.log \
+            | head -20 || true; \
         exit "${MAKE_EXIT}"; \
     fi; \
     \
-    echo "=== Step 8: Install ==="; \
+    echo "=== Installing FLdigi ==="; \
     make install 2>&1; \
+    ldconfig; \
     \
-    echo "=== Step 9: Verify ==="; \
+    echo "=== Verifying installation ==="; \
     if command -v fldigi >/dev/null 2>&1; then \
         echo "  ✓ fldigi installed:"; \
-        fldigi --version 2>&1 | head -3; \
+        fldigi --version 2>&1 | head -3 || true; \
     else \
-        echo "  ✗ fldigi not found after install"; \
-        find /usr/local/bin -name "fldigi*" 2>/dev/null; \
+        echo "  ✗ fldigi binary not found"; \
+        find /usr/local -name "fldigi*" 2>/dev/null; \
         exit 1; \
     fi; \
     \
+    if command -v flarq >/dev/null 2>&1; then \
+        echo "  ✓ flarq installed:"; \
+        flarq --version 2>&1 | head -3 || true; \
+    else \
+        echo "  ℹ flarq not installed (--disable-flarq used)"; \
+    fi; \
+    \
+    echo "=== Cleaning up build files ==="; \
     cd /; \
-    rm -rf /tmp/fldigi-src \
-           /tmp/fldigi-configure.log \
-           /tmp/fldigi-make.log; \
+    rm -rf \
+        /tmp/fldigi-src \
+        /tmp/configure.log \
+        /tmp/make.log; \
+    \
     echo "=== FLdigi build complete ==="
 # ============================================================
 # Build SoapySDR from source
