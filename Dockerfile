@@ -231,162 +231,72 @@ RUN apt-get update && \
 #   intltool          - Internationalization tool
 # ============================================================
 RUN set -eux; \
-    \
     echo "=== Installing FLdigi build dependencies ==="; \
     apt-get update; \
-    \
-    # Core autotools (must all be present for autoreconf)
     apt-get install -y --no-install-recommends \
-        autoconf \
-        automake \
-        libtool \
-        pkg-config \
-        gettext \
-        intltool; \
-    \
-    # Verify autotools are all installed before continuing
-    for tool in autoconf automake libtool pkg-config \
-                autopoint aclocal; do \
+        autoconf automake libtool pkg-config gettext intltool \
+        libfltk1.3-dev libpng-dev libjpeg-dev libxft-dev libxinerama-dev \
+        libxfixes-dev libxcursor-dev libfontconfig1-dev libxext-dev \
+        libsamplerate-dev libsndfile-dev portaudio19-dev libpulse-dev libasound2-dev \
+        libhamlib-dev || true; \
+    rm -rf /var/lib/apt/lists/*; \
+    echo "=== Verifying autotools ==="; \
+    for tool in autoconf automake libtool pkg-config autopoint aclocal; do \
         if command -v "$tool" >/dev/null 2>&1; then \
-            echo "  ✓ $tool: $(${tool} --version 2>&1 \
-                | head -1)"; \
+            echo "  ✓ $tool: $(${tool} --version 2>&1 | head -1)"; \
         else \
             echo "  ✗ MISSING: $tool"; \
-            echo "  Run: apt-get install -y autoconf \
-automake libtool pkg-config gettext"; \
             exit 1; \
         fi; \
     done; \
-    \
-    # Graphics and display libraries
-    apt-get install -y --no-install-recommends \
-        libfltk1.3-dev \
-        libpng-dev \
-        libjpeg-dev \
-        libxft-dev \
-        libxinerama-dev \
-        libxfixes-dev \
-        libxcursor-dev \
-        libfontconfig1-dev \
-        libxext-dev; \
-    \
-    # Audio libraries
-    apt-get install -y --no-install-recommends \
-        libsamplerate-dev \
-        libsndfile-dev \
-        portaudio19-dev \
-        libpulse-dev \
-        libasound2-dev; \
-    \
-    # Optional: Hamlib radio control integration
-    # FLdigi can use Hamlib for radio CAT control.
-    # Try installing the dev package; skip if unavailable.
-    apt-get install -y --no-install-recommends \
-        libhamlib-dev \
-    || echo "INFO: libhamlib-dev not available — \
-FLdigi will build without Hamlib integration"; \
-    \
-    rm -rf /var/lib/apt/lists/*; \
-    \
-    echo "=== Verifying all required libraries ==="; \
-    for lib in fltk libpng libjpeg libxft \
-               libpulse portaudio-2.0 \
-               samplerate sndfile; do \
+    echo "=== Verifying libraries ==="; \
+    for lib in fltk libpng libjpeg libxft libpulse portaudio-2.0 samplerate sndfile; do \
         if pkg-config --exists "$lib" 2>/dev/null; then \
-            VER=$(pkg-config --modversion "$lib" \
-                2>/dev/null || echo "unknown"); \
+            VER=$(pkg-config --modversion "$lib" 2>/dev/null || echo "unknown"); \
             echo "  ✓ $lib: $VER"; \
         else \
-            echo "  ✗ $lib: not found via pkg-config"; \
+            echo "  ✗ $lib: not found"; \
         fi; \
     done; \
-    \
-    echo "=== Cloning fldigi/flarq repository ==="; \
+    echo "=== Cloning fldigi repository ==="; \
     cd /tmp; \
-    git clone \
-        --depth 1 \
-        https://git.code.sf.net/p/fldigi/fldigi \
-        fldigi-src; \
-    \
+    git clone --depth 1 https://git.code.sf.net/p/fldigi/fldigi fldigi-src; \
     cd /tmp/fldigi-src; \
     echo "Repository contents:"; \
     ls -la; \
-    echo "FLdigi version from configure.ac:"; \
-    grep -E "FLDIGI_MAJOR|FLDIGI_MINOR|FLDIGI_PATCH" \
-        configure.ac | head -5; \
-    \
+    grep -E "FLDIGI_MAJOR|FLDIGI_MINOR|FLDIGI_PATCH" configure.ac | head -5; \
     echo "=== Running autoreconf ==="; \
     autoreconf -fi 2>&1; \
-    echo "autoreconf completed"; \
-    \
-    echo "=== Configuring (fldigi only, no flarq) ==="; \
-    ./configure \
-        --prefix=/usr/local \
-        --disable-flarq \
-        2>&1 | tee /tmp/configure.log; \
+    echo "=== Configuring FLdigi ==="; \
+    ./configure --prefix=/usr/local --disable-flarq 2>&1 | tee /tmp/configure.log; \
     CONFIGURE_EXIT=${PIPESTATUS[0]}; \
-    echo "configure exit code: ${CONFIGURE_EXIT}"; \
-    \
     if [ "${CONFIGURE_EXIT}" -ne 0 ]; then \
-        echo "=== configure FAILED — full log ==="; \
+        echo "=== configure FAILED ==="; \
         cat /tmp/configure.log; \
-        echo ""; \
-        echo "=== Missing libraries (configure summary) ==="; \
-        grep -E "no$|not found|missing|error" \
-            /tmp/configure.log | head -30 || true; \
         exit "${CONFIGURE_EXIT}"; \
     fi; \
-    \
-    echo "=== Configure succeeded — library summary ==="; \
-    grep -E "checking for.*\.\.\." /tmp/configure.log \
-        | tail -30 || true; \
-    \
     echo "=== Building FLdigi ==="; \
     CPU_COUNT=$(nproc); \
-    echo "Using ${CPU_COUNT} cores"; \
     make -j${CPU_COUNT} 2>&1 | tee /tmp/make.log; \
     MAKE_EXIT=${PIPESTATUS[0]}; \
-    echo "make exit code: ${MAKE_EXIT}"; \
-    \
     if [ "${MAKE_EXIT}" -ne 0 ]; then \
-        echo "=== make FAILED — last 60 lines ==="; \
+        echo "=== make FAILED ==="; \
         tail -60 /tmp/make.log; \
-        echo ""; \
-        echo "=== Error lines only ==="; \
-        grep -iE "^.*error:.*$" /tmp/make.log \
-            | head -20 || true; \
         exit "${MAKE_EXIT}"; \
     fi; \
-    \
     echo "=== Installing FLdigi ==="; \
-    make install 2>&1; \
+    make install; \
     ldconfig; \
-    \
-    echo "=== Verifying installation ==="; \
     if command -v fldigi >/dev/null 2>&1; then \
-        echo "  ✓ fldigi installed:"; \
-        fldigi --version 2>&1 | head -3 || true; \
+        echo "  ✓ fldigi installed: $(fldigi --version 2>&1 | head -1)"; \
     else \
         echo "  ✗ fldigi binary not found"; \
-        find /usr/local -name "fldigi*" 2>/dev/null; \
         exit 1; \
     fi; \
-    \
-    if command -v flarq >/dev/null 2>&1; then \
-        echo "  ✓ flarq installed:"; \
-        flarq --version 2>&1 | head -3 || true; \
-    else \
-        echo "  ℹ flarq not installed (--disable-flarq used)"; \
-    fi; \
-    \
-    echo "=== Cleaning up build files ==="; \
-    cd /; \
-    rm -rf \
-        /tmp/fldigi-src \
-        /tmp/configure.log \
-        /tmp/make.log; \
-    \
+    echo "=== Cleaning up ==="; \
+    rm -rf /tmp/fldigi-src /tmp/configure.log /tmp/make.log; \
     echo "=== FLdigi build complete ==="
+
 # ============================================================
 # Build SoapySDR from source
 #
