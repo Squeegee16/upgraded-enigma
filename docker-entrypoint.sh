@@ -307,9 +307,7 @@ if [ "$USE_MOCK_DEVICES" = "false" ]; then
 else
     echo "  Mock radio enabled"
 fi
-# ---------------------------------------------------------------
-# Go toolchain check (for GrayWolf plugin)
-# ---------------------------------------------------------------
+
 # ---------------------------------------------------------------
 # Go toolchain check (for GrayWolf and other Go plugins)
 # ---------------------------------------------------------------
