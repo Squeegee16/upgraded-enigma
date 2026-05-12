@@ -230,73 +230,26 @@ RUN apt-get update && \
 #   pkg-config        - Library detection tool
 #   intltool          - Internationalization tool
 # ============================================================
+
 RUN set -eux; \
-    echo "=== Installing FLdigi build dependencies ==="; \
+    echo "=== Installing FLdigi (prebuilt) ==="; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        autoconf automake libtool pkg-config gettext intltool \
-        libfltk1.3-dev libpng-dev libjpeg-dev libxft-dev libxinerama-dev \
-        libxfixes-dev libxcursor-dev libfontconfig1-dev libxext-dev \
-        libsamplerate-dev libsndfile-dev portaudio19-dev libpulse-dev libasound2-dev \
-        libhamlib-dev || true; \
+        fldigi \
+        libfltk1.3 \
+        libpulse0 \
+        libasound2 \
+        libsamplerate0 \
+        libsndfile1 \
+        portaudio19-dev; \
     rm -rf /var/lib/apt/lists/*; \
-    echo "=== Verifying autotools ==="; \
-    for tool in autoconf automake libtool pkg-config autopoint aclocal; do \
-        if command -v "$tool" >/dev/null 2>&1; then \
-            echo "  ✓ $tool: $(${tool} --version 2>&1 | head -1)"; \
-        else \
-            echo "  ✗ MISSING: $tool"; \
-            exit 1; \
-        fi; \
-    done; \
-    echo "=== Verifying libraries ==="; \
-    for lib in fltk libpng libjpeg libxft libpulse portaudio-2.0 samplerate sndfile; do \
-        if pkg-config --exists "$lib" 2>/dev/null; then \
-            VER=$(pkg-config --modversion "$lib" 2>/dev/null || echo "unknown"); \
-            echo "  ✓ $lib: $VER"; \
-        else \
-            echo "  ✗ $lib: not found"; \
-        fi; \
-    done; \
-    echo "=== Cloning fldigi repository ==="; \
-    cd /tmp; \
-    git clone --depth 1 https://git.code.sf.net/p/fldigi/fldigi fldigi-src; \
-    cd /tmp/fldigi-src; \
-    echo "Repository contents:"; \
-    ls -la; \
-    grep -E "FLDIGI_MAJOR|FLDIGI_MINOR|FLDIGI_PATCH" configure.ac | head -5; \
-    echo "=== Running autoreconf ==="; \
-    autoreconf -fi 2>&1; \
-    echo "=== Configuring FLdigi ==="; \
-    ./configure --prefix=/usr/local --disable-flarq 2>&1 | tee /tmp/configure.log; \
-    CONFIGURE_EXIT=${PIPESTATUS[0]}; \
-    if [ "${CONFIGURE_EXIT}" -ne 0 ]; then \
-        echo "=== configure FAILED ==="; \
-        cat /tmp/configure.log; \
-        exit "${CONFIGURE_EXIT}"; \
-    fi; \
-    echo "=== Building FLdigi ==="; \
-    CPU_COUNT=$(nproc); \
-    make -j${CPU_COUNT} 2>&1 | tee /tmp/make.log; \
-    MAKE_EXIT=${PIPESTATUS[0]}; \
-    if [ "${MAKE_EXIT}" -ne 0 ]; then \
-        echo "=== make FAILED ==="; \
-        tail -60 /tmp/make.log; \
-        exit "${MAKE_EXIT}"; \
-    fi; \
-    echo "=== Installing FLdigi ==="; \
-    make install; \
-    ldconfig; \
     if command -v fldigi >/dev/null 2>&1; then \
-        echo "  ✓ fldigi installed: $(fldigi --version 2>&1 | head -1)"; \
+        echo "✓ FLdigi installed: $(fldigi --version 2>&1 | head -1)"; \
     else \
-        echo "  ✗ fldigi binary not found"; \
+        echo "✗ FLdigi installation failed"; \
         exit 1; \
     fi; \
-    echo "=== Cleaning up ==="; \
-    rm -rf /tmp/fldigi-src /tmp/configure.log /tmp/make.log; \
-    echo "=== FLdigi build complete ==="
-
+    echo "=== FLdigi installation complete ==="
 # ============================================================
 # Build SoapySDR from source
 #
