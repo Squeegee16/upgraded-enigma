@@ -16,7 +16,7 @@
 # non-root runtime user (hamradio) never needs to write
 # to /opt/venv.
 #
-# Usage: 
+# Usage:
 #   docker compose build
 #   docker compose up -d
 
@@ -126,14 +126,17 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# Package Group 3: X11 display support
+# Package Group 3: X11 display support + VNC
 # Required for FLdigi and QSSTV which are GUI applications.
 # Xvfb provides a virtual framebuffer — no real monitor needed.
+# TigerVNC allows remote access to the virtual display.
 # ============================================================
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     xvfb \
     x11-utils \
+    tigervnc-standalone-server \
+    tigervnc-common \
     libxft-dev \
     libpng-dev \
     libxinerama-dev \
@@ -142,11 +145,7 @@ RUN apt-get update && apt-get install -y \
     libfontconfig1-dev \
     libxext-dev \
     && rm -rf /var/lib/apt/lists/*
-    
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    tigervnc-standalone-server \
-    tigervnc-common \
-    && rm -rf /var/lib/apt/lists/*
+
 # ============================================================
 # Package Group 4: GPS support
 # ============================================================
@@ -254,6 +253,7 @@ RUN set -eux; \
         exit 1; \
     fi; \
     echo "=== FLdigi installation complete ==="
+
 # ============================================================
 # Build SoapySDR from source
 #
