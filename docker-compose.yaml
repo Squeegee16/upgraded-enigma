@@ -105,7 +105,6 @@ services:
       - PLUGIN_SKIP_PIP_INSTALL=true
       
       # x display gui
-      - DISPLAY=:0
       - XAUTHORITY=/tmp/.Xauthority
       # OpenWebRX sidecar URL (internal Docker network)
       - OPENWEBRX_URL=http://openwebrx:8073
