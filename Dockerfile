@@ -654,6 +654,5 @@ HEALTHCHECK \
         "import urllib.request; \
          urllib.request.urlopen('http://localhost:5000/').read()" \
     || exit 1
-
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["python", "app.py"]
