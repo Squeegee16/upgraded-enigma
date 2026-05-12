@@ -16,7 +16,7 @@
 # non-root runtime user (hamradio) never needs to write
 # to /opt/venv.
 #
-# Usage:
+# Usage: 
 #   docker compose build
 #   docker compose up -d
 
@@ -142,7 +142,11 @@ RUN apt-get update && apt-get install -y \
     libfontconfig1-dev \
     libxext-dev \
     && rm -rf /var/lib/apt/lists/*
-
+    
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tigervnc-standalone-server \
+    tigervnc-common \
+    && rm -rf /var/lib/apt/lists/*
 # ============================================================
 # Package Group 4: GPS support
 # ============================================================
