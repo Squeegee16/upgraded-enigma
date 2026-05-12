@@ -454,6 +454,11 @@ echo -e "${GREEN}  ✓ ALSA configured for PulseAudio${NC}"
 # Start Xvfb virtual display for GUI applications
 # FLdigi and QSSTV require an X11 display to launch.
 # =================================================================
+echo -e "${YELLOW}  Start VNC server on :99 (same display as Xvfb)${NC}"
+# 
+vncserver :99 -geometry 1920x1080 -depth 24 -SecurityTypes None &
+echo "VNC server started on :99"
+
 echo -e "\n${YELLOW}[6b/7] Starting virtual display (Xvfb)...${NC}"
 
 # Ensure X11 socket directory exists with correct permissions
