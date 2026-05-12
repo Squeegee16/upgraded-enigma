@@ -103,14 +103,18 @@ services:
 
       # Tells plugin installers not to attempt runtime pip/apt
       - PLUGIN_SKIP_PIP_INSTALL=true
-
+      
+      # x display gui
+      - DISPLAY=:0
+      - XAUTHORITY=/tmp/.Xauthority
       # OpenWebRX sidecar URL (internal Docker network)
       - OPENWEBRX_URL=http://openwebrx:8073
 
     volumes:
       # Single volume covers all /data subdirectories
       - app_data:/data
-
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ~/.Xauthority:/tmp/.Xauthority:ro
     # USB device passthrough for GPS and Radio CAT port.
     # RTL-SDR is passed to openwebrx service below.
     # Uncomment when real hardware is connected.
