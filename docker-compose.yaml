@@ -66,11 +66,12 @@ services:
 
     ports:
       - "5000:5000"
-      - "7362:7362"
+
     environment:
       # Flask configuration
       - FLASK_ENV=${FLASK_ENV:-production}
       - FLASK_DEBUG=${FLASK_DEBUG:-0}
+      - DISPLAY=host.docker.internal:99
 
       # Database
       - DATABASE_URL=sqlite:////data/db/ham_radio.db
