@@ -307,7 +307,9 @@ if [ "$USE_MOCK_DEVICES" = "false" ]; then
 else
     echo "  Mock radio enabled"
 fi
-
+# ---------------------------------------------------------------
+# Go toolchain check (for GrayWolf plugin)
+# ---------------------------------------------------------------
 # ---------------------------------------------------------------
 # Go toolchain check (for GrayWolf and other Go plugins)
 # ---------------------------------------------------------------
@@ -452,11 +454,6 @@ echo -e "${GREEN}  ✓ ALSA configured for PulseAudio${NC}"
 # Start Xvfb virtual display for GUI applications
 # FLdigi and QSSTV require an X11 display to launch.
 # =================================================================
-echo -e "${YELLOW}  Start VNC server on :99 (same display as Xvfb)${NC}"
-# 
-vncserver :99 -geometry 1920x1080 -depth 24 -SecurityTypes None &
-echo "VNC server started on :99"
-
 echo -e "\n${YELLOW}[6b/7] Starting virtual display (Xvfb)...${NC}"
 
 # Ensure X11 socket directory exists with correct permissions
@@ -503,6 +500,67 @@ if command -v Xvfb >/dev/null 2>&1; then
 else
     echo -e "${YELLOW}  ⚠ Xvfb not installed${NC}"
     echo "  Add to Dockerfile: apt-get install -y xvfb"
+fi
+
+# =================================================================
+# Start VNC server for remote GUI access
+# =================================================================
+echo -e "\n${YELLOW}[6a/7] Starting VNC server...${NC}"
+
+if command -v vncserver >/dev/null 2>&1; then
+    # Start VNC server on display :99 (same as Xvfb)
+    # SecurityTypes None allows passwordless access (for internal use only)
+    export VNCPASSWD="hamradio"
+    vncserver :99 \
+        -geometry 1920x1080 \
+        -depth 24 \
+        -SecurityTypes None \
+        2>/dev/null &
+    sleep 2
+    
+    if ps aux | grep -q "[V]ncserver.*:99"; then
+        echo -e "${GREEN}  ✓ VNC server started on :99 (port 5999)${NC}"
+        echo "    Connect with: vncviewer localhost:5999"
+    else
+        echo -e "${YELLOW}  ⚠ VNC server failed to start${NC}"
+    fi
+else
+    echo -e "${YELLOW}  ⚠ VNC server not installed${NC}"
+    echo "  Add to Dockerfile: apt-get install -y tigervnc-standalone-server"
+fi
+
+# =================================================================
+# Initialize FLdigi XML-RPC configuration
+# =================================================================
+echo -e "\n${YELLOW}[6d/7] Configuring FLdigi XML-RPC...${NC}"
+
+if command -v fldigi >/dev/null 2>&1; then
+    # FLdigi config directory
+    FLDIGI_CONFIG="$HOME/.fldigi"
+    FLDIGI_DEF="$FLDIGI_CONFIG/fldigi_def.xml"
+    
+    # Create initial config by running FLdigi in headless mode
+    if [ ! -f "$FLDIGI_DEF" ]; then
+        echo "  Initializing FLdigi configuration..."
+        timeout 5 fldigi --no-gui >/dev/null 2>&1 || true
+        sleep 2
+        pkill -f "fldigi" 2>/dev/null || true
+        sleep 1
+    fi
+    
+    # Enable XML-RPC in config if file exists
+    if [ -f "$FLDIGI_DEF" ]; then
+        # Enable XML-RPC server
+        sed -i 's/<xmlrpc_server>[0-9]/<xmlrpc_server>1/g' "$FLDIGI_DEF"
+        # Ensure port is set to 7362
+        sed -i 's/<xmlrpc_port>[0-9]*/<xmlrpc_port>7362/g' "$FLDIGI_DEF"
+        echo -e "${GREEN}  ✓ FLdigi XML-RPC enabled (port 7362)${NC}"
+    else
+        echo -e "${YELLOW}  ⚠ FLdigi config not found${NC}"
+        echo "    Will be created when FLdigi starts"
+    fi
+else
+    echo -e "${YELLOW}  ⚠ FLdigi not installed${NC}"
 fi
 # =================================================================
 # [7/7] Starting application
