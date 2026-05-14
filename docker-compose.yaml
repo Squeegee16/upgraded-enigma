@@ -66,7 +66,11 @@ services:
 
     ports:
       - "5000:5000"
-
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+      # Uncomment for UART GPS on Raspberry Pi:
+      - /dev/ttyAMA0:/dev/ttyAMA0    # Pi hardware UART
+      # - /dev/ttyUSB0:/dev/ttyUSB0    # USB GPS dongle
     environment:
       # Flask configuration
       - FLASK_ENV=${FLASK_ENV:-production}
@@ -79,8 +83,13 @@ services:
       # Device configuration
       # Set USE_MOCK_DEVICES=false when real hardware is connected
       - USE_MOCK_DEVICES=${USE_MOCK_DEVICES:-true}
+      - GPS_SOURCE=${GPS_SOURCE:-uart}
       - GPS_SERIAL_PORT=${GPS_SERIAL_PORT:-/dev/ttyAMA0}
       - GPS_BAUD_RATE=${GPS_BAUD_RATE:-9600}
+      - GPSD_HOST=${GPSD_HOST:-127.0.0.1}
+      - GPSD_PORT=${GPSD_PORT:-2947}
+      - GRID_PRECISION=${GRID_PRECISION:-6}
+      # radio
       - RADIO_MODEL=${RADIO_MODEL:-1035}
       - RADIO_PORT=${RADIO_PORT:-/dev/ttyUSB1}
       - RADIO_BAUD_RATE=${RADIO_BAUD_RATE:-38400}
