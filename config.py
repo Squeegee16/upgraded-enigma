@@ -90,7 +90,45 @@ class Config:
     CALLSIGN_DB_DIR = os.path.join(
         BASE_DIR, 'data', 'callsign_db'
     )
+    # -------------------------------------------------------
+    # GPS Configuration
+    # -------------------------------------------------------
 
+    # GPS data source:
+    #   'uart'  - Direct UART serial connection (default)
+    #             Best for Raspberry Pi with wired GPS module
+    #   'gpsd'  - System gpsd daemon
+    #             Use when sharing GPS between applications
+    #   'mock'  - Simulated GPS (always works, no hardware)
+    #             Set automatically when USE_MOCK_DEVICES=True
+    GPS_SOURCE = os.environ.get('GPS_SOURCE', 'uart')
+
+    # Serial port for UART GPS receiver
+    # Raspberry Pi hardware UART: /dev/ttyAMA0
+    # USB GPS dongle:             /dev/ttyUSB0
+    # Pi Zero / early Pi:         /dev/ttyS0
+    GPS_SERIAL_PORT = os.environ.get(
+        'GPS_SERIAL_PORT', '/dev/ttyAMA0'
+    )
+
+    # Serial baud rate — 9600 is the default for most
+    # GPS modules (u-blox, MediaTek, SiRF)
+    GPS_BAUD_RATE = int(
+        os.environ.get('GPS_BAUD_RATE', '9600')
+    )
+
+    # gpsd connection (only used when GPS_SOURCE=gpsd)
+    GPSD_HOST = os.environ.get('GPSD_HOST', '127.0.0.1')
+    GPSD_PORT = int(os.environ.get('GPSD_PORT', '2947'))
+
+    # Maidenhead grid precision:
+    #   4 = field + square      (e.g. 'FN25')
+    #   6 = + subsquare         (e.g. 'FN25bk')  ← default
+    #   8 = + extended square   (e.g. 'FN25bk11')
+    GRID_PRECISION = int(
+        os.environ.get('GRID_PRECISION', '6')
+    )
+    
 class DevelopmentConfig(Config):
     """Development-specific configuration."""
     DEBUG = True
