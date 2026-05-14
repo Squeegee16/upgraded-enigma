@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}SatDump Pipelines - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-play-circle"></i> SatDump Pipelines</h2>
+    <a href="{{ url_for('SatDump.index') }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+</div>
+
+<!-- Active Pipelines -->
+{% if active_pipelines %}
+<div class="card mb-4 border-warning">
+    <div class="card-header bg-warning">
+        <h5><i class="fas fa-play"></i> Active Pipelines</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th>Pipeline</th>
+                        <th>Satellite</th>
+                        <th>Frequency</th>
+                        <th>PID</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pipeline in active_pipelines %}
+                    <tr>
+                        <td><strong>{{ pipeline.name }}</strong></td>
+                        <td>{{ pipeline.satellite }}</td>
+                        <td>
+                            {% if pipeline.frequency %}
+                            {{ "%.3f"|format(pipeline.frequency/1e6) }} MHz
+                            {% else %}Default{% endif %}
+                        </td>
+                        <td>{{ pipeline.pid }}</td>
+                        <td>
+                            <button class="btn btn-danger btn-sm"
+                                    onclick="stopPipeline('{{ pipeline.name }}')">
+                                <i class="fas fa-stop"></i> Stop
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="row">
+    <!-- Start Pipeline Form -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5><i class="fas fa-satellite-dish"></i> Start Live Pipeline</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('SatDump.pipelines') }}">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="mb-3">
+                        {{ form.pipeline.label(class="form-label") }}
+                        {{ form.pipeline(class="form-select" + (" is-invalid" if form.pipeline.errors else ""),
+                                         onchange="updatePipelineInfo(this.value)") }}
+                        {% if form.pipeline.errors %}
+                            <div class="invalid-feedback">
+                                {% for e in form.pipeline.errors %}{{ e }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Pipeline info display -->
+                    <div id="pipeline-info" class="alert alert-info mb-3" style="display:none;">
+                        <small id="pipeline-details"></small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.frequency_override.label(class="form-label") }}
+                        {{ form.frequency_override(class="form-control",
+                                                    placeholder="e.g., 137.100") }}
+                        <small class="text-muted">{{ form.frequency_override.description }}</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.sdr_override.label(class="form-label") }}
+                        {{ form.sdr_override(class="form-select") }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.output_subdir.label(class="form-label") }}
+                        {{ form.output_subdir(class="form-control",
+                                               placeholder="auto-generated if blank") }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.extra_args.label(class="form-label") }}
+                        {{ form.extra_args(class="form-control",
+                                           placeholder="--gain 49 --bias") }}
+                        <small class="text-muted">{{ form.extra_args.description }}</small>
+                    </div>
+                    
+                    {{ form.submit(class="btn btn-primary w-100") }}
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Available Pipelines by Category -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5><i class="fas fa-list"></i> Available Satellites</h5>
+            </div>
+            <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+                {% for category, pipeline_names in categories.items() %}
+                <h6 class="text-muted mt-2">{{ category }}</h6>
+                <ul class="list-group list-group-flush mb-3">
+                    {% for name in pipeline_names %}
+                    {% set pipeline = all_pipelines[name] %}
+                    <li class="list-group-item py-1 px-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong class="small">{{ name }}</strong>
+                                <br>
+                                <small class="text-muted">
+                                    {% if pipeline.frequency %}
+                                    {{ "%.3f"|format(pipeline.frequency/1e6) }} MHz
+                                    {% endif %}
+                                    {% if pipeline.description %}
+                                    - {{ pipeline.description }}
+                                    {% endif %}
+                                </small>
+                            </div>
+                            <span class="badge bg-secondary">{{ pipeline.band or 'Unknown' }}</span>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+    <div id="pipe-toast" class="toast align-items-center text-white" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toast-msg">Done</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                    data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const pipelineData = {{ all_pipelines | tojson }};
+
+function showToast(msg, type) {
+    const el = document.getElementById('pipe-toast');
+    document.getElementById('toast-msg').textContent = msg;
+    el.className = `toast align-items-center text-white bg-${type}`;
+    new bootstrap.Toast(el, {delay: 4000}).show();
+}
+
+function updatePipelineInfo(name) {
+    const info = pipelineData[name];
+    if (!info) {
+        document.getElementById('pipeline-info').style.display = 'none';
+        return;
+    }
+    
+    const details = document.getElementById('pipeline-details');
+    let html = `<strong>${name}</strong><br>`;
+    html += `Satellite: ${info.satellite || 'Unknown'}<br>`;
+    if (info.frequency) html += `Default Freq: ${(info.frequency/1e6).toFixed(3)} MHz<br>`;
+    if (info.samplerate) html += `Sample Rate: ${(info.samplerate/1e6).toFixed(3)} MSPS<br>`;
+    if (info.description) html += `${info.description}`;
+    
+    details.innerHTML = html;
+    document.getElementById('pipeline-info').style.display = 'block';
+}
+
+function stopPipeline(name) {
+    if (!confirm(`Stop pipeline: ${name}?`)) return;
+    
+    $.ajax({
+        url: '{{ url_for("SatDump.api_stop_pipeline") }}',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({pipeline_name: name}),
+        success: function(data) {
+            showToast(
+                data.success ? `Stopped: ${name}` : 'Failed: ' + data.message,
+                data.success ? 'info' : 'danger'
+            );
+            if (data.success) setTimeout(() => location.reload(), 1000);
+        }
+    });
+}
+
+// Update info for initially selected pipeline
+$(document).ready(function() {
+    const sel = document.querySelector('[name=pipeline]');
+    if (sel && sel.value) updatePipelineInfo(sel.value);
+});
+</script>
+{% endblock %}

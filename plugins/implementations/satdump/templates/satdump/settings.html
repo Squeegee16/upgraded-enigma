@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}SatDump Settings - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-cog"></i> SatDump Settings</h2>
+    <a href="{{ url_for('SatDump.index') }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+</div>
+
+{% if install_error %}
+<div class="alert alert-warning">
+    <i class="fas fa-exclamation-triangle"></i> {{ install_error }}
+    <br><a href="https://docs.satdump.org/building.html" target="_blank">
+        Build Documentation
+    </a>
+</div>
+{% endif %}
+
+<div class="row">
+    <div class="col-md-8">
+        <form method="POST">
+            {{ form.hidden_tag() }}
+            
+            <!-- SDR Device -->
+            <div class="card mb-4">
+                <div class="card-header"><h5>SDR Device</h5></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.sdr_source.label(class="form-label") }}
+                            {{ form.sdr_source(class="form-select", onchange="updateSDRSettings(this.value)") }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            {{ form.sdr_device_id.label(class="form-label") }}
+                            {{ form.sdr_device_id(class="form-control") }}
+                            <small class="text-muted">{{ form.sdr_device_id.description }}</small>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            {{ form.sdr_gain.label(class="form-label") }}
+                            {{ form.sdr_gain(class="form-control") }}
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            {{ form.sdr_ppm.label(class="form-label") }}
+                            {{ form.sdr_ppm(class="form-control") }}
+                        </div>
+                    </div>
+                    
+                    <!-- SpyServer settings -->
+                    <div id="spyserver-settings" style="display:none;">
+                        <div class="row">
+                            <div class="col-md-8 mb-3">
+                                {{ form.spyserver_host.label(class="form-label") }}
+                                {{ form.spyserver_host(class="form-control") }}
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                {{ form.spyserver_port.label(class="form-label") }}
+                                {{ form.spyserver_port(class="form-control") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Output Settings -->
+            <div class="card mb-4">
+                <div class="card-header"><h5>Output Settings</h5></div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        {{ form.output_dir.label(class="form-label") }}
+                        {{ form.output_dir(class="form-control" + (" is-invalid" if form.output_dir.errors else "")) }}
+                        {% if form.output_dir.errors %}
+                            <div class="invalid-feedback">
+                                {% for e in form.output_dir.errors %}{{ e }}{% endfor %}
+                            </div>
+                        {% endif %}
+                        <small class="text-muted">{{ form.output_dir.description }}</small>
+                    </div>
+                    <div class="mb-3">
+                        {{ form.display.label(class="form-label") }}
+                        {{ form.display(class="form-control") }}
+                        <small class="text-muted">{{ form.display.description }}</small>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Station Info -->
+            <div class="card mb-4">
+                <div class="card-header"><h5>Station Info</h5></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.callsign.label(class="form-label") }}
+                            {{ form.callsign(class="form-control", placeholder="W1ABC") }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.locator.label(class="form-label") }}
+                            {{ form.locator(class="form-control", placeholder="FN20") }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Plugin Behavior -->
+            <div class="card mb-4">
+                <div class="card-header"><h5>Plugin Behavior</h5></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                {{ form.auto_listen(class="form-check-input") }}
+                                {{ form.auto_listen.label(class="form-check-label") }}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                {{ form.log_products(class="form-check-input") }}
+                                {{ form.log_products.label(class="form-check-label") }}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                {{ form.auto_start(class="form-check-input") }}
+                                {{ form.auto_start.label(class="form-check-label") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="d-flex justify-content-end gap-2">
+                <a href="{{ url_for('SatDump.index') }}" class="btn btn-secondary">Cancel</a>
+                {{ form.submit(class="btn btn-primary") }}
+            </div>
+        </form>
+    </div>
+    
+    <div class="col-md-4">
+        <!-- Info cards -->
+        <div class="card mb-3">
+            <div class="card-header bg-info text-white">
+                <h6><i class="fas fa-satellite"></i> About SatDump</h6>
+            </div>
+            <div class="card-body small">
+                <p>SatDump is a comprehensive satellite data processing suite.</p>
+                <p><strong>Satellite Support:</strong></p>
+                <ul>
+                    <li>NOAA APT/HRPT/DSB</li>
+                    <li>METEOR LRPT/HRPT</li>
+                    <li>GOES LRIT/HRIT/GRB</li>
+                    <li>Meteosat LRIT/HRIT</li>
+                    <li>FengYun-3</li>
+                    <li>Suomi NPP/JPSS</li>
+                    <li>And 50+ more!</li>
+                </ul>
+                <a href="https://github.com/SatDump/SatDump"
+                   target="_blank" class="btn btn-dark btn-sm w-100">
+                    <i class="fab fa-github"></i> GitHub
+                </a>
+            </div>
+        </div>
+        
+        <div class="card mb-3">
+            <div class="card-header bg-warning">
+                <h6><i class="fas fa-broadcast-tower"></i> Antenna Tips</h6>
+            </div>
+            <div class="card-body small">
+                <p><strong>VHF (137 MHz) - NOAA/METEOR:</strong><br>
+                Turnstile or QFH antenna recommended.</p>
+                <p><strong>L-Band (1.7 GHz):</strong><br>
+                Patch or helix antenna required.<br>
+                LNA strongly recommended.</p>
+                <p><strong>S-Band (2.4 GHz):</strong><br>
+                Dish antenna required.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function updateSDRSettings(source) {
+    const spyserver = document.getElementById('spyserver-settings');
+    spyserver.style.display = (source === 'spyserver') ? 'block' : 'none';
+}
+
+$(document).ready(function() {
+    const sel = document.querySelector('[name=sdr_source]');
+    if (sel) updateSDRSettings(sel.value);
+});
+</script>
+{% endblock %}
