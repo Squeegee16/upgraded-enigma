@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Compose Winlink Message - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-pen"></i> Compose Winlink Message</h2>
+    <a href="{{ url_for('GrayWolf.index') }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+</div>
+
+{% if not status.running %}
+<div class="alert alert-warning">
+    <i class="fas fa-exclamation-triangle"></i>
+    GrayWolf is not running. Messages will be queued for delivery.
+</div>
+{% endif %}
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-envelope"></i> New Message</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('GrayWolf.compose') }}">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="mb-3">
+                        {{ form.to_address.label(class="form-label") }}
+                        {{ form.to_address(class="form-control" + (" is-invalid" if form.to_address.errors else ""), placeholder="W1ABC or W1ABC@winlink.org") }}
+                        {% if form.to_address.errors %}
+                            <div class="invalid-feedback">
+                                {% for e in form.to_address.errors %}{{ e }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.subject.label(class="form-label") }}
+                        {{ form.subject(class="form-control" + (" is-invalid" if form.subject.errors else ""), placeholder="Message subject") }}
+                        {% if form.subject.errors %}
+                            <div class="invalid-feedback">
+                                {% for e in form.subject.errors %}{{ e }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.body.label(class="form-label") }}
+                        {{ form.body(class="form-control" + (" is-invalid" if form.body.errors else ""), rows="8") }}
+                        {% if form.body.errors %}
+                            <div class="invalid-feedback">
+                                {% for e in form.body.errors %}{{ e }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3 form-check">
+                        {{ form.log_as_contact(class="form-check-input") }}
+                        {{ form.log_as_contact.label(class="form-check-label") }}
+                        <small class="text-muted d-block">
+                            Adds this Winlink contact to the central logbook
+                        </small>
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('GrayWolf.inbox') }}" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
+                        {{ form.submit(class="btn btn-primary") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
