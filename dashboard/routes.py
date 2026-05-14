@@ -367,3 +367,112 @@ def get_plugins():
         return jsonify({'plugins': loader.get_plugin_list()})
     except Exception as e:
         return jsonify({'plugins': [], 'error': str(e)})
+@dashboard_bp.route('/api/gps_detail')
+@login_required
+def get_gps_detail():
+    """
+    Detailed GPS status API endpoint.
+
+    Returns extended GPS data including:
+    - Full position with grid square
+    - Satellite information
+    - NMEA parser statistics
+    - Fix quality details
+    - UART port information
+
+    Returns:
+        JSON: Complete GPS status
+    """
+    from flask import current_app
+
+    gps = current_app.extensions.get('gps_device')
+
+    if not gps:
+        return jsonify({
+            'available': False,
+            'error': 'GPS device not configured'
+        })
+
+    if not gps.is_connected():
+        return jsonify({
+            'available': True,
+            'connected': False,
+            'error': 'GPS not connected'
+        })
+
+    try:
+        position = gps.get_position()
+
+        if not position:
+            return jsonify({
+                'available': True,
+                'connected': True,
+                'has_fix': False,
+                'source': getattr(gps, 'source', 'unknown'),
+                'error': 'No position data yet'
+            })
+
+        # Add grid square precision variants if we have
+        # a valid position
+        if position.get('latitude') is not None:
+            from devices.grid_square import (
+                GridSquareCalculator
+            )
+            calc = GridSquareCalculator()
+            lat = position['latitude']
+            lon = position['longitude']
+
+            try:
+                position['grid_2'] = calc.from_latlon(
+                    lat, lon, precision=2
+                )
+                position['grid_4'] = calc.from_latlon(
+                    lat, lon, precision=4
+                )
+                position['grid_6'] = calc.from_latlon(
+                    lat, lon, precision=6
+                )
+                position['grid_8'] = calc.from_latlon(
+                    lat, lon, precision=8
+                )
+            except Exception:
+                pass
+
+        position['available'] = True
+        position['connected'] = True
+
+        return jsonify(position)
+
+    except Exception as e:
+        return jsonify({
+            'available': True,
+            'connected': True,
+            'error': str(e)
+        }), 500
+
+
+@dashboard_bp.route('/api/gps_raw')
+@login_required
+def get_gps_raw():
+    """
+    Recent raw NMEA sentences for diagnostics.
+
+    Returns:
+        JSON: List of recent raw NMEA sentences
+    """
+    from flask import current_app
+
+    gps = current_app.extensions.get('gps_device')
+
+    sentences = []
+    if gps and hasattr(gps, 'get_raw_sentences'):
+        sentences = gps.get_raw_sentences(count=20)
+
+    stats = {}
+    if gps and hasattr(gps, 'get_stats'):
+        stats = gps.get_stats()
+
+    return jsonify({
+        'sentences': sentences,
+        'stats': stats
+    })
