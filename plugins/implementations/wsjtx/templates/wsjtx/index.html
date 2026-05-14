@@ -1,0 +1,427 @@
+{% extends "base.html" %}
+
+{% block title %}WSJT-X - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-satellite"></i> WSJT-X Digital Modes</h2>
+    <div class="btn-group">
+        <a href="{{ url_for('WSJTX.spots') }}" class="btn btn-primary">
+            <i class="fas fa-list-alt"></i> Live Spots
+        </a>
+        <a href="{{ url_for('WSJTX.logbook') }}" class="btn btn-info">
+            <i class="fas fa-book"></i> Contacts
+        </a>
+        <a href="{{ url_for('WSJTX.settings') }}" class="btn btn-secondary">
+            <i class="fas fa-cog"></i> Settings
+        </a>
+    </div>
+</div>
+
+<!-- Installation Warning -->
+{% if not install_complete %}
+<div class="alert alert-warning">
+    <h5><i class="fas fa-exclamation-triangle"></i> WSJT-X Not Installed</h5>
+    {% if install_error %}<p>{{ install_error }}</p>{% endif %}
+    <button class="btn btn-warning" id="install-btn" onclick="installWSJTX()">
+        <i class="fas fa-download"></i> Install WSJT-X
+    </button>
+    <a href="https://physics.princeton.edu/pulsar/k1jt/wsjtx.html"
+       target="_blank" class="btn btn-outline-secondary ms-2">
+        <i class="fas fa-external-link-alt"></i> Download Manually
+    </a>
+    <div id="install-progress" class="mt-2" style="display:none;">
+        <div class="spinner-border spinner-border-sm me-2"></div>
+        Installing... this may take a few minutes.
+    </div>
+</div>
+{% endif %}
+
+<div class="row">
+    <!-- Plugin Status Card -->
+    <div class="col-md-3 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h6><i class="fas fa-info-circle"></i> Plugin Status</h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush small">
+                    <li class="list-group-item d-flex justify-content-between py-1">
+                        UDP Listener
+                        <span class="badge {% if status.udp_listening %}bg-success{% else %}bg-danger{% endif %}">
+                            {{ 'Active' if status.udp_listening else 'Stopped' }}
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between py-1">
+                        WSJT-X Link
+                        <span class="badge {% if status.wsjtx_connected %}bg-success{% else %}bg-secondary{% endif %}">
+                            {{ 'Connected' if status.wsjtx_connected else 'Not seen' }}
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between py-1">
+                        Process
+                        <span class="badge {% if status.process_running %}bg-success{% else %}bg-secondary{% endif %}">
+                            {{ 'Running' if status.process_running else 'External' }}
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between py-1">
+                        Packets
+                        <small>{{ status.packets_received or 0 }}</small>
+                    </li>
+                </ul>
+                
+                <div class="mt-2 d-grid gap-1">
+                    {% if status.udp_listening %}
+                    <button class="btn btn-danger btn-sm" onclick="stopListener()">
+                        <i class="fas fa-stop"></i> Stop Listener
+                    </button>
+                    {% else %}
+                    <button class="btn btn-success btn-sm" onclick="startListener()">
+                        <i class="fas fa-play"></i> Start Listener
+                    </button>
+                    {% endif %}
+                    
+                    {% if not status.process_running %}
+                    <button class="btn btn-primary btn-sm" onclick="startWSJTX()"
+                            {% if not install_complete %}disabled{% endif %}>
+                        <i class="fas fa-rocket"></i> Launch WSJT-X
+                    </button>
+                    {% else %}
+                    <button class="btn btn-warning btn-sm" onclick="stopWSJTX()">
+                        <i class="fas fa-stop-circle"></i> Stop WSJT-X
+                    </button>
+                    {% endif %}
+                    
+                    {% if status.wsjtx_connected %}
+                    <button class="btn btn-outline-danger btn-sm" onclick="haltTx()">
+                        <i class="fas fa-ban"></i> Halt TX
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- WSJT-X Status Card -->
+    <div class="col-md-3 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-success text-white">
+                <h6><i class="fas fa-broadcast-tower"></i> WSJT-X</h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush small">
+                    <li class="list-group-item d-flex justify-content-between py-1">
+                        Mode
+                        <strong>{{ wsjtx_status.mode or config.get('default_mode', 'N/A') }}</strong>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between py-1">
+                        Frequency
+                        {% if wsjtx_status.dial_frequency %}
+                        <strong>{{ "%.3f"|format(wsjtx_status.dial_frequency / 1000000) }} MHz</strong>
+                        {% else %}
+                        <span class="text-muted">N/A</span>
+                        {% endif %}
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between py-1">
+                        Callsign
+                        <strong>{{ wsjtx_status.de_call or config.callsign or 'N/A' }}</strong>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between py-1">
+                        Grid
+                        <small>{{ wsjtx_status.de_grid or config.grid or 'N/A' }}</small>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between py-1">
+                        TX
+                        <span class="badge {% if wsjtx_status.transmitting %}bg-danger{% else %}bg-success{% endif %}">
+                            {{ 'TX' if wsjtx_status.transmitting else 'RX' }}
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between py-1">
+                        Decoding
+                        <span class="badge {% if wsjtx_status.decoding %}bg-warning{% else %}bg-secondary{% endif %}">
+                            {{ 'Active' if wsjtx_status.decoding else 'Idle' }}
+                        </span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Decodes Card -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-info text-white d-flex justify-content-between">
+                <h6><i class="fas fa-wave-square"></i> Recent Decodes</h6>
+                <div>
+                    <button class="btn btn-outline-light btn-sm me-1" onclick="refreshDecodes()">
+                        <i class="fas fa-sync"></i>
+                    </button>
+                    <a href="{{ url_for('WSJTX.spots') }}" class="btn btn-outline-light btn-sm">
+                        All Spots
+                    </a>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 280px; overflow-y: auto;">
+                    <table class="table table-sm table-striped mb-0" id="decodes-table">
+                        <thead class="sticky-top bg-light">
+                            <tr>
+                                <th>Time</th>
+                                <th>dB</th>
+                                <th>Hz</th>
+                                <th>Message</th>
+                                <th>Log</th>
+                            </tr>
+                        </thead>
+                        <tbody id="decodes-tbody">
+                            {% if decodes %}
+                                {% for decode in decodes %}
+                                <tr class="{% if decode.is_cq %}table-success{% endif %}">
+                                    <td><small>{{ decode.decode_time[11:19] if decode.decode_time else '?' }}</small></td>
+                                    <td>
+                                        <small class="{% if decode.snr and decode.snr > -10 %}text-success{% elif decode.snr and decode.snr < -20 %}text-danger{% else %}text-warning{% endif %}">
+                                            {{ decode.snr }}
+                                        </small>
+                                    </td>
+                                    <td><small>{{ decode.delta_freq }}</small></td>
+                                    <td>
+                                        <small>
+                                            {% if decode.is_cq %}<span class="badge bg-success">CQ</span>{% endif %}
+                                            {{ decode.message }}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        {% if decode.callsign or decode.de_call %}
+                                        <button class="btn btn-xs btn-success"
+                                                onclick="quickLog('{{ decode.callsign or decode.de_call }}', '{{ decode.mode }}', {{ (wsjtx_status.dial_frequency or 0) / 1000000 }}, '{{ decode.snr }}', '{{ decode.grid }}')">
+                                            <i class="fas fa-book"></i>
+                                        </button>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-3">
+                                        {% if status.udp_listening %}
+                                        Waiting for WSJT-X decodes...
+                                        {% else %}
+                                        Start UDP listener to receive decodes
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Activity Log -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-dark text-white d-flex justify-content-between">
+                <h6><i class="fas fa-terminal"></i> Plugin Log</h6>
+                <button class="btn btn-outline-light btn-sm" onclick="refreshLogs()">
+                    <i class="fas fa-sync"></i>
+                </button>
+            </div>
+            <div id="log-container"
+                 style="height: 150px; overflow-y: auto; background: #1e1e1e;
+                        padding: 8px; font-family: monospace; font-size: 0.8rem;">
+                {% for log in logs %}
+                <div class="{% if log.level == 'error' %}text-danger{% elif log.level == 'warning' %}text-warning{% else %}text-success{% endif %}">
+                    <small>{{ log.timestamp[11:19] }}</small> {{ log.message }}
+                </div>
+                {% else %}
+                <div class="text-muted">No log entries</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+    <div id="wsjtx-toast" class="toast align-items-center text-white" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toast-msg">Done</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                    data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function showToast(msg, type) {
+    const el = document.getElementById('wsjtx-toast');
+    document.getElementById('toast-msg').textContent = msg;
+    el.className = `toast align-items-center text-white bg-${type}`;
+    new bootstrap.Toast(el, {delay: 4000}).show();
+}
+
+function apiPost(url, data, cb) {
+    $.ajax({
+        url: url,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data || {}),
+        success: cb,
+        error: () => showToast('Server error', 'danger')
+    });
+}
+
+function startListener() {
+    apiPost('{{ url_for("WSJTX.api_start_listener") }}', {}, function(data) {
+        showToast(data.success ? 'Listener started!' : data.message,
+                  data.success ? 'success' : 'danger');
+        if (data.success) setTimeout(() => location.reload(), 1500);
+    });
+}
+
+function stopListener() {
+    apiPost('{{ url_for("WSJTX.api_stop_listener") }}', {}, function(data) {
+        showToast(data.success ? 'Listener stopped' : data.message,
+                  data.success ? 'info' : 'danger');
+        if (data.success) setTimeout(() => location.reload(), 1500);
+    });
+}
+
+function startWSJTX() {
+    showToast('Launching WSJT-X...', 'info');
+    apiPost('{{ url_for("WSJTX.api_start_wsjtx") }}', {}, function(data) {
+        showToast(data.success ? 'WSJT-X started!' : data.message,
+                  data.success ? 'success' : 'danger');
+        if (data.success) setTimeout(() => location.reload(), 2000);
+    });
+}
+
+function stopWSJTX() {
+    if (!confirm('Stop WSJT-X?')) return;
+    apiPost('{{ url_for("WSJTX.api_stop_wsjtx") }}', {}, function(data) {
+        showToast(data.success ? 'WSJT-X stopped' : data.message,
+                  data.success ? 'info' : 'danger');
+        if (data.success) setTimeout(() => location.reload(), 1500);
+    });
+}
+
+function haltTx() {
+    apiPost('{{ url_for("WSJTX.api_halt_tx") }}', {auto_only: false}, function(data) {
+        showToast(data.success ? 'Halt TX sent' : 'Failed', 'warning');
+    });
+}
+
+function quickLog(callsign, mode, freqMhz, snr, grid) {
+    if (!callsign) return;
+    
+    apiPost('{{ url_for("WSJTX.api_log_contact") }}', {
+        callsign: callsign,
+        mode: mode || 'FT8',
+        frequency: parseFloat(freqMhz) || null,
+        rst_sent: snr ? snr.toString() : '-10',
+        rst_rcvd: snr ? snr.toString() : '-10',
+        grid: grid || '',
+        notes: 'Quick log from WSJT-X spot'
+    }, function(data) {
+        showToast(
+            data.success ? `${callsign} logged!` : 'Log failed',
+            data.success ? 'success' : 'danger'
+        );
+    });
+}
+
+function refreshDecodes() {
+    $.get('{{ url_for("WSJTX.api_decodes") }}?limit=20', function(data) {
+        const tbody = $('#decodes-tbody');
+        tbody.empty();
+        
+        if (!data.decodes || !data.decodes.length) {
+            tbody.append('<tr><td colspan="5" class="text-center text-muted py-3">No decodes yet</td></tr>');
+            return;
+        }
+        
+        data.decodes.forEach(function(d) {
+            const rowClass = d.is_cq ? 'table-success' : '';
+            const snrClass = d.snr > -10 ? 'text-success' : d.snr < -20 ? 'text-danger' : 'text-warning';
+            const timeStr = d.decode_time ? d.decode_time.substring(11, 19) : '?';
+            const callBtn = (d.callsign || d.de_call) ?
+                `<button class="btn btn-xs btn-success" onclick="quickLog('${d.callsign || d.de_call}','${d.mode}',0,'${d.snr}','${d.grid||''}')">
+                    <i class="fas fa-book"></i></button>` : '';
+            
+            tbody.append(`
+                <tr class="${rowClass}">
+                    <td><small>${timeStr}</small></td>
+                    <td><small class="${snrClass}">${d.snr}</small></td>
+                    <td><small>${d.delta_freq}</small></td>
+                    <td><small>${d.is_cq ? '<span class="badge bg-success">CQ</span> ' : ''}${d.message}</small></td>
+                    <td>${callBtn}</td>
+                </tr>`);
+        });
+    });
+}
+
+function refreshLogs() {
+    $.get('{{ url_for("WSJTX.api_logs") }}?limit=30', function(data) {
+        const container = $('#log-container');
+        container.empty();
+        
+        if (!data.logs || !data.logs.length) {
+            container.append('<div class="text-muted">No entries</div>');
+            return;
+        }
+        
+        data.logs.forEach(function(log) {
+            const cls = log.level === 'error' ? 'text-danger'
+                      : log.level === 'warning' ? 'text-warning' : 'text-success';
+            container.append(
+                `<div class="${cls}"><small>${log.timestamp.substring(11,19)}</small> ${log.message}</div>`
+            );
+        });
+        
+        container.scrollTop(container[0].scrollHeight);
+    });
+}
+
+function installWSJTX() {
+    if (!confirm('Install WSJT-X? This requires internet access.')) return;
+    document.getElementById('install-btn').disabled = true;
+    document.getElementById('install-progress').style.display = 'block';
+    
+    $.ajax({
+        url: '{{ url_for("WSJTX.api_install") }}',
+        method: 'POST',
+        timeout: 600000,
+        success: function(data) {
+            if (data.success) {
+                showToast('WSJT-X installed!', 'success');
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                showToast('Install failed: ' + data.message, 'danger');
+                document.getElementById('install-btn').disabled = false;
+                document.getElementById('install-progress').style.display = 'none';
+            }
+        },
+        error: function() {
+            showToast('Install error', 'danger');
+            document.getElementById('install-btn').disabled = false;
+            document.getElementById('install-progress').style.display = 'none';
+        }
+    });
+}
+
+$(document).ready(function() {
+    {% if status.udp_listening %}
+    setInterval(refreshDecodes, 5000);
+    setInterval(refreshLogs, 10000);
+    {% endif %}
+    
+    const log = document.getElementById('log-container');
+    if (log) log.scrollTop = log.scrollHeight;
+});
+</script>
+{% endblock %}
