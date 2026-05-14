@@ -211,60 +211,185 @@
     </div>{# end .col-md-4 (operator card) #}
 
 
-    {# -------------------------------------------------------- #}
-    {# GPS Location Card                                         #}
-    {# FIX 3: Moved GPS and Device cards back inside the row    #}
-    {# div. Previously the modal was inserted between the       #}
-    {# operator card and these cards, breaking the layout.      #}
-    {# -------------------------------------------------------- #}
-    <div class="col-md-4 mb-4">
-        <div class="card h-100">
-            <div class="card-header bg-success text-white">
-                <h5 class="mb-0">
-                    <i class="fas fa-map-marker-alt"></i>
-                    Location
-                </h5>
-            </div>
-            <div class="card-body" id="location-card">
-                {% if gps_data %}
-                <dl class="row mb-0">
-                    <dt class="col-5">Grid:</dt>
-                    <dd class="col-7">
-                        <strong>{{ gps_data.grid }}</strong>
-                    </dd>
-                    <dt class="col-5">Latitude:</dt>
-                    <dd class="col-7">
-                        {{ "%.4f"|format(gps_data.latitude) }}°
-                    </dd>
-                    <dt class="col-5">Longitude:</dt>
-                    <dd class="col-7">
-                        {{ "%.4f"|format(gps_data.longitude) }}°
-                    </dd>
-                    <dt class="col-5">Altitude:</dt>
-                    <dd class="col-7">
-                        {{ "%.1f"|format(gps_data.altitude) }} m
-                    </dd>
-                    <dt class="col-5">Satellites:</dt>
-                    <dd class="col-7">
-                        {{ gps_data.satellites }}
-                    </dd>
-                </dl>
-                {% else %}
-                <div class="text-center py-3">
-                    <i class="fas fa-satellite-dish fa-2x
-                              text-muted mb-2"></i>
-                    <p class="text-muted mb-2">
-                        GPS not available
-                    </p>
-                    <button class="btn btn-sm btn-outline-success"
-                            onclick="refreshLocation()">
-                        <i class="fas fa-sync"></i> Refresh
-                    </button>
-                </div>
+    {# GPS Location Card - Enhanced #}
+<div class="col-md-4 mb-4">
+    <div class="card h-100">
+        <div class="card-header bg-success text-white
+                    d-flex justify-content-between
+                    align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-map-marker-alt me-1"></i>
+                GPS Location
+            </h5>
+            <button class="btn btn-sm btn-outline-light"
+                    onclick="showGpsDetail()"
+                    title="GPS Details">
+                <i class="fas fa-satellite-dish"></i>
+            </button>
+        </div>
+        <div class="card-body" id="location-card">
+            {% if gps_data and gps_data.get('has_fix') %}
+
+            {# Valid fix #}
+            <dl class="row mb-0 small">
+                <dt class="col-5">Grid (6):</dt>
+                <dd class="col-7">
+                    <strong class="font-monospace">
+                        {{ gps_data.get('grid', 'N/A') }}
+                    </strong>
+                </dd>
+
+                <dt class="col-5">Grid (4):</dt>
+                <dd class="col-7">
+                    <span class="font-monospace">
+                        {{ gps_data.get('grid_4', 'N/A') }}
+                    </span>
+                </dd>
+
+                <dt class="col-5">Latitude:</dt>
+                <dd class="col-7 font-monospace">
+                    {{ "%.5f"|format(
+                       gps_data.get('latitude', 0)) }}°
+                </dd>
+
+                <dt class="col-5">Longitude:</dt>
+                <dd class="col-7 font-monospace">
+                    {{ "%.5f"|format(
+                       gps_data.get('longitude', 0)) }}°
+                </dd>
+
+                <dt class="col-5">Altitude:</dt>
+                <dd class="col-7">
+                    {{ "%.1f"|format(
+                       gps_data.get('altitude', 0)) }} m
+                </dd>
+
+                <dt class="col-5">Satellites:</dt>
+                <dd class="col-7">
+                    {{ gps_data.get('satellites', 0) }}
+                    used /
+                    {{ gps_data.get(
+                       'satellites_view', 0) }} seen
+                </dd>
+
+                {% if gps_data.get('hdop') %}
+                <dt class="col-5">HDOP:</dt>
+                <dd class="col-7">
+                    {{ "%.1f"|format(
+                       gps_data.get('hdop', 0)) }}
+                    {% if gps_data.get('hdop', 99) < 1.5 %}
+                    <span class="badge bg-success
+                                  ms-1 small">
+                        Excellent
+                    </span>
+                    {% elif gps_data.get('hdop', 99) < 3 %}
+                    <span class="badge bg-warning
+                                  ms-1 small">
+                        Good
+                    </span>
+                    {% else %}
+                    <span class="badge bg-danger
+                                  ms-1 small">
+                        Poor
+                    </span>
+                    {% endif %}
+                </dd>
                 {% endif %}
+
+                <dt class="col-5">Source:</dt>
+                <dd class="col-7">
+                    <span class="badge bg-info small">
+                        {{ gps_data.get(
+                           'source', 'unknown')|upper }}
+                    </span>
+                    {% if gps_data.get('port') and
+                          gps_data.get('source') == 'uart' %}
+                    <small class="text-muted ms-1">
+                        {{ gps_data.get('port') }}
+                    </small>
+                    {% endif %}
+                </dd>
+            </dl>
+
+            {% elif gps_data and
+                    not gps_data.get('has_fix') %}
+
+            {# Connected but no fix yet #}
+            <div class="text-center py-2">
+                <div class="spinner-border
+                            spinner-border-sm
+                            text-warning me-2">
+                </div>
+                <span class="text-warning">
+                    Acquiring GPS fix...
+                </span>
+                <br>
+                <small class="text-muted mt-1 d-block">
+                    Satellites:
+                    {{ gps_data.get('satellites', 0) }}
+                    used /
+                    {{ gps_data.get(
+                       'satellites_view', 0) }} visible
+                </small>
+                <small class="text-muted">
+                    Source:
+                    {{ gps_data.get(
+                       'source', '?')|upper }}
+                    {% if gps_data.get('port') %}
+                    ({{ gps_data.get('port') }})
+                    {% endif %}
+                </small>
+            </div>
+
+            {% else %}
+
+            {# No GPS data #}
+            <div class="text-center py-3">
+                <i class="fas fa-satellite-dish
+                          fa-2x text-muted mb-2"></i>
+                <p class="text-muted mb-2 small">
+                    GPS not available
+                </p>
+                <button class="btn btn-sm
+                               btn-outline-success"
+                        onclick="refreshLocation()">
+                    <i class="fas fa-sync me-1"></i>
+                    Refresh
+                </button>
+            </div>
+
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{# ============================================================ #}
+{# GPS Detail Modal                                             #}
+{# ============================================================ #}
+<div class="modal fade" id="gpsDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-satellite-dish me-2"></i>
+                    GPS Detail &amp; NMEA Status
+                </h5>
+                <button type="button"
+                        class="btn-close btn-close-white"
+                        data-bs-dismiss="modal">
+                </button>
+            </div>
+            <div class="modal-body" id="gps-detail-body">
+                <div class="text-center py-3">
+                    <div class="spinner-border
+                                text-success">
+                    </div>
+                    <p class="mt-2">Loading GPS data...</p>
+                </div>
             </div>
         </div>
-    </div>{# end .col-md-4 (GPS card) #}
+    </div>
+</div>
 
 
     {# -------------------------------------------------------- #}
