@@ -1,0 +1,1557 @@
+{% extends "base.html" %}
+
+{% block title %}Morse Code - Ham Radio App{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ============================================================
+   Morse Plugin Styles
+   ============================================================ */
+
+/* Morse key button */
+.morse-key-btn {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    font-size: 1.4rem;
+    font-weight: 700;
+    border: 6px solid #0d6efd;
+    background: linear-gradient(145deg, #1a1a2e, #16213e);
+    color: #fff;
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
+    transition: all 0.05s ease;
+    box-shadow:
+        0 8px 24px rgba(13,110,253,0.4),
+        inset 0 2px 4px rgba(255,255,255,0.1);
+}
+
+.morse-key-btn:active,
+.morse-key-btn.key-active {
+    background: linear-gradient(145deg, #0d6efd, #0a58ca);
+    border-color: #0a58ca;
+    transform: scale(0.95);
+    box-shadow:
+        0 2px 8px rgba(13,110,253,0.6),
+        inset 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* Tone indicator light */
+.tone-indicator {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background-color: #dc3545;
+    display: inline-block;
+    transition: background-color 0.05s ease,
+                box-shadow 0.05s ease;
+    box-shadow: 0 0 4px rgba(220,53,69,0.5);
+}
+
+.tone-indicator.tone-on {
+    background-color: #28a745;
+    box-shadow: 0 0 16px rgba(40,167,69,0.8),
+                0 0 32px rgba(40,167,69,0.4);
+    animation: tone-pulse 0.1s ease infinite alternate;
+}
+
+@keyframes tone-pulse {
+    from { box-shadow: 0 0 8px rgba(40,167,69,0.6); }
+    to   { box-shadow: 0 0 24px rgba(40,167,69,0.9); }
+}
+
+/* Signal meter */
+.signal-meter {
+    height: 12px;
+    border-radius: 6px;
+    background: #343a40;
+    overflow: hidden;
+}
+
+.signal-meter-fill {
+    height: 100%;
+    border-radius: 6px;
+    background: linear-gradient(
+        90deg, #28a745 0%, #ffc107 60%, #dc3545 100%
+    );
+    transition: width 0.1s ease;
+    min-width: 2px;
+}
+
+/* Decode display */
+.decode-display {
+    background: #0d1117;
+    color: #58d68d;
+    font-family: 'Courier New', monospace;
+    font-size: 1.1rem;
+    padding: 12px;
+    border-radius: 6px;
+    min-height: 100px;
+    max-height: 200px;
+    overflow-y: auto;
+    word-break: break-all;
+    border: 1px solid #30363d;
+    white-space: pre-wrap;
+}
+
+/* Morse reference table */
+.morse-ref-table td {
+    font-family: 'Courier New', monospace;
+    padding: 2px 6px;
+    font-size: 0.85rem;
+}
+
+.morse-ref-table .morse-sym {
+    color: #0d6efd;
+    font-size: 1rem;
+    letter-spacing: 2px;
+}
+
+/* CW band presets */
+.band-preset-btn {
+    font-size: 0.78rem;
+    padding: 0.2rem 0.5rem;
+}
+
+/* TX text area */
+#tx-text {
+    font-family: 'Courier New', monospace;
+    font-size: 1rem;
+    background: #0d1117;
+    color: #e6edf3;
+    border: 1px solid #30363d;
+    resize: vertical;
+}
+
+#tx-text:focus {
+    background: #161b22;
+    color: #e6edf3;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13,110,253,0.25);
+}
+
+/* Morse preview */
+.morse-preview {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    color: #0d6efd;
+    letter-spacing: 3px;
+    min-height: 28px;
+    word-break: break-all;
+}
+
+/* Source toggle badge */
+.source-badge {
+    font-size: 0.75rem;
+    padding: 0.3em 0.6em;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+/* Frequency display */
+.freq-display {
+    font-family: 'Courier New', monospace;
+    font-size: 1.2rem;
+    color: #0d6efd;
+}
+
+/* TX progress bar */
+.tx-progress {
+    height: 6px;
+    border-radius: 3px;
+    transition: width 0.1s linear;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between
+            align-items-center mb-3">
+    <h2>
+        <i class="fas fa-broadcast-tower me-2"></i>
+        Morse Code  / CW
+    </h2>
+    <div class="d-flex align-items-center gap-2">
+        {# Source toggle #}
+        <div class="btn-group" role="group"
+             aria-label="Receive source">
+            <button type="button"
+                    id="btn-source-sdr"
+                    class="btn btn-sm
+                    {% if config.default_source == 'sdr' %}
+                        btn-primary
+                    {% else %}
+                        btn-outline-primary
+                    {% endif %}"
+                    onclick="setSource('sdr')">
+                <i class="fas fa-signal me-1"></i>
+                RTL-SDR
+            </button>
+            <button type="button"
+                    id="btn-source-radio"
+                    class="btn btn-sm
+                    {% if config.default_source == 'radio' %}
+                        btn-success
+                    {% else %}
+                        btn-outline-success
+                    {% endif %}"
+                    onclick="setSource('radio')">
+                <i class="fas fa-broadcast-tower me-1"></i>
+                Radio
+            </button>
+        </div>
+
+        <a href="{{ url_for('Morse.settings') }}"
+           class="btn btn-secondary btn-sm">
+            <i class="fas fa-cog me-1"></i>
+            Settings
+        </a>
+    </div>
+</div>
+
+{# ============================================================ #}
+{# Top row: Status | Receive | Frequency                       #}
+{# ============================================================ #}
+<div class="row mb-3">
+
+    {# Receive status card #}
+    <div class="col-md-3 mb-3">
+        <div class="card h-100">
+            <div class="card-header bg-dark text-white
+                        py-2">
+                <h6 class="mb-0">
+                    <i class="fas fa-headphones me-1"></i>
+                    Receive Status
+                </h6>
+            </div>
+            <div class="card-body py-2">
+                <div class="d-flex
+                            justify-content-between
+                            align-items-center mb-2">
+                    <small class="text-muted">Tone</small>
+                    <span id="tone-indicator"
+                          class="tone-indicator">
+                    </span>
+                </div>
+
+                <div class="mb-2">
+                    <div class="d-flex
+                                justify-content-between mb-1">
+                        <small class="text-muted">
+                            Signal
+                        </small>
+                        <small id="signal-pct"
+                               class="text-muted">
+                            0%
+                        </small>
+                    </div>
+                    <div class="signal-meter">
+                        <div class="signal-meter-fill"
+                             id="signal-bar"
+                             style="width:0%">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex
+                            justify-content-between
+                            align-items-center mb-2">
+                    <small class="text-muted">
+                        Source
+                    </small>
+                    <span class="badge bg-secondary"
+                          id="source-badge">
+                        {{ config.default_source|upper }}
+                    </span>
+                </div>
+
+                <div class="d-flex
+                            justify-content-between
+                            align-items-center mb-2">
+                    <small class="text-muted">Speed</small>
+                    <span class="badge bg-info">
+                        {{ timing.get('wpm', 20) }} WPM
+                    </span>
+                </div>
+
+                <div class="d-flex
+                            justify-content-between
+                            align-items-center">
+                    <small class="text-muted">Tone</small>
+                    <span class="badge bg-secondary">
+                        {{ timing.get('tone_hz', 700) }} Hz
+                    </span>
+                </div>
+
+                <hr class="my-2">
+
+                <div class="d-grid gap-1">
+                    {% if receiver_status.get('running') %}
+                    <button class="btn btn-danger btn-sm"
+                            onclick="stopReceiver()">
+                        <i class="fas fa-stop me-1"></i>
+                        Stop RX
+                    </button>
+                    {% else %}
+                    <button class="btn btn-success btn-sm"
+                            onclick="startReceiver()">
+                        <i class="fas fa-play me-1"></i>
+                        Start RX
+                    </button>
+                    {% endif %}
+                </div>
+
+                {% if receiver_status.get('error') %}
+                <div class="alert alert-warning
+                            py-1 px-2 mt-2 mb-0 small">
+                    <small>
+                        {{ receiver_status.error }}
+                    </small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# Frequency card #}
+    <div class="col-md-3 mb-3">
+        <div class="card h-100">
+            <div class="card-header bg-dark text-white
+                        py-2">
+                <h6 class="mb-0">
+                    <i class="fas fa-wave-square me-1"></i>
+                    Frequency
+                </h6>
+            </div>
+            <div class="card-body py-2">
+                <div class="text-center mb-2">
+                    <div class="freq-display"
+                         id="freq-display">
+                        {{ "%.4f"|format(freq_mhz) }} MHz
+                    </div>
+                    <small class="text-muted">
+                        SDR Center Frequency
+                    </small>
+                </div>
+
+                <div class="input-group input-group-sm
+                            mb-2">
+                    <input type="number"
+                           class="form-control"
+                           id="freq-input"
+                           value="{{ freq_mhz }}"
+                           step="0.001"
+                           min="0.1"
+                           max="2000">
+                    <span class="input-group-text">
+                        MHz
+                    </span>
+                    <button class="btn btn-primary"
+                            onclick="setFrequency()">
+                        Set
+                    </button>
+                </div>
+
+                {# CW band presets #}
+                <div class="d-flex flex-wrap gap-1">
+                    <button class="btn btn-outline-secondary
+                                   band-preset-btn"
+                            onclick="setFreqPreset(1.8375)">
+                        160m
+                    </button>
+                    <button class="btn btn-outline-secondary
+                                   band-preset-btn"
+                            onclick="setFreqPreset(3.530)">
+                        80m
+                    </button>
+                    <button class="btn btn-outline-secondary
+                                   band-preset-btn"
+                            onclick="setFreqPreset(7.030)">
+                        40m
+                    </button>
+                    <button class="btn btn-outline-secondary
+                                   band-preset-btn"
+                            onclick="setFreqPreset(10.115)">
+                        30m
+                    </button>
+                    <button class="btn btn-outline-primary
+                                   band-preset-btn"
+                            onclick="setFreqPreset(14.030)">
+                        20m
+                    </button>
+                    <button class="btn btn-outline-secondary
+                                   band-preset-btn"
+                            onclick="setFreqPreset(18.080)">
+                        17m
+                    </button>
+                    <button class="btn btn-outline-secondary
+                                   band-preset-btn"
+                            onclick="setFreqPreset(21.030)">
+                        15m
+                    </button>
+                    <button class="btn btn-outline-secondary
+                                   band-preset-btn"
+                            onclick="setFreqPreset(28.030)">
+                        10m
+                    </button>
+                </div>
+
+                {% if radio_freq %}
+                <hr class="my-2">
+                <div class="text-center">
+                    <small class="text-muted">
+                        Radio:
+                        <strong class="text-success">
+                            {{ "%.3f"|format(
+                               radio_freq / 1e6) }} MHz
+                        </strong>
+                    </small>
+                    <br>
+                    <button class="btn btn-xs
+                                   btn-outline-success
+                                   btn-sm mt-1"
+                            onclick="useRadioFreq(
+                                {{ radio_freq }})">
+                        Use Radio Freq
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# Decoded text card #}
+    <div class="col-md-6 mb-3">
+        <div class="card h-100">
+            <div class="card-header bg-dark text-white
+                        py-2 d-flex
+                        justify-content-between
+                        align-items-center">
+                <h6 class="mb-0">
+                    <i class="fas fa-closed-captioning
+                              me-1"></i>
+                    Decoded CW
+                </h6>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-light
+                                   btn-sm"
+                            onclick="clearDecode()">
+                        <i class="fas fa-trash me-1"></i>
+                        Clear
+                    </button>
+                    <button class="btn btn-outline-success
+                                   btn-sm"
+                            data-bs-toggle="modal"
+                            data-bs-target=
+                                "#logContactModal">
+                        <i class="fas fa-book me-1"></i>
+                        Log QSO
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-2">
+                <div class="decode-display"
+                     id="decode-display">
+                    {{ decoded_text or
+                       '(waiting for CW signal...)' }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{# ============================================================ #}
+{# Transmit row: Morse key | Text mode                         #}
+{# ============================================================ #}
+<div class="row mb-3">
+
+    {# On-screen morse key #}
+    <div class="col-md-4 mb-3">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white
+                        py-2">
+                <h6 class="mb-0">
+                    <i class="fas fa-hand-pointer me-1"></i>
+                    On-Screen Key
+                </h6>
+            </div>
+            <div class="card-body text-center">
+
+                {# Mode selector #}
+                <div class="btn-group btn-group-sm mb-3"
+                     role="group">
+                    <input type="radio"
+                           class="btn-check"
+                           name="key-mode"
+                           id="mode-freerun"
+                           value="freerun"
+                           checked>
+                    <label class="btn btn-outline-warning"
+                           for="mode-freerun">
+                        Free Run
+                    </label>
+                    <input type="radio"
+                           class="btn-check"
+                           name="key-mode"
+                           id="mode-text"
+                           value="text">
+                    <label class="btn btn-outline-info"
+                           for="mode-text">
+                        Text Mode
+                    </label>
+                </div>
+
+                {# Free-run key #}
+                <div id="freerun-panel">
+                    <div class="d-flex
+                                justify-content-center
+                                mb-3">
+                        <button class="morse-key-btn"
+                                id="morse-key-btn"
+                                onmousedown="keyDown()"
+                                onmouseup="keyUp()"
+                                onmouseleave="keyUp()"
+                                ontouchstart="keyDown(event)"
+                                ontouchend="keyUp(event)">
+                            <i class="fas fa-circle
+                                      d-block mb-1"
+                               style="font-size:2rem">
+                            </i>
+                            KEY
+                        </button>
+                    </div>
+                    <p class="text-muted small mb-2">
+                        Hold to send · Release to space
+                    </p>
+                    <div class="d-flex
+                                justify-content-center
+                                align-items-center
+                                gap-2">
+                        <span class="text-muted small">
+                            Sent:
+                        </span>
+                        <span class="badge bg-dark
+                                     font-monospace
+                                     fs-6"
+                              id="freerun-morse"
+                              style="letter-spacing:3px;
+                                     min-width:120px">
+                        </span>
+                    </div>
+                </div>
+
+                {# Text mode controls #}
+                <div id="text-mode-panel" style="display:none">
+                    <div class="mb-2">
+                        <textarea
+                            class="form-control"
+                            id="tx-text"
+                            rows="4"
+                            placeholder="Type message here..."
+                            style="font-family: monospace;
+                                   background: #0d1117;
+                                   color: #e6edf3;
+                                   border-color: #30363d;">
+                        </textarea>
+                    </div>
+                    <div class="morse-preview mb-2"
+                         id="morse-preview">
+                        {# Filled by JS as user types #}
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-warning"
+                                id="send-btn"
+                                onclick="sendText()">
+                            <i class="fas fa-paper-plane
+                                      me-1"></i>
+                            Send as Morse
+                        </button>
+                        <button class="btn btn-danger
+                                       btn-sm"
+                                id="abort-btn"
+                                onclick="abortSend()"
+                                style="display:none">
+                            <i class="fas fa-ban me-1"></i>
+                            Abort TX
+                        </button>
+                    </div>
+                    <div class="progress mt-2"
+                         style="display:none"
+                         id="tx-progress-container">
+                        <div class="progress-bar
+                                    progress-bar-striped
+                                    progress-bar-animated
+                                    bg-warning
+                                    tx-progress"
+                             id="tx-progress"
+                             style="width:0%">
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-2">
+
+                {# Volume control for sidetone #}
+                <div class="d-flex align-items-center
+                            gap-2">
+                    <i class="fas fa-volume-up
+                              text-muted small">
+                    </i>
+                    <input type="range"
+                           class="form-range flex-fill"
+                           id="volume-slider"
+                           min="0" max="1"
+                           step="0.05"
+                           value="0.7"
+                           oninput="setVolume(this.value)">
+                    <span class="text-muted small"
+                          id="volume-pct">
+                        70%
+                    </span>
+                </div>
+                <small class="text-muted">
+                    Sidetone volume
+                </small>
+            </div>
+        </div>
+    </div>
+
+    {# Morse reference chart #}
+    <div class="col-md-8 mb-3">
+        <div class="card h-100">
+            <div class="card-header bg-dark text-white
+                        py-2">
+                <h6 class="mb-0">
+                    <i class="fas fa-table me-1"></i>
+                    International Morse Code Reference
+                </h6>
+            </div>
+            <div class="card-body p-2">
+
+                {# Visual reference image from ITU #}
+                <div class="text-center mb-2">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/International_Morse_Code.svg/800px-International_Morse_Code.svg.png"
+                         alt="International Morse Code Chart"
+                         class="img-fluid rounded"
+                         style="max-height: 280px;
+                                background: white;
+                                padding: 8px;"
+                         onerror="this.style.display='none';
+                             document.getElementById(
+                                 'morse-table-fallback'
+                             ).style.display='block'">
+                </div>
+
+                {# Fallback text table #}
+                <div id="morse-table-fallback"
+                     style="display:none">
+                    <div class="row g-0">
+                        {% set morse_letters = [
+                            ('A','.-'), ('B','-...'),
+                            ('C','-.-.'), ('D','-..'),
+                            ('E','.'), ('F','..-.'),
+                            ('G','--.'), ('H','....'),
+                            ('I','..'), ('J','.---'),
+                            ('K','-.-'), ('L','.-..'),
+                            ('M','--'), ('N','-.'),
+                            ('O','---'), ('P','.--.'),
+                            ('Q','--.-'), ('R','.-.'),
+                            ('S','...'), ('T','-'),
+                            ('U','..-'), ('V','...-'),
+                            ('W','.--'), ('X','-..-'),
+                            ('Y','-.--'), ('Z','--..'),
+                        ] %}
+                        {% set morse_nums = [
+                            ('0','-----'), ('1','.----'),
+                            ('2','..---'), ('3','...--'),
+                            ('4','....-'), ('5','.....'),
+                            ('6','-....'), ('7','--...'),
+                            ('8','---.'), ('9','----.'),
+                        ] %}
+                        <div class="col-8">
+                            <table class="table
+                                          table-sm
+                                          morse-ref-table
+                                          mb-0">
+                                <thead>
+                                    <tr class="table-dark">
+                                        <th>Char</th>
+                                        <th>Code</th>
+                                        <th>Char</th>
+                                        <th>Code</th>
+                                        <th>Char</th>
+                                        <th>Code</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for i in range(0,
+                                       morse_letters|length,
+                                       3) %}
+                                    <tr>
+                                        {% for j in
+                                           range(3) %}
+                                        {% if i+j <
+                                           morse_letters
+                                           |length %}
+                                        {% set c =
+                                           morse_letters[i+j]
+                                        %}
+                                        <td>
+                                            <strong>
+                                                {{ c[0] }}
+                                            </strong>
+                                        </td>
+                                        <td class="morse-sym">
+                                            {{ c[1] }}
+                                        </td>
+                                        {% endif %}
+                                        {% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="col-4">
+                            <table class="table
+                                          table-sm
+                                          morse-ref-table
+                                          mb-0">
+                                <thead>
+                                    <tr class="table-dark">
+                                        <th>Num</th>
+                                        <th>Code</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for c in
+                                       morse_nums %}
+                                    <tr>
+                                        <td>
+                                            <strong>
+                                                {{ c[0] }}
+                                            </strong>
+                                        </td>
+                                        <td class="morse-sym">
+                                            {{ c[1] }}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                {# Timing reference #}
+                <div class="row mt-2 g-2">
+                    <div class="col-12">
+                        <small class="text-muted
+                                      d-block text-center">
+                            Current timing at
+                            <strong>
+                                {{ timing.get('wpm', 20) }}
+                                WPM
+                            </strong>
+                            /
+                            <strong>
+                                {{ timing.get('tone_hz', 700)
+                                }}Hz
+                            </strong>
+                        </small>
+                    </div>
+                    {% for label, key, color in [
+                        ('Dot', 'dot_ms', 'primary'),
+                        ('Dash', 'dash_ms', 'warning'),
+                        ('Char gap', 'inter_char_ms', 'info'),
+                        ('Word gap', 'word_space_ms', 'secondary'),
+                    ] %}
+                    <div class="col-3 text-center">
+                        <div class="badge bg-{{ color }}
+                                    w-100 py-1">
+                            <div class="small fw-bold">
+                                {{ label }}
+                            </div>
+                            <div class="font-monospace">
+                                {{ timing.get(key, '?') }}ms
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{# ============================================================ #}
+{# Log Contact Modal                                            #}
+{# ============================================================ #}
+<div class="modal fade" id="logContactModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-book me-1"></i>
+                    Log CW Contact
+                </h5>
+                <button type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal">
+                </button>
+            </div>
+            <div class="modal-body">
+                {{ log_form.hidden_tag() }}
+                <div class="mb-3">
+                    {{ log_form.callsign.label(
+                       class="form-label") }}
+                    {{ log_form.callsign(
+                       class="form-control",
+                       id="modal-callsign",
+                       placeholder="W1ABC") }}
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ log_form.frequency.label(
+                           class="form-label") }}
+                        {{ log_form.frequency(
+                           class="form-control",
+                           id="modal-freq",
+                           placeholder="14.030") }}
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        {{ log_form.rst_sent.label(
+                           class="form-label") }}
+                        {{ log_form.rst_sent(
+                           class="form-control") }}
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        {{ log_form.rst_rcvd.label(
+                           class="form-label") }}
+                        {{ log_form.rst_rcvd(
+                           class="form-control") }}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    {{ log_form.notes.label(
+                       class="form-label") }}
+                    {{ log_form.notes(
+                       class="form-control", rows="2") }}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button"
+                        class="btn btn-secondary"
+                        data-bs-dismiss="modal">
+                    Cancel
+                </button>
+                <button type="button"
+                        class="btn btn-success"
+                        onclick="submitLogContact()">
+                    <i class="fas fa-save me-1"></i>
+                    Log Contact
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Toast notification #}
+<div class="position-fixed bottom-0 end-0 p-3"
+     style="z-index:11">
+    <div id="morse-toast"
+         class="toast align-items-center text-white"
+         role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toast-msg">
+                Done
+            </div>
+            <button type="button"
+                    class="btn-close btn-close-white
+                           me-2 m-auto"
+                    data-bs-dismiss="toast">
+            </button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+/* ============================================================
+   Morse Code Plugin - JavaScript
+   ============================================================
+   All sidetone audio is generated in the browser using the
+   Web Audio API. No server-side audio is required for TX.
+
+   Receive decode is server-side (RTL-SDR or radio audio).
+   The browser polls /api/decoded every 500ms for updates.
+   ============================================================ */
+
+// ---------------------------------------------------------------
+// Web Audio API context for sidetone generation
+// ---------------------------------------------------------------
+let audioCtx = null;
+let gainNode = null;
+let oscillator = null;
+let toneVolume = 0.7;
+const TONE_HZ = {{ timing.get('tone_hz', 700) }};
+
+/**
+ * Initialise (or resume) the Web Audio context.
+ * Must be called on user gesture (click/touch).
+ */
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (
+            window.AudioContext ||
+            window.webkitAudioContext
+        )();
+        gainNode = audioCtx.createGain();
+        gainNode.gain.setValueAtTime(
+            0, audioCtx.currentTime
+        );
+        gainNode.connect(audioCtx.destination);
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}
+
+/**
+ * Start the sidetone oscillator.
+ */
+function startTone() {
+    if (!audioCtx) return;
+    if (oscillator) {
+        oscillator.disconnect();
+        oscillator = null;
+    }
+    oscillator = audioCtx.createOscillator();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(
+        TONE_HZ, audioCtx.currentTime
+    );
+    oscillator.connect(gainNode);
+    oscillator.start();
+    gainNode.gain.cancelScheduledValues(
+        audioCtx.currentTime
+    );
+    gainNode.gain.setTargetAtTime(
+        toneVolume, audioCtx.currentTime, 0.003
+    );
+    document.getElementById(
+        'tone-indicator'
+    ).classList.add('tone-on');
+}
+
+/**
+ * Stop the sidetone oscillator.
+ */
+function stopTone() {
+    if (!audioCtx || !gainNode) return;
+    gainNode.gain.cancelScheduledValues(
+        audioCtx.currentTime
+    );
+    gainNode.gain.setTargetAtTime(
+        0, audioCtx.currentTime, 0.003
+    );
+    setTimeout(function() {
+        if (oscillator) {
+            try { oscillator.stop(); } catch(e) {}
+            oscillator.disconnect();
+            oscillator = null;
+        }
+    }, 20);
+    document.getElementById(
+        'tone-indicator'
+    ).classList.remove('tone-on');
+}
+
+/**
+ * Set sidetone volume.
+ * @param {number} vol - Volume 0.0 to 1.0
+ */
+function setVolume(vol) {
+    toneVolume = parseFloat(vol);
+    document.getElementById('volume-pct').textContent =
+        Math.round(toneVolume * 100) + '%';
+    if (gainNode && oscillator) {
+        gainNode.gain.setTargetAtTime(
+            toneVolume, audioCtx.currentTime, 0.003
+        );
+    }
+}
+
+
+// ---------------------------------------------------------------
+// Free-run key
+// ---------------------------------------------------------------
+let keyDownTime = null;
+let keySymbols = '';
+let silenceTimer = null;
+
+/**
+ * Handle key press start.
+ * Starts sidetone and records start time.
+ */
+function keyDown(evt) {
+    if (evt) evt.preventDefault();
+    initAudio();
+    keyDownTime = Date.now();
+    document.getElementById(
+        'morse-key-btn'
+    ).classList.add('key-active');
+    startTone();
+
+    // Clear pending silence timer
+    if (silenceTimer) {
+        clearTimeout(silenceTimer);
+        silenceTimer = null;
+    }
+}
+
+/**
+ * Handle key release.
+ * Stops sidetone and classifies element as dot or dash.
+ */
+function keyUp(evt) {
+    if (evt) evt.preventDefault();
+    if (!keyDownTime) return;
+
+    const duration = Date.now() - keyDownTime;
+    keyDownTime = null;
+    document.getElementById(
+        'morse-key-btn'
+    ).classList.remove('key-active');
+    stopTone();
+
+    // Classify element
+    const dotMs = {{ timing.get('dot_ms', 60) }};
+    const sym = duration < dotMs * 2 ? '.' : '-';
+    keySymbols += sym;
+
+    document.getElementById(
+        'freerun-morse'
+    ).textContent = keySymbols;
+
+    // Start silence timer to detect character end
+    const interCharMs = (
+        {{ timing.get('inter_char_ms', 180) }}
+    );
+    silenceTimer = setTimeout(function() {
+        keySymbols = '';
+        document.getElementById(
+            'freerun-morse'
+        ).textContent = '';
+    }, interCharMs * 3);
+}
+
+
+// ---------------------------------------------------------------
+// Text-to-Morse transmission
+// ---------------------------------------------------------------
+let txActive = false;
+let txAbort = false;
+let txEvents = [];
+let txIndex = 0;
+let txTimer = null;
+
+/**
+ * Send the text in the TX textarea as morse code.
+ * Encodes text server-side then plays timing in browser.
+ */
+async function sendText() {
+    const text = document.getElementById(
+        'tx-text'
+    ).value.trim();
+    if (!text) {
+        showToast('Enter text to send', 'warning');
+        return;
+    }
+    if (txActive) {
+        showToast('TX in progress', 'warning');
+        return;
+    }
+
+    initAudio();
+
+    try {
+        const response = await fetch(
+            '{{ url_for("Morse.api_encode") }}',
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({text: text})
+            }
+        );
+        const data = await response.json();
+
+        if (!data.success) {
+            showToast(
+                'Encode error: ' + data.error, 'danger'
+            );
+            return;
+        }
+
+        txEvents = data.timing;
+        txIndex = 0;
+        txAbort = false;
+        txActive = true;
+
+        document.getElementById(
+            'send-btn'
+        ).style.display = 'none';
+        document.getElementById(
+            'abort-btn'
+        ).style.display = 'block';
+        document.getElementById(
+            'tx-progress-container'
+        ).style.display = 'block';
+
+        playNextEvent();
+
+    } catch(e) {
+        showToast('TX error: ' + e.message, 'danger');
+    }
+}
+
+/**
+ * Play the next timing event in the TX sequence.
+ * Recursively schedules itself for the duration of
+ * each event until the sequence is complete.
+ */
+function playNextEvent() {
+    if (txAbort || txIndex >= txEvents.length) {
+        stopTone();
+        txActive = false;
+        txAbort = false;
+        document.getElementById(
+            'send-btn'
+        ).style.display = 'block';
+        document.getElementById(
+            'abort-btn'
+        ).style.display = 'none';
+        document.getElementById(
+            'tx-progress-container'
+        ).style.display = 'none';
+        document.getElementById(
+            'tx-progress'
+        ).style.width = '0%';
+        return;
+    }
+
+    const event = txEvents[txIndex];
+    txIndex++;
+
+    // Update progress bar
+    const pct = Math.round(
+        (txIndex / txEvents.length) * 100
+    );
+    document.getElementById(
+        'tx-progress'
+    ).style.width = pct + '%';
+
+    if (event.type === 'tone_on') {
+        startTone();
+    } else {
+        stopTone();
+    }
+
+    if (event.type === 'done') {
+        playNextEvent();
+        return;
+    }
+
+    txTimer = setTimeout(
+        playNextEvent,
+        event.duration_ms
+    );
+}
+
+/**
+ * Abort the current TX sequence.
+ */
+function abortSend() {
+    txAbort = true;
+    if (txTimer) clearTimeout(txTimer);
+    stopTone();
+    txActive = false;
+    document.getElementById(
+        'send-btn'
+    ).style.display = 'block';
+    document.getElementById(
+        'abort-btn'
+    ).style.display = 'none';
+    document.getElementById(
+        'tx-progress-container'
+    ).style.display = 'none';
+    showToast('TX aborted', 'warning');
+}
+
+/**
+ * Update the morse preview as the user types.
+ */
+document.addEventListener('DOMContentLoaded', function() {
+    const txText = document.getElementById('tx-text');
+    if (txText) {
+        txText.addEventListener('input', function() {
+            const preview = document.getElementById(
+                'morse-preview'
+            );
+            if (!this.value.trim()) {
+                preview.textContent = '';
+                return;
+            }
+            // Simple local preview (dots/dashes)
+            const MORSE = {
+                A:'.-', B:'-...', C:'-.-.', D:'-..',
+                E:'.', F:'..-.', G:'--.', H:'....',
+                I:'..', J:'.---', K:'-.-', L:'.-..',
+                M:'--', N:'-.', O:'---', P:'.--.',
+                Q:'--.-', R:'.-.', S:'...', T:'-',
+                U:'..-', V:'...-', W:'.--', X:'-..-',
+                Y:'-.--', Z:'--..',
+                '0':'-----', '1':'.----', '2':'..---',
+                '3':'...--', '4':'....-', '5':'.....',
+                '6':'-....', '7':'--...', '8':'---..',
+                '9':'----.',
+            };
+            const text = this.value.toUpperCase();
+            let result = '';
+            for (const ch of text) {
+                if (MORSE[ch]) result += MORSE[ch] + ' ';
+                else if (ch === ' ') result += '  ';
+            }
+            preview.textContent = result.trim();
+        });
+    }
+});
+
+
+// ---------------------------------------------------------------
+// Key mode toggle
+// ---------------------------------------------------------------
+document.querySelectorAll(
+    'input[name="key-mode"]'
+).forEach(function(radio) {
+    radio.addEventListener('change', function() {
+        const freerun = document.getElementById(
+            'freerun-panel'
+        );
+        const textMode = document.getElementById(
+            'text-mode-panel'
+        );
+        if (this.value === 'freerun') {
+            freerun.style.display = 'block';
+            textMode.style.display = 'none';
+        } else {
+            freerun.style.display = 'none';
+            textMode.style.display = 'block';
+        }
+    });
+});
+
+
+// ---------------------------------------------------------------
+// Receive controls
+// ---------------------------------------------------------------
+function startReceiver() {
+    $.ajax({
+        url: '{{ url_for("Morse.api_receiver_start") }}',
+        method: 'POST',
+        headers: {'X-CSRFToken': getCsrfToken()},
+        success: function(data) {
+            showToast(
+                data.success
+                    ? 'Receiver started'
+                    : data.message,
+                data.success ? 'success' : 'danger'
+            );
+            if (data.success) {
+                setTimeout(() => location.reload(), 1000);
+            }
+        }
+    });
+}
+
+function stopReceiver() {
+    $.ajax({
+        url: '{{ url_for("Morse.api_receiver_stop") }}',
+        method: 'POST',
+        headers: {'X-CSRFToken': getCsrfToken()},
+        success: function(data) {
+            showToast('Receiver stopped', 'info');
+            setTimeout(() => location.reload(), 1000);
+        }
+    });
+}
+
+function setSource(source) {
+    $.ajax({
+        url: '{{ url_for("Morse.api_receiver_source") }}',
+        method: 'POST',
+        contentType: 'application/json',
+        headers: {'X-CSRFToken': getCsrfToken()},
+        data: JSON.stringify({source: source}),
+        success: function(data) {
+            showToast(
+                data.success
+                    ? 'Source: ' + source
+                    : data.error,
+                data.success ? 'info' : 'danger'
+            );
+            if (data.success) {
+                document.getElementById(
+                    'source-badge'
+                ).textContent = source.toUpperCase();
+                // Update toggle buttons
+                const sdrBtn = document.getElementById(
+                    'btn-source-sdr'
+                );
+                const radioBtn = document.getElementById(
+                    'btn-source-radio'
+                );
+                if (source === 'sdr') {
+                    sdrBtn.className =
+                        'btn btn-sm btn-primary';
+                    radioBtn.className =
+                        'btn btn-sm btn-outline-success';
+                } else {
+                    sdrBtn.className =
+                        'btn btn-sm btn-outline-primary';
+                    radioBtn.className =
+                        'btn btn-sm btn-success';
+                }
+            }
+        }
+    });
+}
+
+function setFrequency() {
+    const freq = parseFloat(
+        document.getElementById('freq-input').value
+    );
+    if (!freq || freq < 0.1 || freq > 2000) {
+        showToast('Invalid frequency', 'warning');
+        return;
+    }
+    $.ajax({
+        url: '{{ url_for("Morse.api_set_frequency") }}',
+        method: 'POST',
+        contentType: 'application/json',
+        headers: {'X-CSRFToken': getCsrfToken()},
+        data: JSON.stringify({frequency_mhz: freq}),
+        success: function(data) {
+            if (data.success) {
+                document.getElementById(
+                    'freq-display'
+                ).textContent = freq.toFixed(4) + ' MHz';
+                showToast(
+                    'Frequency: ' + freq.toFixed(3) +
+                    ' MHz', 'success'
+                );
+            }
+        }
+    });
+}
+
+function setFreqPreset(freq) {
+    document.getElementById('freq-input').value = freq;
+    setFrequency();
+}
+
+function useRadioFreq(freq_hz) {
+    const mhz = (freq_hz / 1e6).toFixed(4);
+    document.getElementById('freq-input').value = mhz;
+    setFrequency();
+}
+
+function clearDecode() {
+    $.ajax({
+        url: '{{ url_for("Morse.api_clear_decode") }}',
+        method: 'POST',
+        headers: {'X-CSRFToken': getCsrfToken()},
+        success: function() {
+            document.getElementById(
+                'decode-display'
+            ).textContent = '(waiting for CW signal...)';
+            showToast('Decode cleared', 'info');
+        }
+    });
+}
+
+
+// ---------------------------------------------------------------
+// Logbook integration
+// ---------------------------------------------------------------
+function submitLogContact() {
+    const callsign = document.getElementById(
+        'modal-callsign'
+    ).value.trim().toUpperCase();
+    const freq = document.getElementById(
+        'modal-freq'
+    ).value;
+
+    if (!callsign) {
+        showToast('Callsign required', 'warning');
+        return;
+    }
+
+    $.ajax({
+        url: '{{ url_for("Morse.api_log_contact") }}',
+        method: 'POST',
+        contentType: 'application/json',
+        headers: {'X-CSRFToken': getCsrfToken()},
+        data: JSON.stringify({
+            callsign: callsign,
+            frequency: parseFloat(freq) || null,
+            rst_sent: $('[name=rst_sent]').val() || '599',
+            rst_rcvd: $('[name=rst_rcvd]').val() || '599',
+            notes: $('[name=notes]').val() || ''
+        }),
+        success: function(data) {
+            if (data.success) {
+                $('#logContactModal').modal('hide');
+                showToast(data.message, 'success');
+            } else {
+                showToast(
+                    'Log failed: ' + data.error,
+                    'danger'
+                );
+            }
+        }
+    });
+}
+
+
+// ---------------------------------------------------------------
+// Polling: update decoded text and signal status
+// ---------------------------------------------------------------
+let lastDecodedLen = 0;
+
+function pollDecoded() {
+    $.ajax({
+        url: '{{ url_for("Morse.api_decoded") }}',
+        method: 'GET',
+        timeout: 3000,
+        success: function(data) {
+            // Update decoded text display
+            const display = document.getElementById(
+                'decode-display'
+            );
+            if (data.text && data.text.length > 0) {
+                display.textContent = data.text;
+                // Auto-scroll to bottom
+                display.scrollTop = display.scrollHeight;
+            }
+
+            // Update tone indicator
+            const indicator = document.getElementById(
+                'tone-indicator'
+            );
+            if (data.tone_detected) {
+                indicator.classList.add('tone-on');
+            } else {
+                indicator.classList.remove('tone-on');
+            }
+
+            // Update signal meter
+            const level = (data.signal_level || 0);
+            const pct = Math.min(100,
+                Math.round(level * 100 * 8)
+            );
+            document.getElementById(
+                'signal-bar'
+            ).style.width = pct + '%';
+            document.getElementById(
+                'signal-pct'
+            ).textContent = pct + '%';
+        }
+    });
+}
+
+
+// ---------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------
+function showToast(msg, type) {
+    const el = document.getElementById('morse-toast');
+    if (!el) return;
+    document.getElementById('toast-msg').textContent = msg;
+    el.className = (
+        'toast align-items-center text-white bg-' + type
+    );
+    new bootstrap.Toast(el, {delay: 3500}).show();
+}
+
+function getCsrfToken() {
+    const meta = document.querySelector(
+        'meta[name=csrf-token]'
+    );
+    if (meta) return meta.getAttribute('content');
+    // Try from cookie
+    const match = document.cookie.match(
+        /csrf_token=([^;]+)/
+    );
+    return match ? match[1] : '';
+}
+
+
+// ---------------------------------------------------------------
+// Initialisation
+// ---------------------------------------------------------------
+$(document).ready(function() {
+    // Pre-fill log modal frequency from current SDR freq
+    $('#logContactModal').on('show.bs.modal', function() {
+        const freqInput = document.getElementById(
+            'freq-input'
+        );
+        document.getElementById(
+            'modal-freq'
+        ).value = freqInput ? freqInput.value : '';
+    });
+
+    // Start polling for decoded text
+    setInterval(pollDecoded, 500);
+
+    // Keyboard shortcut: Space bar = morse key
+    // (when not typing in a text field)
+    document.addEventListener('keydown', function(e) {
+        if (e.code === 'Space' &&
+                e.target.tagName !== 'TEXTAREA' &&
+                e.target.tagName !== 'INPUT') {
+            e.preventDefault();
+            const mode = document.querySelector(
+                'input[name="key-mode"]:checked'
+            );
+            if (mode && mode.value === 'freerun') {
+                if (!keyDownTime) keyDown();
+            }
+        }
+    });
+
+    document.addEventListener('keyup', function(e) {
+        if (e.code === 'Space' &&
+                e.target.tagName !== 'TEXTAREA' &&
+                e.target.tagName !== 'INPUT') {
+            e.preventDefault();
+            const mode = document.querySelector(
+                'input[name="key-mode"]:checked'
+            );
+            if (mode && mode.value === 'freerun') {
+                keyUp();
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
