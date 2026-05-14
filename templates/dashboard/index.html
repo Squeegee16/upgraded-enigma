@@ -1385,6 +1385,256 @@ $(document).ready(function() {
         }
     });
 });
+// ---------------------------------------------------------------
+// GPS Detail Modal
+// ---------------------------------------------------------------
+function showGpsDetail() {
+    const modal = new bootstrap.Modal(
+        document.getElementById('gpsDetailModal')
+    );
+    modal.show();
+    loadGpsDetail();
+}
 
+function loadGpsDetail() {
+    const body = document.getElementById(
+        'gps-detail-body'
+    );
+
+    $.ajax({
+        url: '{{ url_for("dashboard.get_gps_detail") }}',
+        method: 'GET',
+        timeout: 8000,
+        success: function(data) {
+            if (!data.available) {
+                body.innerHTML = (
+                    '<div class="alert alert-danger">' +
+                    data.error + '</div>'
+                );
+                return;
+            }
+
+            let html = '';
+
+            // Fix status banner
+            if (data.has_fix) {
+                html += (
+                    '<div class="alert alert-success py-2">' +
+                    '<i class="fas fa-check-circle me-2"></i>' +
+                    '<strong>GPS Fix Active</strong> — ' +
+                    'Grid: <strong class="font-monospace">' +
+                    (data.grid_6 || data.grid || 'N/A') +
+                    '</strong>' +
+                    '</div>'
+                );
+            } else {
+                html += (
+                    '<div class="alert alert-warning py-2">' +
+                    '<div class="spinner-border ' +
+                    'spinner-border-sm me-2"></div>' +
+                    'Acquiring fix... ' +
+                    (data.satellites || 0) + ' sats used' +
+                    '</div>'
+                );
+            }
+
+            // Grid squares at all precisions
+            if (data.has_fix && data.latitude !== null) {
+                html += '<div class="row mb-3">';
+                const grids = [
+                    ['2-char (Field)', data.grid_2],
+                    ['4-char (Square)', data.grid_4],
+                    ['6-char (Subsquare)', data.grid_6],
+                    ['8-char (Extended)', data.grid_8],
+                ];
+                grids.forEach(function(g) {
+                    html += (
+                        '<div class="col-6 col-md-3 mb-2">' +
+                        '<div class="card text-center ' +
+                        'border-success">' +
+                        '<div class="card-body py-2 px-1">' +
+                        '<div class="font-monospace fs-5 ' +
+                        'fw-bold text-success">' +
+                        (g[1] || '?') +
+                        '</div>' +
+                        '<small class="text-muted">' +
+                        g[0] + '</small>' +
+                        '</div></div></div>'
+                    );
+                });
+                html += '</div>';
+            }
+
+            // Position table
+            html += (
+                '<div class="row">' +
+                '<div class="col-md-6">' +
+                '<h6>Position</h6>' +
+                '<table class="table table-sm small">'
+            );
+
+            const posFields = [
+                ['Latitude', data.latitude !== null ?
+                    parseFloat(data.latitude).toFixed(8) + '°'
+                    : 'N/A'],
+                ['Longitude', data.longitude !== null ?
+                    parseFloat(data.longitude).toFixed(8) + '°'
+                    : 'N/A'],
+                ['Altitude', data.altitude !== undefined ?
+                    parseFloat(data.altitude).toFixed(1) + ' m'
+                    : 'N/A'],
+                ['Fix Quality', (data.fix_quality || 0) +
+                    ' (' + (
+                        data.fix_quality === 1 ? 'GPS' :
+                        data.fix_quality === 2 ? 'DGPS' :
+                        data.fix_quality === 0 ? 'No fix' :
+                        'Other'
+                    ) + ')'],
+                ['Fix Type', (data.fix_type || 1) === 3 ?
+                    '3D' : data.fix_type === 2 ? '2D' :
+                    'No fix'],
+                ['Source', (data.source || '?').toUpperCase()],
+                ['Port', data.port || 'N/A'],
+            ];
+
+            posFields.forEach(function(f) {
+                html += (
+                    '<tr><td class="text-muted">' + f[0] +
+                    '</td><td class="font-monospace">' +
+                    f[1] + '</td></tr>'
+                );
+            });
+
+            html += '</table></div>';
+
+            // Accuracy and motion
+            html += (
+                '<div class="col-md-6">' +
+                '<h6>Accuracy &amp; Motion</h6>' +
+                '<table class="table table-sm small">'
+            );
+
+            const accFields = [
+                ['Satellites used',
+                    (data.satellites || 0) + ' / ' +
+                    (data.satellites_view || 0) +
+                    ' visible'],
+                ['HDOP', data.hdop !== null ?
+                    parseFloat(data.hdop || 0).toFixed(1)
+                    : 'N/A'],
+                ['VDOP', data.vdop !== null ?
+                    parseFloat(data.vdop || 0).toFixed(1)
+                    : 'N/A'],
+                ['Speed', data.speed_kmh !== null ?
+                    parseFloat(data.speed_kmh || 0)
+                    .toFixed(1) + ' km/h' : 'N/A'],
+                ['Track', data.track_true !== null ?
+                    parseFloat(data.track_true || 0)
+                    .toFixed(1) + '°T' : 'N/A'],
+                ['Mag Var', data.magnetic_variation ?
+                    parseFloat(data.magnetic_variation)
+                    .toFixed(1) + '°' : 'N/A'],
+                ['UTC Time', data.time || 'N/A'],
+                ['UTC Date', data.date || 'N/A'],
+            ];
+
+            accFields.forEach(function(f) {
+                html += (
+                    '<tr><td class="text-muted">' + f[0] +
+                    '</td><td class="font-monospace">' +
+                    f[1] + '</td></tr>'
+                );
+            });
+
+            html += '</table></div></div>';
+
+            // Satellite table
+            if (data.satellite_data &&
+                    data.satellite_data.length > 0) {
+                html += (
+                    '<h6>Satellite View</h6>' +
+                    '<div class="table-responsive">' +
+                    '<table class="table table-sm ' +
+                    'table-striped small">' +
+                    '<thead><tr>' +
+                    '<th>PRN</th>' +
+                    '<th>Elevation</th>' +
+                    '<th>Azimuth</th>' +
+                    '<th>SNR</th>' +
+                    '<th>Signal</th>' +
+                    '</tr></thead><tbody>'
+                );
+
+                data.satellite_data.forEach(function(sat) {
+                    const snr = sat.snr || 0;
+                    const barWidth = Math.min(100,
+                        snr > 0 ? (snr / 50 * 100) : 0
+                    );
+                    const barColor = (
+                        snr > 35 ? 'bg-success' :
+                        snr > 20 ? 'bg-warning' :
+                        'bg-danger'
+                    );
+
+                    html += (
+                        '<tr>' +
+                        '<td><strong>' + sat.prn +
+                        '</strong></td>' +
+                        '<td>' +
+                        (sat.elevation !== null ?
+                            sat.elevation + '°' : '-') +
+                        '</td>' +
+                        '<td>' +
+                        (sat.azimuth !== null ?
+                            sat.azimuth + '°' : '-') +
+                        '</td>' +
+                        '<td>' + (snr > 0 ? snr : '-') +
+                        '</td>' +
+                        '<td>' +
+                        '<div class="progress" ' +
+                        'style="height:8px;width:80px">' +
+                        '<div class="progress-bar ' +
+                        barColor + '" style="width:' +
+                        barWidth + '%"></div>' +
+                        '</div>' +
+                        '</td>' +
+                        '</tr>'
+                    );
+                });
+
+                html += '</tbody></table></div>';
+            }
+
+            // NMEA stats if available
+            if (data.stats) {
+                html += (
+                    '<div class="alert alert-dark ' +
+                    'small mt-2 mb-0">' +
+                    '<strong>NMEA Statistics:</strong> ' +
+                    'Received: ' +
+                    (data.stats.sentences_received || 0) +
+                    ' | Parsed: ' +
+                    (data.stats.sentences_parsed || 0) +
+                    ' | Errors: ' +
+                    (data.stats.parse_errors || 0) +
+                    (data.stats.fix_acquired_at ?
+                        ' | Fix: ' +
+                        data.stats.fix_acquired_at
+                        .substring(11, 19) + ' UTC'
+                        : '') +
+                    '</div>'
+                );
+            }
+
+            body.innerHTML = html;
+        },
+        error: function() {
+            body.innerHTML = (
+                '<div class="alert alert-danger">' +
+                'Error loading GPS data</div>'
+            );
+        }
+    });
+}
 </script>
 {% endblock %}{# end block extra_js #}
