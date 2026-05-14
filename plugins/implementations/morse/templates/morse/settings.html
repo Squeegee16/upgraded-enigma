@@ -1,0 +1,515 @@
+{% extends "base.html" %}
+
+{% block title %}Morse Settings - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between
+            align-items-center mb-4">
+    <h2>
+        <i class="fas fa-cog me-2"></i>
+        Morse / CW Settings
+    </h2>
+    <a href="{{ url_for('Morse.index') }}"
+       class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>
+        Back
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <form method="POST"
+              action="{{ url_for('Morse.settings') }}">
+            {{ form.hidden_tag() }}
+
+            {# ------------------------------------------------ #}
+            {# Timing settings                                   #}
+            {# ------------------------------------------------ #}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-clock me-1"></i>
+                        Morse Timing
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.wpm.label(
+                               class="form-label") }}
+                            {{ form.wpm(
+                               class="form-control" + (
+                                   " is-invalid"
+                                   if form.wpm.errors
+                                   else "")) }}
+                            {% if form.wpm.errors %}
+                            <div class="invalid-feedback">
+                                {% for e in form.wpm.errors %}
+                                {{ e }}{% endfor %}
+                            </div>
+                            {% endif %}
+                            <small class="text-muted">
+                                {{ form.wpm.description }}
+                            </small>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            {{ form.farnsworth_wpm.label(
+                               class="form-label") }}
+                            {{ form.farnsworth_wpm(
+                               class="form-control") }}
+                            <small class="text-muted">
+                                {{ form.farnsworth_wpm
+                                   .description }}
+                            </small>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            {{ form.tone_hz.label(
+                               class="form-label") }}
+                            <div class="input-group">
+                                {{ form.tone_hz(
+                                   class="form-control" + (
+                                       " is-invalid"
+                                       if form.tone_hz.errors
+                                       else ""),
+                                   id="tone-hz-input",
+                                   oninput=
+                                       "updateTonePreview(
+                                           this.value)") }}
+                                <span class="input-group-text">
+                                    Hz
+                                </span>
+                            </div>
+                            {% if form.tone_hz.errors %}
+                            <div class="invalid-feedback
+                                        d-block">
+                                {% for e in
+                                   form.tone_hz.errors %}
+                                {{ e }}{% endfor %}
+                            </div>
+                            {% endif %}
+                            <small class="text-muted">
+                                {{ form.tone_hz.description }}
+                            </small>
+                        </div>
+                    </div>
+
+                    {# Tone frequency slider #}
+                    <div class="mb-3">
+                        <label class="form-label">
+                            Tone Frequency Preview
+                        </label>
+                        <input type="range"
+                               class="form-range"
+                               id="tone-slider"
+                               min="400" max="1200"
+                               step="10"
+                               value="{{ config.get(
+                                   'tone_hz', 700) }}"
+                               oninput="
+                                   document.getElementById(
+                                       'tone-hz-input'
+                                   ).value = this.value;
+                                   updateTonePreview(
+                                       this.value)">
+                        <div class="d-flex
+                                    justify-content-between">
+                            <small class="text-muted">
+                                400 Hz (low)
+                            </small>
+                            <small class="text-primary
+                                         fw-bold"
+                                   id="tone-preview-label">
+                                {{ config.get('tone_hz', 700)
+                                }} Hz
+                            </small>
+                            <small class="text-muted">
+                                1200 Hz (high)
+                            </small>
+                        </div>
+                        <div class="text-center mt-1">
+                            <button type="button"
+                                    class="btn btn-sm
+                                           btn-outline-primary"
+                                    onclick="previewTone()">
+                                <i class="fas fa-volume-up
+                                          me-1"></i>
+                                Preview Tone
+                            </button>
+                        </div>
+                    </div>
+
+                    {# Current timing summary #}
+                    <div class="alert alert-dark small mb-0">
+                        <strong>Current timing:</strong>
+                        <span id="timing-summary">
+                            {% if timing %}
+                            Dot: {{ timing.dot_ms }}ms |
+                            Dash: {{ timing.dash_ms }}ms |
+                            Char gap: {{ timing.inter_char_ms }}ms |
+                            Word gap: {{ timing.word_space_ms }}ms
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {# ------------------------------------------------ #}
+            {# SDR settings                                      #}
+            {# ------------------------------------------------ #}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-signal me-1"></i>
+                        RTL-SDR Settings
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.center_frequency_mhz.label(
+                               class="form-label") }}
+                            <div class="input-group">
+                                {{ form.center_frequency_mhz(
+                                   class="form-control") }}
+                                <span class="input-group-text">
+                                    MHz
+                                </span>
+                            </div>
+                            <small class="text-muted">
+                                {{
+                                form.center_frequency_mhz
+                                .description }}
+                            </small>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            {{ form.sdr_gain.label(
+                               class="form-label") }}
+                            <div class="input-group">
+                                {{ form.sdr_gain(
+                                   class="form-control") }}
+                                <span class="input-group-text">
+                                    dB
+                                </span>
+                            </div>
+                            <small class="text-muted">
+                                {{ form.sdr_gain.description }}
+                            </small>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            {{ form.sdr_device_index.label(
+                               class="form-label") }}
+                            {{ form.sdr_device_index(
+                               class="form-control") }}
+                            <small class="text-muted">
+                                {{ form.sdr_device_index
+                                   .description }}
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.tone_detection_threshold
+                           .label(class="form-label") }}
+                        {{ form.tone_detection_threshold(
+                           class="form-control") }}
+                        <small class="text-muted">
+                            {{
+                            form.tone_detection_threshold
+                            .description }}
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            {# ------------------------------------------------ #}
+            {# Radio audio settings                              #}
+            {# ------------------------------------------------ #}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-broadcast-tower
+                                  me-1"></i>
+                        Radio Audio Settings
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        {{ form.radio_audio_device.label(
+                           class="form-label") }}
+                        {{ form.radio_audio_device(
+                           class="form-control",
+                           placeholder=
+                               "e.g. hw:1,0 or pulse") }}
+                        <small class="text-muted">
+                            {{ form.radio_audio_device
+                               .description }}
+                        </small>
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.default_source.label(
+                           class="form-label") }}
+                        {{ form.default_source(
+                           class="form-select") }}
+                        <small class="text-muted">
+                            {{ form.default_source
+                               .description }}
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            {# ------------------------------------------------ #}
+            {# General settings                                  #}
+            {# ------------------------------------------------ #}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-sliders-h me-1"></i>
+                        General
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.callsign.label(
+                               class="form-label") }}
+                            {{ form.callsign(
+                               class="form-control",
+                               placeholder="W1ABC") }}
+                            <small class="text-muted">
+                                {{ form.callsign.description }}
+                            </small>
+                        </div>
+
+                        <div class="col-md-6 mb-3
+                                    d-flex align-items-center">
+                            <div class="form-check mt-4">
+                                {{ form.auto_log(
+                                   class="form-check-input") }}
+                                {{ form.auto_log.label(
+                                   class="form-check-label") }}
+                                <div class="form-text">
+                                    {{ form.auto_log
+                                       .description }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end
+                        gap-2 mb-4">
+                <a href="{{ url_for('Morse.index') }}"
+                   class="btn btn-secondary">
+                    Cancel
+                </a>
+                {{ form.submit(class="btn btn-primary") }}
+            </div>
+        </form>
+    </div>
+
+    {# Info panel #}
+    <div class="col-md-4">
+
+        {# Current status #}
+        <div class="card mb-3">
+            <div class="card-header bg-dark text-white">
+                <h6 class="mb-0">Current Status</h6>
+            </div>
+            <div class="card-body small">
+                <dl class="row mb-0">
+                    <dt class="col-5">Receiver:</dt>
+                    <dd class="col-7">
+                        {% if receiver_status.get(
+                            'running') %}
+                        <span class="text-success">
+                            Active
+                        </span>
+                        {% else %}
+                        <span class="text-danger">
+                            Stopped
+                        </span>
+                        {% endif %}
+                    </dd>
+
+                    <dt class="col-5">Source:</dt>
+                    <dd class="col-7">
+                        {{ receiver_status.get(
+                            'source', 'sdr')|upper }}
+                    </dd>
+
+                    <dt class="col-5">Frequency:</dt>
+                    <dd class="col-7">
+                        {{ "%.3f"|format(
+                           (receiver_status.get(
+                               'frequency', 7030000)
+                           ) / 1e6) }} MHz
+                    </dd>
+                </dl>
+            </div>
+        </div>
+
+        {# WPM reference #}
+        <div class="card mb-3">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0">WPM Reference</h6>
+            </div>
+            <div class="card-body small">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>WPM</th>
+                            <th>Dot</th>
+                            <th>Use</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>5</td>
+                            <td>240ms</td>
+                            <td>Beginner</td>
+                        </tr>
+                        <tr>
+                            <td>10</td>
+                            <td>120ms</td>
+                            <td>Learning</td>
+                        </tr>
+                        <tr>
+                            <td>15</td>
+                            <td>80ms</td>
+                            <td>Intermediate</td>
+                        </tr>
+                        <tr class="table-primary">
+                            <td><strong>20</strong></td>
+                            <td><strong>60ms</strong></td>
+                            <td><strong>
+                                General QSO
+                            </strong></td>
+                        </tr>
+                        <tr>
+                            <td>25</td>
+                            <td>48ms</td>
+                            <td>Contest</td>
+                        </tr>
+                        <tr>
+                            <td>35+</td>
+                            <td>&lt;34ms</td>
+                            <td>Expert</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {# Tone frequency guide #}
+        <div class="card">
+            <div class="card-header bg-secondary
+                        text-white">
+                <h6 class="mb-0">
+                    Tone Frequency Guide
+                </h6>
+            </div>
+            <div class="card-body small">
+                <ul class="list-unstyled mb-0">
+                    <li>
+                        <strong>400-500 Hz</strong>
+                        — Low, easy on ears
+                    </li>
+                    <li>
+                        <strong>600-800 Hz</strong>
+                        — Most common range
+                    </li>
+                    <li>
+                        <strong>700 Hz</strong>
+                        — ITU standard / default
+                    </li>
+                    <li>
+                        <strong>800-1000 Hz</strong>
+                        — Higher pitch, cuts through noise
+                    </li>
+                    <li>
+                        <strong>1000-1200 Hz</strong>
+                        — High pitch, some prefer for DX
+                    </li>
+                </ul>
+                <hr class="my-2">
+                <small class="text-muted">
+                    Set this to match the offset from
+                    your SDR center frequency where the
+                    CW signal appears on the waterfall.
+                </small>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Sync slider with number input
+document.addEventListener('DOMContentLoaded', function() {
+    const toneInput = document.getElementById(
+        'tone-hz-input'
+    );
+    const toneSlider = document.getElementById(
+        'tone-slider'
+    );
+
+    if (toneInput && toneSlider) {
+        toneInput.addEventListener('input', function() {
+            toneSlider.value = this.value;
+            updateTonePreview(this.value);
+        });
+    }
+});
+
+function updateTonePreview(hz) {
+    const label = document.getElementById(
+        'tone-preview-label'
+    );
+    if (label) label.textContent = hz + ' Hz';
+}
+
+/**
+ * Play a brief preview of the configured tone.
+ * Uses Web Audio API in the browser.
+ */
+function previewTone() {
+    const hz = parseInt(
+        document.getElementById('tone-hz-input').value
+    ) || 700;
+
+    try {
+        const ctx = new (
+            window.AudioContext ||
+            window.webkitAudioContext
+        )();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.value = hz;
+        gain.gain.setValueAtTime(0.7, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(
+            0.001,
+            ctx.currentTime + 0.8
+        );
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.8);
+    } catch(e) {
+        console.warn('Audio preview error:', e);
+    }
+}
+</script>
+{% endblock %}
