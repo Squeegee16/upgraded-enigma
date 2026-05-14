@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}WSJT-X Settings - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="fas fa-cog"></i> WSJT-X Settings</h2>
+    <a href="{{ url_for('WSJTX.index') }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Back
+    </a>
+</div>
+
+{% if install_error %}
+<div class="alert alert-warning">
+    <i class="fas fa-exclamation-triangle"></i> {{ install_error }}
+    <br><a href="https://physics.princeton.edu/pulsar/k1jt/wsjtx.html" target="_blank">
+        Download WSJT-X manually
+    </a>
+</div>
+{% endif %}
+
+<div class="row">
+    <div class="col-md-8">
+        <form method="POST">
+            {{ form.hidden_tag() }}
+            
+            <!-- UDP Settings -->
+            <div class="card mb-4">
+                <div class="card-header"><h5>UDP Listener Settings</h5></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.udp_host.label(class="form-label") }}
+                            {{ form.udp_host(class="form-control") }}
+                            <small class="text-muted">{{ form.udp_host.description }}</small>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            {{ form.udp_port.label(class="form-label") }}
+                            {{ form.udp_port(class="form-control") }}
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            {{ form.multicast_group.label(class="form-label") }}
+                            {{ form.multicast_group(class="form-control", placeholder="Optional") }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Launch Settings -->
+            <div class="card mb-4">
+                <div class="card-header"><h5>Launch Settings</h5></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.launch_mode.label(class="form-label") }}
+                            {{ form.launch_mode(class="form-select") }}
+                            <small class="text-muted">{{ form.launch_mode.description }}</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.display.label(class="form-label") }}
+                            {{ form.display(class="form-control") }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Station -->
+            <div class="card mb-4">
+                <div class="card-header"><h5>Station Settings</h5></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.callsign.label(class="form-label") }}
+                            {{ form.callsign(class="form-control", placeholder="W1ABC") }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.grid.label(class="form-label") }}
+                            {{ form.grid(class="form-control", placeholder="FN20") }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Plugin Behavior -->
+            <div class="card mb-4">
+                <div class="card-header"><h5>Plugin Behavior</h5></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                {{ form.auto_start(class="form-check-input") }}
+                                {{ form.auto_start.label(class="form-check-label") }}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                {{ form.auto_listen(class="form-check-input") }}
+                                {{ form.auto_listen.label(class="form-check-label") }}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                {{ form.auto_log_qsos(class="form-check-input") }}
+                                {{ form.auto_log_qsos.label(class="form-check-label") }}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                {{ form.show_cq_only(class="form-check-input") }}
+                                {{ form.show_cq_only.label(class="form-check-label") }}
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            {{ form.max_spots.label(class="form-label") }}
+                            {{ form.max_spots(class="form-control") }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="d-flex justify-content-end gap-2">
+                <a href="{{ url_for('WSJTX.index') }}" class="btn btn-secondary">Cancel</a>
+                {{ form.submit(class="btn btn-primary") }}
+            </div>
+        </form>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header bg-info text-white">
+                <h6><i class="fas fa-info-circle"></i> WSJT-X Setup</h6>
+            </div>
+            <div class="card-body small">
+                <p>Configure WSJT-X to send UDP data:</p>
+                <ol>
+                    <li>Open WSJT-X</li>
+                    <li>Go to <strong>File → Settings</strong></li>
+                    <li>Click <strong>Reporting</strong> tab</li>
+                    <li>Set UDP Server: <code>localhost</code></li>
+                    <li>Set Port: <code>2237</code></li>
+                    <li>Check <strong>Accept UDP requests</strong></li>
+                    <li>Click <strong>OK</strong></li>
+                </ol>
+                <a href="https://physics.princeton.edu/pulsar/k1jt/wsjtx-doc/wsjtx-main-2.6.0.html#UDP_MESSAGES"
+                   target="_blank" class="btn btn-info btn-sm w-100">
+                    <i class="fas fa-external-link-alt"></i> UDP Docs
+                </a>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h6>Supported Modes</h6>
+            </div>
+            <div class="card-body small">
+                <div class="row">
+                    <div class="col-6">
+                        <ul class="list-unstyled mb-0">
+                            <li>✓ FT8</li>
+                            <li>✓ FT4</li>
+                            <li>✓ JT65</li>
+                            <li>✓ JT9</li>
+                        </ul>
+                    </div>
+                    <div class="col-6">
+                        <ul class="list-unstyled mb-0">
+                            <li>✓ WSPR</li>
+                            <li>✓ Q65</li>
+                            <li>✓ MSK144</li>
+                            <li>✓ JS8</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
