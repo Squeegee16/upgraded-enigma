@@ -125,6 +125,14 @@ RUN apt-get update && apt-get install -y \
     libudev-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# RTL-SDR development library for pyrtlsdr Python bindings
+# Must be present before 'pip install pyrtlsdr'
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    librtlsdr-dev \
+    librtlsdr0 \
+    && rm -rf /var/lib/apt/lists/*
+
 # ============================================================
 # Package Group 3: X11 display support + VNC
 # Required for FLdigi and QSSTV which are GUI applications.
