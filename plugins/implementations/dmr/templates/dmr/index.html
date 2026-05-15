@@ -1,0 +1,1701 @@
+{% extends "base.html" %}
+
+{% block title %}DMR Radio - Ham Radio App{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ============================================================
+   DMR Plugin Styles
+   ============================================================ */
+
+/* PTT Button */
+.ptt-btn {
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    font-size: 1.6rem;
+    font-weight: 900;
+    border: 8px solid #dc3545;
+    background: linear-gradient(
+        145deg, #1a1a2e, #2d1a1a
+    );
+    color: #fff;
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
+    transition: all 0.08s ease;
+    box-shadow:
+        0 8px 32px rgba(220,53,69,0.4),
+        inset 0 2px 4px rgba(255,255,255,0.08);
+    letter-spacing: 0.05em;
+}
+
+.ptt-btn:active,
+.ptt-btn.ptt-active {
+    background: linear-gradient(
+        145deg, #dc3545, #a71d2a
+    );
+    border-color: #a71d2a;
+    transform: scale(0.93);
+    box-shadow:
+        0 2px 8px rgba(220,53,69,0.8),
+        inset 0 3px 10px rgba(0,0,0,0.4);
+}
+
+.ptt-btn.ptt-disabled {
+    border-color: #6c757d;
+    background: linear-gradient(
+        145deg, #1a1a1a, #2a2a2a
+    );
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* Signal quality meter */
+.signal-quality-bar {
+    height: 14px;
+    border-radius: 7px;
+    background: #1e1e2e;
+    overflow: hidden;
+    border: 1px solid #30363d;
+}
+
+.signal-quality-fill {
+    height: 100%;
+    border-radius: 7px;
+    background: linear-gradient(
+        90deg, #28a745 0%, #ffc107 60%, #dc3545 100%
+    );
+    transition: width 0.3s ease;
+    min-width: 3px;
+}
+
+/* Active call banner */
+.active-call-banner {
+    background: linear-gradient(
+        135deg, #0d1a0d, #1a2d0d
+    );
+    border: 2px solid #28a745;
+    border-radius: 8px;
+    animation: call-pulse 1s ease-in-out infinite;
+}
+
+@keyframes call-pulse {
+    0%, 100% {
+        border-color: #28a745;
+        box-shadow: 0 0 8px rgba(40,167,69,0.3);
+    }
+    50% {
+        border-color: #20c997;
+        box-shadow: 0 0 20px rgba(40,167,69,0.6);
+    }
+}
+
+/* DMR frame table */
+.frame-table td {
+    font-size: 0.82rem;
+    padding: 0.25rem 0.4rem;
+    vertical-align: middle;
+    font-family: 'Courier New', monospace;
+}
+
+.frame-type-voice   { color: #58d68d; }
+.frame-type-data    { color: #5dade2; }
+.frame-type-end     { color: #e74c3c; }
+.frame-type-header  { color: #f1c40f; }
+
+/* Frequency display */
+.freq-display {
+    font-family: 'Courier New', monospace;
+    font-size: 1.6rem;
+    font-weight: bold;
+    color: #5dade2;
+    letter-spacing: 0.08em;
+    text-shadow: 0 0 10px rgba(93,173,226,0.4);
+}
+
+/* TG and TS badges */
+.tg-badge {
+    font-family: monospace;
+    font-size: 1rem;
+    padding: 0.4em 0.8em;
+    letter-spacing: 0.05em;
+}
+
+/* Status LED */
+.status-led {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.led-rx {
+    background: #28a745;
+    box-shadow: 0 0 8px rgba(40,167,69,0.7);
+    animation: led-blink 1.5s infinite;
+}
+
+.led-tx {
+    background: #dc3545;
+    box-shadow: 0 0 16px rgba(220,53,69,0.9);
+    animation: led-blink 0.4s infinite;
+}
+
+.led-idle {
+    background: #6c757d;
+}
+
+@keyframes led-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* BER gauge */
+.ber-gauge {
+    font-family: monospace;
+    font-size: 0.9rem;
+}
+
+/* Tier badge */
+.tier-badge {
+    font-size: 0.7rem;
+    padding: 0.15em 0.5em;
+}
+
+/* Timeslot tabs */
+.ts-tab-btn {
+    font-size: 0.8rem;
+    padding: 0.2rem 0.8rem;
+}
+
+/* Source selector */
+.source-btn-sdr { border-color: #0d6efd; }
+.source-btn-radio { border-color: #28a745; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between
+            align-items-center mb-3">
+    <h2>
+        <i class="fas fa-mobile-alt me-2"></i>
+        DMR Digital Mobile Radio
+        <span class="badge tier-badge
+            {% if config.get('tier') == 1 %}bg-secondary
+            {% elif config.get('tier') == 2 %}bg-primary
+            {% else %}bg-warning text-dark{% endif %} ms-2">
+            Tier {{ config.get('tier', 2) }}
+        </span>
+    </h2>
+    <div class="d-flex align-items-center gap-2">
+
+        {# Source toggle #}
+        <div class="btn-group" role="group">
+            <button type="button"
+                    id="btn-sdr"
+                    class="btn btn-sm
+                    {% if config.get('source','sdr') == 'sdr' %}
+                        btn-primary source-btn-sdr
+                    {% else %}
+                        btn-outline-primary
+                    {% endif %}"
+                    onclick="setSource('sdr')">
+                <i class="fas fa-signal me-1"></i>
+                RTL-SDR
+            </button>
+            <button type="button"
+                    id="btn-radio"
+                    class="btn btn-sm
+                    {% if config.get('source') == 'radio' %}
+                        btn-success source-btn-radio
+                    {% else %}
+                        btn-outline-success
+                    {% endif %}"
+                    onclick="setSource('radio')">
+                <i class="fas fa-broadcast-tower me-1"></i>
+                Radio
+            </button>
+        </div>
+
+        <a href="{{ url_for('DMR.settings') }}"
+           class="btn btn-secondary btn-sm">
+            <i class="fas fa-cog"></i>
+        </a>
+    </div>
+</div>
+
+{# ============================================================ #}
+{# Active Call Banner                                           #}
+{# ============================================================ #}
+<div id="active-call-section" style="display:none"
+     class="mb-3">
+    <div class="active-call-banner p-3">
+        <div class="row align-items-center">
+            <div class="col-auto">
+                <span class="status-led led-rx"
+                      id="rx-led"></span>
+            </div>
+            <div class="col">
+                <div class="d-flex align-items-center
+                            gap-3 flex-wrap">
+                    <div>
+                        <small class="text-muted d-block">
+                            Active Call
+                        </small>
+                        <strong class="text-success fs-5"
+                                id="call-callsign">
+                            —
+                        </strong>
+                    </div>
+                    <div>
+                        <small class="text-muted d-block">
+                            DMR ID
+                        </small>
+                        <span class="font-monospace
+                                     text-info"
+                              id="call-dmrid">—</span>
+                    </div>
+                    <div>
+                        <small class="text-muted d-block">
+                            Talk Group
+                        </small>
+                        <span class="badge bg-primary
+                                     tg-badge"
+                              id="call-tg">—</span>
+                    </div>
+                    <div>
+                        <small class="text-muted d-block">
+                            TS
+                        </small>
+                        <span class="badge bg-secondary"
+                              id="call-ts">—</span>
+                    </div>
+                    <div>
+                        <small class="text-muted d-block">
+                            Type
+                        </small>
+                        <span id="call-type"
+                              class="text-muted small">
+                            —
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-success btn-sm"
+                        data-bs-toggle="modal"
+                        data-bs-target=
+                            "#logContactModal">
+                    <i class="fas fa-book me-1"></i>
+                    Log QSO
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ============================================================ #}
+{# Main row: Channel params | PTT | Signal                     #}
+{# ============================================================ #}
+<div class="row mb-3">
+
+    {# Channel parameters card #}
+    <div class="col-md-4 mb-3">
+        <div class="card h-100 bg-dark text-light
+                    border-secondary">
+            <div class="card-header border-secondary py-2">
+                <h6 class="mb-0 text-secondary">
+                    <i class="fas fa-sliders-h me-1"></i>
+                    Channel Parameters
+                </h6>
+            </div>
+            <div class="card-body py-2">
+
+                {# Frequency display #}
+                <div class="text-center mb-3">
+                    <div class="freq-display"
+                         id="freq-display">
+                        {{ "%.4f"|format(
+                           config.get(
+                               'center_frequency_mhz',
+                               438.0)) }}
+                    </div>
+                    <small class="text-muted">MHz</small>
+                    <div class="input-group
+                                input-group-sm mt-2">
+                        <input type="number"
+                               class="form-control
+                                      bg-dark
+                                      text-light
+                                      border-secondary"
+                               id="freq-input"
+                               value="{{ config.get(
+                                   'center_frequency_mhz',
+                                   438.0) }}"
+                               step="0.0001"
+                               min="100"
+                               max="3000">
+                        <span class="input-group-text
+                                     bg-dark
+                                     text-muted
+                                     border-secondary">
+                            MHz
+                        </span>
+                        <button class="btn
+                                       btn-outline-primary
+                                       btn-sm"
+                                onclick="setFrequency()">
+                            Set
+                        </button>
+                    </div>
+                </div>
+
+                {# DMR channel params #}
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="text-muted
+                                      small d-block">
+                            Color Code
+                        </label>
+                        <select class="form-select
+                                       form-select-sm
+                                       bg-dark text-light
+                                       border-secondary"
+                                id="color-code-sel"
+                                onchange="setChannel()">
+                            {% for cc in range(16) %}
+                            <option value="{{ cc }}"
+                                {% if cc == config.get(
+                                    'color_code', 1) %}
+                                selected{% endif %}>
+                                CC {{ cc }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="text-muted
+                                      small d-block">
+                            Timeslot
+                        </label>
+                        <select class="form-select
+                                       form-select-sm
+                                       bg-dark text-light
+                                       border-secondary"
+                                id="timeslot-sel"
+                                onchange="setChannel()">
+                            <option value="1"
+                                {% if config.get(
+                                    'timeslot', 1) == 1 %}
+                                selected{% endif %}>
+                                TS 1
+                            </option>
+                            <option value="2"
+                                {% if config.get(
+                                    'timeslot', 1) == 2 %}
+                                selected{% endif %}>
+                                TS 2
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="text-muted
+                                      small d-block">
+                            Talk Group
+                        </label>
+                        <div class="input-group
+                                    input-group-sm">
+                            <input type="number"
+                                   class="form-control
+                                          bg-dark
+                                          text-light
+                                          border-secondary"
+                                   id="tg-input"
+                                   value="{{ config.get(
+                                       'talkgroup',
+                                       9990) }}"
+                                   min="1">
+                            <button class="btn
+                                           btn-outline-info
+                                           btn-sm"
+                                    onclick="setChannel()">
+                                Set
+                            </button>
+                        </div>
+                        <small class="text-muted"
+                               id="tg-name-display">
+                            {{ tg_name }}
+                        </small>
+                    </div>
+                </div>
+
+                <hr class="border-secondary my-2">
+
+                {# Quick TG presets #}
+                <div class="d-flex flex-wrap gap-1">
+                    {% for tg_id, tg_n in [
+                        (9990, 'Echo'),
+                        (91, 'WW'),
+                        (93, 'NA'),
+                        (3026, 'CAN'),
+                        (3100, 'USA'),
+                    ] %}
+                    <button class="btn btn-outline-secondary
+                                   btn-sm"
+                            style="font-size:0.72rem"
+                            onclick="quickTG({{ tg_id }},
+                                '{{ tg_n }}')">
+                        {{ tg_n }}
+                    </button>
+                    {% endfor %}
+                </div>
+
+                <hr class="border-secondary my-2">
+
+                {# Controls #}
+                <div class="d-grid gap-1">
+                    {% if status.get('running') %}
+                    <button class="btn btn-outline-danger
+                                   btn-sm"
+                            onclick="stopRX()">
+                        <i class="fas fa-stop me-1"></i>
+                        Stop RX
+                    </button>
+                    {% else %}
+                    <button class="btn btn-outline-success
+                                   btn-sm"
+                            onclick="startRX()">
+                        <i class="fas fa-play me-1"></i>
+                        Start RX
+                    </button>
+                    {% endif %}
+
+                    <button class="btn btn-outline-info
+                                   btn-sm"
+                            onclick="syncRadioFreq()">
+                        <i class="fas fa-sync me-1"></i>
+                        Sync Radio Freq
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# PTT card #}
+    <div class="col-md-4 mb-3">
+        <div class="card h-100 bg-dark text-light
+                    border-secondary">
+            <div class="card-header border-secondary py-2">
+                <h6 class="mb-0 text-secondary">
+                    <i class="fas fa-microphone me-1"></i>
+                    Push To Talk
+                </h6>
+            </div>
+            <div class="card-body
+                        d-flex
+                        flex-column
+                        align-items-center
+                        justify-content-center">
+
+                {# Mode indicator #}
+                <div class="d-flex align-items-center
+                            gap-2 mb-3">
+                    <span class="status-led"
+                          id="mode-led"></span>
+                    <span class="fw-bold"
+                          id="mode-text">
+                        {{ 'TX' if status.get(
+                            'transmitting') else 'RX' }}
+                    </span>
+                    <span class="badge bg-secondary"
+                          id="source-badge">
+                        {{ config.get(
+                            'source', 'sdr')|upper }}
+                    </span>
+                </div>
+
+                {# PTT button #}
+                <button class="ptt-btn mb-3
+                    {% if status.get('transmitting') %}
+                        ptt-active
+                    {% endif %}"
+                        id="ptt-btn"
+                        onmousedown="pttStart(event)"
+                        onmouseup="pttStop(event)"
+                        onmouseleave="pttStop(event)"
+                        ontouchstart="pttStart(event)"
+                        ontouchend="pttStop(event)"
+                        title="Hold to transmit">
+                    <i class="fas fa-microphone
+                              d-block mb-1"
+                       style="font-size:2.4rem"></i>
+                    PTT
+                </button>
+
+                {# TX info #}
+                <div class="text-center small">
+                    <div class="text-muted mb-1">
+                        Transmit on TG
+                        <strong class="text-warning">
+                            {{ config.get(
+                                'talkgroup', 9990) }}
+                        </strong>
+                        /
+                        TS<strong>
+                            {{ config.get('timeslot', 1) }}
+                        </strong>
+                    </div>
+                </div>
+
+                <hr class="border-secondary w-100 my-2">
+
+                {# Volume #}
+                <div class="w-100">
+                    <label class="text-muted
+                                  small d-block mb-1">
+                        <i class="fas fa-volume-up
+                                  me-1"></i>
+                        Speaker Volume
+                    </label>
+                    <input type="range"
+                           class="form-range"
+                           id="vol-slider"
+                           min="0" max="1"
+                           step="0.05"
+                           value="0.8"
+                           oninput="setVolume(
+                               this.value)">
+                </div>
+
+                {# TX warning for SDR #}
+                {% if config.get('source','sdr')=='sdr' %}
+                <div class="alert alert-warning py-1
+                            px-2 mt-2 mb-0 small w-100">
+                    <i class="fas fa-info-circle me-1"></i>
+                    RTL-SDR is RX only.
+                    TX requires HackRF or radio mode.
+                </div>
+                {% endif %}
+
+            </div>
+        </div>
+    </div>
+
+    {# Signal quality card #}
+    <div class="col-md-4 mb-3">
+        <div class="card h-100 bg-dark text-light
+                    border-secondary">
+            <div class="card-header border-secondary py-2">
+                <h6 class="mb-0 text-secondary">
+                    <i class="fas fa-chart-bar me-1"></i>
+                    Signal Quality
+                </h6>
+            </div>
+            <div class="card-body py-2">
+
+                {# RSSI #}
+                <div class="mb-3">
+                    <div class="d-flex
+                                justify-content-between mb-1">
+                        <small class="text-muted">
+                            RSSI
+                        </small>
+                        <span class="font-monospace
+                                     text-info small"
+                              id="rssi-val">
+                            {{ status.get('rssi',
+                               '—') }}
+                            {% if status.get('rssi') %}
+                            dBm
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="signal-quality-bar">
+                        <div class="signal-quality-fill"
+                             id="rssi-bar"
+                             style="width:{% if status.get('rssi') %}{{ [0, ((status.rssi + 120) / 60 * 100)]|max|min(100) }}{% else %}0{% endif %}%">
+                        </div>
+                    </div>
+                </div>
+
+                {# BER #}
+                <div class="mb-3">
+                    <div class="d-flex
+                                justify-content-between mb-1">
+                        <small class="text-muted">
+                            BER (avg)
+                        </small>
+                        <span class="font-monospace
+                                     small
+                                     {% if status.get('ber_avg', 0) < 1 %}text-success
+                                     {% elif status.get('ber_avg', 0) < 3 %}text-warning
+                                     {% else %}text-danger{% endif %}"
+                              id="ber-val">
+                            {{ "%.2f"|format(
+                               status.get('ber_avg', 0))
+                               }}%
+                        </span>
+                    </div>
+                    <div class="signal-quality-bar">
+                        <div class="signal-quality-fill"
+                             id="ber-bar"
+                             style="width:{{ [0, 100 - status.get('ber_avg', 0) * 10]|max|min(100) }}%">
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="border-secondary my-2">
+
+                {# DMR protocol info #}
+                <dl class="row small mb-0">
+                    <dt class="col-6 text-muted">
+                        Modulation:
+                    </dt>
+                    <dd class="col-6 font-monospace">
+                        4FSK
+                    </dd>
+                    <dt class="col-6 text-muted">
+                        Symbol rate:
+                    </dt>
+                    <dd class="col-6 font-monospace">
+                        {{ SYMBOL_RATE }} Bd
+                    </dd>
+                    <dt class="col-6 text-muted">
+                        Channel BW:
+                    </dt>
+                    <dd class="col-6 font-monospace">
+                        {{ CHANNEL_BW_KHZ }} kHz
+                    </dd>
+                    <dt class="col-6 text-muted">
+                        Access:
+                    </dt>
+                    <dd class="col-6 font-monospace">
+                        TDMA/2
+                    </dd>
+                    <dt class="col-6 text-muted">
+                        Slot dur.:
+                    </dt>
+                    <dd class="col-6 font-monospace">
+                        30 ms
+                    </dd>
+                    <dt class="col-6 text-muted">
+                        Codec:
+                    </dt>
+                    <dd class="col-6 font-monospace">
+                        AMBE+2
+                    </dd>
+                    <dt class="col-6 text-muted">
+                        Tier:
+                    </dt>
+                    <dd class="col-6">
+                        <span class="badge
+                            {% if config.get('tier')==1 %}bg-secondary
+                            {% elif config.get('tier')==2 %}bg-primary
+                            {% else %}bg-warning text-dark
+                            {% endif %}">
+                            T{{ config.get('tier', 2) }}
+                            {{ dmr_tiers.get(
+                               config.get('tier', 2),
+                               {}).get('name', '') }}
+                        </span>
+                    </dd>
+                    <dt class="col-6 text-muted">
+                        Network:
+                    </dt>
+                    <dd class="col-6 small">
+                        {{ config.get(
+                            'network_type',
+                            'BrandMeister') }}
+                    </dd>
+                    <dt class="col-6 text-muted">
+                        Calls RX:
+                    </dt>
+                    <dd class="col-6"
+                        id="calls-count">
+                        {{ status.get('stats', {}).get(
+                           'calls_received', 0) }}
+                    </dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{# ============================================================ #}
+{# Decoded frames and activity log                              #}
+{# ============================================================ #}
+<div class="row">
+
+    {# Frame decode table #}
+    <div class="col-md-8 mb-3">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header border-secondary
+                        d-flex justify-content-between
+                        py-2">
+                <h6 class="mb-0 text-secondary">
+                    <i class="fas fa-th-list me-1"></i>
+                    Decoded Frames
+                </h6>
+                <div class="d-flex gap-2
+                            align-items-center">
+                    <select class="form-select
+                                   form-select-sm
+                                   bg-dark text-light
+                                   border-secondary"
+                            id="ts-filter"
+                            style="width:100px"
+                            onchange="refreshFrames()">
+                        <option value="">All TS</option>
+                        <option value="1">TS 1</option>
+                        <option value="2">TS 2</option>
+                    </select>
+                    <button class="btn
+                                   btn-outline-secondary
+                                   btn-sm"
+                            onclick="refreshFrames()">
+                        <i class="fas fa-sync"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0"
+                 style="max-height:380px;
+                        overflow-y:auto;">
+                <table class="table table-dark
+                               table-sm mb-0
+                               frame-table">
+                    <thead class="sticky-top bg-dark">
+                        <tr>
+                            <th>Time</th>
+                            <th>TS</th>
+                            <th>CC</th>
+                            <th>Source</th>
+                            <th>TG</th>
+                            <th>Type</th>
+                            <th>RSSI</th>
+                            <th>BER</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="frames-tbody">
+                        {% for frame in frames %}
+                        <tr class="
+                            {% if frame.is_voice %}
+                                frame-type-voice
+                            {% elif frame.is_data %}
+                                frame-type-data
+                            {% elif frame.is_end %}
+                                frame-type-end
+                            {% else %}
+                                frame-type-header
+                            {% endif %}">
+                            <td>{{ frame.timestamp[11:19] }}</td>
+                            <td>{{ frame.timeslot }}</td>
+                            <td>{{ frame.color_code }}</td>
+                            <td>
+                                {% if frame.source_alias %}
+                                <strong>{{ frame.source_alias }}</strong>
+                                <small class="text-muted">
+                                    /{{ frame.source_id }}
+                                </small>
+                                {% else %}
+                                {{ frame.source_id or '—' }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {{ frame.talkgroup }}
+                                {% if frame.talkgroup_name %}
+                                <small class="text-muted">
+                                    ({{ frame.talkgroup_name }})
+                                </small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small>
+                                    {% if frame.is_voice %}
+                                    🎙 Voice
+                                    {% elif frame.is_data %}
+                                    📊 Data
+                                    {% elif frame.is_end %}
+                                    ⏹ End
+                                    {% else %}
+                                    📋 {{ frame.burst_type[:8] if frame.burst_type else '?' }}
+                                    {% endif %}
+                                </small>
+                            </td>
+                            <td class="font-monospace small">
+                                {{ frame.rssi if frame.rssi is not none else '—' }}
+                            </td>
+                            <td class="font-monospace small">
+                                {{ "%.1f"|format(frame.ber) if frame.ber is not none else '—' }}
+                            </td>
+                            <td>
+                                {% if frame.source_alias or frame.source_id %}
+                                <button class="btn btn-xs btn-outline-success"
+                                        onclick="openLog('{{ frame.source_alias or '' }}',
+                                            {{ frame.source_id or 0 }},
+                                            {{ frame.talkgroup or 0 }},
+                                            {{ frame.timeslot or 1 }})"
+                                        title="Log contact">
+                                    <i class="fas fa-book"></i>
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9"
+                                class="text-center
+                                       text-muted py-4">
+                                {% if status.get('running') %}
+                                Waiting for DMR frames...
+                                {% else %}
+                                Start receive to decode frames
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {# Engine log #}
+    <div class="col-md-4 mb-3">
+        <div class="card bg-dark border-secondary h-100">
+            <div class="card-header border-secondary
+                        d-flex justify-content-between
+                        py-2">
+                <h6 class="mb-0 text-secondary">
+                    <i class="fas fa-terminal me-1"></i>
+                    Engine Log
+                </h6>
+                <button class="btn
+                               btn-outline-secondary
+                               btn-sm"
+                        onclick="refreshLogs()">
+                    <i class="fas fa-sync"></i>
+                </button>
+            </div>
+            <div id="dmr-log"
+                 style="height:380px;
+                        overflow-y:auto;
+                        background:#0d1117;
+                        padding:8px;
+                        font-family:monospace;
+                        font-size:0.78rem;">
+                {% for log in logs %}
+                <div class="
+                    {% if log.level == 'error' %}text-danger
+                    {% elif log.level == 'warning' %}text-warning
+                    {% else %}text-success{% endif %}">
+                    <small>{{ log.timestamp[11:19] }}</small>
+                    {{ log.message }}
+                </div>
+                {% else %}
+                <div class="text-muted">No log entries</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{# ============================================================ #}
+{# Log Contact Modal                                            #}
+{# ============================================================ #}
+<div class="modal fade" id="logContactModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-book me-1"></i>
+                    Log DMR Contact
+                </h5>
+                <button type="button"
+                        class="btn-close btn-close-white"
+                        data-bs-dismiss="modal">
+                </button>
+            </div>
+            <div class="modal-body">
+                {{ log_form.hidden_tag() }}
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ log_form.callsign.label(
+                           class="form-label") }}
+                        {{ log_form.callsign(
+                           class="form-control",
+                           id="log-callsign") }}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ log_form.dmr_id.label(
+                           class="form-label") }}
+                        {{ log_form.dmr_id(
+                           class="form-control",
+                           id="log-dmrid") }}
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        {{ log_form.talkgroup.label(
+                           class="form-label") }}
+                        {{ log_form.talkgroup(
+                           class="form-control",
+                           id="log-tg") }}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        {{ log_form.timeslot.label(
+                           class="form-label") }}
+                        {{ log_form.timeslot(
+                           class="form-select",
+                           id="log-ts") }}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        {{ log_form.frequency.label(
+                           class="form-label") }}
+                        {{ log_form.frequency(
+                           class="form-control",
+                           id="log-freq") }}
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ log_form.rst_sent.label(
+                           class="form-label") }}
+                        {{ log_form.rst_sent(
+                           class="form-control") }}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ log_form.rst_rcvd.label(
+                           class="form-label") }}
+                        {{ log_form.rst_rcvd(
+                           class="form-control") }}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    {{ log_form.notes.label(
+                       class="form-label") }}
+                    {{ log_form.notes(
+                       class="form-control",
+                       id="log-notes", rows="2") }}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button"
+                        class="btn btn-secondary"
+                        data-bs-dismiss="modal">
+                    Cancel
+                </button>
+                <button type="button"
+                        class="btn btn-success"
+                        onclick="submitLog()">
+                    <i class="fas fa-save me-1"></i>
+                    Log Contact
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Toast #}
+<div class="position-fixed bottom-0 end-0 p-3"
+     style="z-index:11">
+    <div id="dmr-toast"
+         class="toast align-items-center text-white"
+         role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toast-msg">
+                Done
+            </div>
+            <button type="button"
+                    class="btn-close btn-close-white
+                           me-2 m-auto"
+                    data-bs-dismiss="toast">
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+/* ============================================================
+   DMR Plugin JavaScript
+   ============================================================
+   Audio output for decoded DMR voice is handled server-side
+   by DSD piping to /dev/dsp or sounddevice.
+
+   PTT microphone capture uses browser WebRTC getUserMedia()
+   and streams to the server via WebSocket or chunked POST
+   for radio encoding and transmission.
+   ============================================================ */
+
+// ---------------------------------------------------------------
+// PTT microphone state
+// ---------------------------------------------------------------
+let mediaStream = null;
+let mediaRecorder = null;
+let pttActive = false;
+
+// Request mic permission proactively
+async function initMic() {
+    try {
+        mediaStream = await navigator.mediaDevices
+            .getUserMedia({audio: true, video: false});
+        console.log('[DMR] Microphone ready');
+    } catch(e) {
+        console.warn('[DMR] Mic not available:', e);
+    }
+}
+
+/**
+ * Start PTT transmit.
+ * Requests microphone access and starts radio TX.
+ */
+async function pttStart(evt) {
+    evt.preventDefault();
+    if (pttActive) return;
+
+    // Ensure mic is available
+    if (!mediaStream) {
+        try {
+            mediaStream = await navigator.mediaDevices
+                .getUserMedia({audio: true});
+        } catch(e) {
+            showToast('Microphone access denied', 'danger');
+            return;
+        }
+    }
+
+    // Start TX on server
+    const response = await fetch(
+        '{{ url_for("DMR.api_ptt_start") }}',
+        {
+            method: 'POST',
+            headers: {'X-CSRFToken': getCsrfToken()}
+        }
+    );
+    const data = await response.json();
+
+    if (!data.success) {
+        showToast(data.message || data.error, 'warning');
+        return;
+    }
+
+    pttActive = true;
+    document.getElementById('ptt-btn')
+        .classList.add('ptt-active');
+    document.getElementById('mode-text').textContent = 'TX';
+
+    // Update LED
+    const led = document.getElementById('mode-led');
+    led.className = 'status-led led-tx';
+
+    showToast('PTT ON', 'warning');
+}
+
+/**
+ * Stop PTT transmit.
+ */
+async function pttStop(evt) {
+    evt.preventDefault();
+    if (!pttActive) return;
+
+    pttActive = false;
+    document.getElementById('ptt-btn')
+        .classList.remove('ptt-active');
+    document.getElementById('mode-text').textContent = 'RX';
+
+    const led = document.getElementById('mode-led');
+    led.className = 'status-led led-rx';
+
+    await fetch(
+        '{{ url_for("DMR.api_ptt_stop") }}',
+        {
+            method: 'POST',
+            headers: {'X-CSRFToken': getCsrfToken()}
+        }
+    );
+
+    showToast('PTT OFF', 'info');
+}
+
+// Spacebar = PTT
+document.addEventListener('keydown', function(e) {
+    if (e.code === 'Space' &&
+            e.target.tagName !== 'INPUT' &&
+            e.target.tagName !== 'TEXTAREA' &&
+            e.target.tagName !== 'SELECT') {
+        e.preventDefault();
+        if (!pttActive) {
+            pttStart(e);
+        }
+    }
+});
+document.addEventListener('keyup', function(e) {
+    if (e.code === 'Space' &&
+            e.target.tagName !== 'INPUT' &&
+            e.target.tagName !== 'TEXTAREA' &&
+            e.target.tagName !== 'SELECT') {
+        if (pttActive) pttStop(e);
+    }
+});
+
+
+// ---------------------------------------------------------------
+// Audio playback (Web Audio for decoded DMR voice)
+// ---------------------------------------------------------------
+let audioCtx = null;
+let masterGain = null;
+
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (
+            window.AudioContext ||
+            window.webkitAudioContext
+        )();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.8;
+        masterGain.connect(audioCtx.destination);
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}
+
+function setVolume(val) {
+    if (masterGain) {
+        masterGain.gain.value = parseFloat(val);
+    }
+}
+
+
+// ---------------------------------------------------------------
+// Channel controls
+// ---------------------------------------------------------------
+function setSource(source) {
+    fetch('{{ url_for("DMR.api_set_source") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({source: source})
+    }).then(r => r.json()).then(data => {
+        if (data.success) {
+            showToast('Source: ' + source, 'info');
+            const sdrBtn = document.getElementById(
+                'btn-sdr'
+            );
+            const radioBtn = document.getElementById(
+                'btn-radio'
+            );
+            document.getElementById(
+                'source-badge'
+            ).textContent = source.toUpperCase();
+
+            if (source === 'sdr') {
+                sdrBtn.className =
+                    'btn btn-sm btn-primary source-btn-sdr';
+                radioBtn.className =
+                    'btn btn-sm btn-outline-success';
+            } else {
+                sdrBtn.className =
+                    'btn btn-sm btn-outline-primary';
+                radioBtn.className =
+                    'btn btn-sm btn-success source-btn-radio';
+            }
+        } else {
+            showToast(data.error || 'Error', 'danger');
+        }
+    });
+}
+
+function setFrequency() {
+    const freq = parseFloat(
+        document.getElementById('freq-input').value
+    );
+    if (!freq || freq < 100 || freq > 3000) {
+        showToast('Invalid frequency', 'warning');
+        return;
+    }
+    fetch('{{ url_for("DMR.api_set_frequency") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({frequency_mhz: freq})
+    }).then(r => r.json()).then(data => {
+        if (data.success) {
+            document.getElementById(
+                'freq-display'
+            ).textContent = freq.toFixed(4);
+            showToast(freq.toFixed(4) + ' MHz', 'success');
+        }
+    });
+}
+
+function setChannel() {
+    const cc = parseInt(
+        document.getElementById('color-code-sel').value
+    );
+    const ts = parseInt(
+        document.getElementById('timeslot-sel').value
+    );
+    const tg = parseInt(
+        document.getElementById('tg-input').value
+    );
+
+    fetch('{{ url_for("DMR.api_set_channel") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({
+            color_code: cc,
+            timeslot: ts,
+            talkgroup: tg
+        })
+    }).then(r => r.json()).then(data => {
+        if (data.success) {
+            // Update TG name display
+            const tgNames = {{ talkgroups | tojson }};
+            const tgName = tgNames[tg] || '';
+            document.getElementById(
+                'tg-name-display'
+            ).textContent = tgName;
+            showToast(
+                `CC:${cc} TS:${ts} TG:${tg}`, 'info'
+            );
+        }
+    });
+}
+
+function quickTG(tg, name) {
+    document.getElementById('tg-input').value = tg;
+    setChannel();
+    showToast('TG: ' + name + ' (' + tg + ')', 'info');
+}
+
+function startRX() {
+    fetch('{{ url_for("DMR.api_start_rx") }}', {
+        method: 'POST',
+        headers: {'X-CSRFToken': getCsrfToken()}
+    }).then(r => r.json()).then(data => {
+        showToast(
+            data.success ? data.message : data.error,
+            data.success ? 'success' : 'danger'
+        );
+        if (data.success) {
+            setTimeout(() => location.reload(), 1000);
+        }
+    });
+}
+
+function stopRX() {
+    fetch('{{ url_for("DMR.api_stop_rx") }}', {
+        method: 'POST',
+        headers: {'X-CSRFToken': getCsrfToken()}
+    }).then(r => r.json()).then(data => {
+        showToast('RX stopped', 'info');
+        setTimeout(() => location.reload(), 1000);
+    });
+}
+
+function syncRadioFreq() {
+    fetch('{{ url_for("DMR.api_sync_radio") }}', {
+        method: 'POST',
+        headers: {'X-CSRFToken': getCsrfToken()}
+    }).then(r => r.json()).then(data => {
+        if (data.success) {
+            const freq = parseFloat(
+                data.frequency_mhz
+            ).toFixed(4);
+            document.getElementById(
+                'freq-input'
+            ).value = freq;
+            document.getElementById(
+                'freq-display'
+            ).textContent = freq;
+            showToast(data.message, 'info');
+        } else {
+            showToast(data.error, 'warning');
+        }
+    });
+}
+
+
+// ---------------------------------------------------------------
+// Frame display and log
+// ---------------------------------------------------------------
+function refreshFrames() {
+    const ts = document.getElementById(
+        'ts-filter'
+    ).value;
+    let url = (
+        '{{ url_for("DMR.api_frames") }}?limit=50'
+    );
+    if (ts) url += '&timeslot=' + ts;
+
+    $.get(url, function(data) {
+        const tbody = document.getElementById(
+            'frames-tbody'
+        );
+        if (!data.frames || !data.frames.length) {
+            tbody.innerHTML = (
+                '<tr><td colspan="9" ' +
+                'class="text-center text-muted py-4">' +
+                'No frames decoded yet</td></tr>'
+            );
+            return;
+        }
+
+        tbody.innerHTML = data.frames.map(function(f) {
+            let cls = f.is_voice ? 'frame-type-voice' :
+                      f.is_data ? 'frame-type-data' :
+                      f.is_end ? 'frame-type-end' :
+                      'frame-type-header';
+
+            let typeIcon = f.is_voice ? '🎙 Voice' :
+                           f.is_data ? '📊 Data' :
+                           f.is_end ? '⏹ End' :
+                           '📋 Hdr';
+
+            let src = f.source_alias ?
+                '<strong>' + f.source_alias + '</strong>' +
+                '<small class="text-muted">/' +
+                f.source_id + '</small>' :
+                (f.source_id || '—');
+
+            let tg = f.talkgroup || '—';
+            if (f.talkgroup_name) {
+                tg += '<small class="text-muted"> (' +
+                    f.talkgroup_name + ')</small>';
+            }
+
+            let logBtn = (f.source_alias || f.source_id) ?
+                '<button class="btn btn-xs ' +
+                'btn-outline-success" ' +
+                'onclick="openLog(\'' +
+                (f.source_alias || '') + '\',' +
+                (f.source_id || 0) + ',' +
+                (f.talkgroup || 0) + ',' +
+                (f.timeslot || 1) + ')">' +
+                '<i class="fas fa-book"></i>' +
+                '</button>' : '';
+
+            return '<tr class="' + cls + '">' +
+                '<td>' + f.timestamp.substring(11, 19) +
+                '</td>' +
+                '<td>' + (f.timeslot || '?') + '</td>' +
+                '<td>' + (f.color_code || '?') + '</td>' +
+                '<td>' + src + '</td>' +
+                '<td>' + tg + '</td>' +
+                '<td><small>' + typeIcon + '</small></td>' +
+                '<td class="font-monospace small">' +
+                (f.rssi !== null ? f.rssi : '—') +
+                '</td>' +
+                '<td class="font-monospace small">' +
+                (f.ber !== null ?
+                    parseFloat(f.ber).toFixed(1) : '—') +
+                '</td>' +
+                '<td>' + logBtn + '</td>' +
+                '</tr>';
+        }).join('');
+
+        // Update active call banner
+        if (data.active_call) {
+            updateActiveCall(data.active_call);
+        } else {
+            document.getElementById(
+                'active-call-section'
+            ).style.display = 'none';
+        }
+    });
+}
+
+function updateActiveCall(call) {
+    if (!call) return;
+    document.getElementById(
+        'active-call-section'
+    ).style.display = 'block';
+    document.getElementById(
+        'call-callsign'
+    ).textContent = call.source_alias ||
+        'ID: ' + call.source_id;
+    document.getElementById(
+        'call-dmrid'
+    ).textContent = call.source_id || '—';
+    document.getElementById(
+        'call-tg'
+    ).textContent = call.talkgroup +
+        (call.talkgroup_name ?
+            ' ' + call.talkgroup_name : '');
+    document.getElementById(
+        'call-ts'
+    ).textContent = 'TS' + (call.timeslot || '?');
+    document.getElementById(
+        'call-type'
+    ).textContent = call.call_type || 'Group Call';
+}
+
+function refreshLogs() {
+    $.get(
+        '{{ url_for("DMR.api_logs") }}?limit=40',
+        function(data) {
+            const div = document.getElementById(
+                'dmr-log'
+            );
+            if (!data.logs || !data.logs.length) {
+                div.innerHTML = (
+                    '<div class="text-muted">' +
+                    'No log entries</div>'
+                );
+                return;
+            }
+            div.innerHTML = data.logs.map(function(l) {
+                const cls =
+                    l.level === 'error' ? 'text-danger' :
+                    l.level === 'warning' ? 'text-warning' :
+                    'text-success';
+                return '<div class="' + cls + '">' +
+                    '<small>' +
+                    l.timestamp.substring(11, 19) +
+                    '</small> ' + l.message + '</div>';
+            }).join('');
+            div.scrollTop = div.scrollHeight;
+        }
+    );
+}
+
+
+// ---------------------------------------------------------------
+// Status polling
+// ---------------------------------------------------------------
+function pollStatus() {
+    $.get(
+        '{{ url_for("DMR.api_status") }}',
+        function(data) {
+            // RSSI
+            if (data.rssi !== null &&
+                    data.rssi !== undefined) {
+                document.getElementById(
+                    'rssi-val'
+                ).textContent = data.rssi + ' dBm';
+                const pct = Math.max(0, Math.min(100,
+                    ((data.rssi + 120) / 60 * 100)
+                ));
+                document.getElementById(
+                    'rssi-bar'
+                ).style.width = pct + '%';
+            }
+
+            // BER
+            if (data.ber_avg !== undefined) {
+                document.getElementById(
+                    'ber-val'
+                ).textContent =
+                    parseFloat(data.ber_avg)
+                    .toFixed(2) + '%';
+                const berPct = Math.max(0,
+                    100 - data.ber_avg * 10
+                );
+                document.getElementById(
+                    'ber-bar'
+                ).style.width = berPct + '%';
+            }
+
+            // Calls count
+            if (data.stats) {
+                document.getElementById(
+                    'calls-count'
+                ).textContent =
+                    data.stats.calls_received || 0;
+            }
+
+            // Mode LED
+            const led = document.getElementById(
+                'mode-led'
+            );
+            const modeText = document.getElementById(
+                'mode-text'
+            );
+
+            if (data.transmitting) {
+                led.className = 'status-led led-tx';
+                modeText.textContent = 'TX';
+            } else if (data.running) {
+                if (data.active_call) {
+                    led.className = 'status-led led-rx';
+                    modeText.textContent = 'RX ACTIVE';
+                } else {
+                    led.className = 'status-led led-rx';
+                    modeText.textContent = 'RX';
+                }
+            } else {
+                led.className = 'status-led led-idle';
+                modeText.textContent = 'IDLE';
+            }
+        }
+    );
+}
+
+
+// ---------------------------------------------------------------
+// Logbook integration
+// ---------------------------------------------------------------
+function openLog(callsign, dmrId, tg, ts) {
+    document.getElementById(
+        'log-callsign'
+    ).value = callsign || '';
+    document.getElementById(
+        'log-dmrid'
+    ).value = dmrId || '';
+    document.getElementById(
+        'log-tg'
+    ).value = tg || '';
+    document.getElementById(
+        'log-ts'
+    ).value = String(ts || 1);
+    document.getElementById(
+        'log-freq'
+    ).value = parseFloat(
+        document.getElementById('freq-input').value
+    ).toFixed(4);
+    document.getElementById(
+        'log-notes'
+    ).value = 'DMR contact via DMR plugin';
+
+    new bootstrap.Modal(
+        document.getElementById('logContactModal')
+    ).show();
+}
+
+function submitLog() {
+    const data = {
+        callsign: document.getElementById(
+            'log-callsign'
+        ).value.trim().toUpperCase(),
+        dmr_id: parseInt(
+            document.getElementById('log-dmrid').value
+        ) || null,
+        talkgroup: parseInt(
+            document.getElementById('log-tg').value
+        ) || null,
+        timeslot: parseInt(
+            document.getElementById('log-ts').value
+        ) || 1,
+        frequency: parseFloat(
+            document.getElementById('log-freq').value
+        ) || null,
+        rst_sent: $('[name=rst_sent]').val() || '59',
+        rst_rcvd: $('[name=rst_rcvd]').val() || '59',
+        notes: document.getElementById(
+            'log-notes'
+        ).value,
+    };
+
+    if (!data.callsign) {
+        showToast('Callsign required', 'warning');
+        return;
+    }
+
+    fetch('{{ url_for("DMR.api_log_contact") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(data)
+    }).then(r => r.json()).then(result => {
+        if (result.success) {
+            bootstrap.Modal.getInstance(
+                document.getElementById(
+                    'logContactModal'
+                )
+            ).hide();
+            showToast(result.message, 'success');
+        } else {
+            showToast(
+                'Failed: ' + result.error, 'danger'
+            );
+        }
+    });
+}
+
+
+// ---------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------
+function showToast(msg, type) {
+    const el = document.getElementById('dmr-toast');
+    document.getElementById('toast-msg').textContent = msg;
+    el.className = (
+        'toast align-items-center text-white bg-' + type
+    );
+    new bootstrap.Toast(el, {delay: 3500}).show();
+}
+
+function getCsrfToken() {
+    const el = document.querySelector(
+        'input[name=csrf_token]'
+    );
+    return el ? el.value : '';
+}
+
+
+// ---------------------------------------------------------------
+// Initialisation
+// ---------------------------------------------------------------
+$(document).ready(function() {
+    initAudio();
+    initMic();
+
+    // Initial LED state
+    const led = document.getElementById('mode-led');
+    {% if status.get('transmitting') %}
+    led.className = 'status-led led-tx';
+    {% elif status.get('running') %}
+    led.className = 'status-led led-rx';
+    {% else %}
+    led.className = 'status-led led-idle';
+    {% endif %}
+
+    // Polling
+    setInterval(refreshFrames, 2000);
+    setInterval(pollStatus, 3000);
+    setInterval(refreshLogs, 5000);
+
+    // Initial scroll
+    const log = document.getElementById('dmr-log');
+    if (log) log.scrollTop = log.scrollHeight;
+
+    // Pre-fill log modal from active call on open
+    $('#logContactModal').on(
+        'show.bs.modal', function() {
+            {% if status.get('active_call') %}
+            const ac = {{ status.get(
+                'active_call', {}) | tojson }};
+            if (ac) {
+                document.getElementById(
+                    'log-callsign'
+                ).value = ac.source_alias || '';
+                document.getElementById(
+                    'log-dmrid'
+                ).value = ac.source_id || '';
+                document.getElementById(
+                    'log-tg'
+                ).value = ac.talkgroup || '';
+            }
+            {% endif %}
+        }
+    );
+});
+</script>
+{% endblock %}
