@@ -42,3 +42,8 @@ watchdog==4.0.0
 
 # Numerical computing (SDR, SatDump)
 numpy==1.26.4
+
+# RTL-SDR Python bindings (optional — for Morse/SDR plugins)
+# Requires librtlsdr system library:
+#   apt-get install librtlsdr-dev
+pyrtlsdr==0.2.93
