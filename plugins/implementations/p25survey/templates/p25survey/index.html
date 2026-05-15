@@ -1,0 +1,1525 @@
+{% extends "base.html" %}
+
+{% block title %}P25 Survey - Ham Radio App{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ============================================================
+   P25 Survey Plugin Styles
+   ============================================================ */
+
+.freq-display {
+    font-family: 'Courier New', monospace;
+    font-size: 1.6rem;
+    font-weight: bold;
+    color: #3498db;
+    letter-spacing: 0.08em;
+    text-shadow: 0 0 10px rgba(52,152,219,0.4);
+}
+
+.nac-badge {
+    font-family: monospace;
+    font-size: 0.95rem;
+    letter-spacing: 0.05em;
+    padding: 0.35em 0.7em;
+}
+
+.active-call-bar {
+    background: linear-gradient(
+        135deg, #0d2a0d, #1a3a0d
+    );
+    border: 2px solid #27ae60;
+    border-radius: 8px;
+    animation: p25-call 1.2s ease-in-out infinite;
+}
+
+@keyframes p25-call {
+    0%, 100% {
+        border-color: #27ae60;
+        box-shadow: 0 0 8px rgba(39,174,96,0.3);
+    }
+    50% {
+        border-color: #2ecc71;
+        box-shadow: 0 0 20px rgba(46,204,113,0.6);
+    }
+}
+
+.scan-state-badge {
+    font-size: 0.75rem;
+    padding: 0.25em 0.6em;
+    border-radius: 10px;
+}
+
+.system-card {
+    border-left: 4px solid;
+    transition: transform 0.15s ease;
+}
+
+.system-card:hover {
+    transform: translateX(3px);
+}
+
+.frame-table td {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.4rem;
+    vertical-align: middle;
+}
+
+.frame-ldu1  { color: #2ecc71; }
+.frame-ldu2  { color: #27ae60; }
+.frame-tsbk  { color: #3498db; }
+.frame-hdu   { color: #f1c40f; }
+.frame-tdu   { color: #e74c3c; }
+.frame-enc   { color: #e67e22; }
+
+.signal-bar {
+    height: 12px;
+    border-radius: 6px;
+    background: #1e1e2e;
+    overflow: hidden;
+}
+
+.signal-fill {
+    height: 100%;
+    border-radius: 6px;
+    background: linear-gradient(
+        90deg, #27ae60 0%, #f1c40f 60%, #e74c3c 100%
+    );
+    transition: width 0.3s ease;
+}
+
+.tg-pill {
+    font-family: monospace;
+    font-size: 0.78rem;
+    padding: 0.15em 0.5em;
+    border-radius: 10px;
+    margin: 1px;
+}
+
+.status-led {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.led-active {
+    background: #27ae60;
+    box-shadow: 0 0 8px rgba(39,174,96,0.7);
+    animation: blink 1.5s infinite;
+}
+
+.led-idle { background: #6c757d; }
+.led-scan {
+    background: #3498db;
+    animation: blink 0.8s infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.enc-icon { color: #e67e22; }
+.emg-icon { color: #e74c3c; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between
+            align-items-center mb-3">
+    <h2>
+        <i class="fas fa-walkie-talkie me-2"></i>
+        P25 Survey
+        <small class="text-muted fs-6 ms-2">
+            APCO Project 25
+        </small>
+    </h2>
+    <div class="d-flex align-items-center gap-2">
+
+        {# Source toggle #}
+        <div class="btn-group" role="group">
+            <button type="button"
+                    id="btn-sdr"
+                    class="btn btn-sm
+                    {% if config.get('source','sdr') == 'sdr' %}
+                        btn-primary
+                    {% else %}
+                        btn-outline-primary
+                    {% endif %}"
+                    onclick="setSource('sdr')">
+                <i class="fas fa-signal me-1"></i>
+                RTL-SDR
+            </button>
+            <button type="button"
+                    id="btn-radio"
+                    class="btn btn-sm
+                    {% if config.get('source') == 'radio' %}
+                        btn-success
+                    {% else %}
+                        btn-outline-success
+                    {% endif %}"
+                    onclick="setSource('radio')">
+                <i class="fas fa-broadcast-tower me-1"></i>
+                Radio
+            </button>
+        </div>
+
+        {# Scan mode #}
+        <select class="form-select form-select-sm"
+                id="scan-mode-sel"
+                style="width:160px"
+                onchange="setMode(this.value)">
+            <option value="conventional"
+                {% if config.get('scan_mode','conventional')=='conventional' %}
+                selected{% endif %}>
+                Conventional
+            </option>
+            <option value="survey"
+                {% if config.get('scan_mode')=='survey' %}
+                selected{% endif %}>
+                Survey Scan
+            </option>
+            <option value="trunked"
+                {% if config.get('scan_mode')=='trunked' %}
+                selected{% endif %}>
+                Trunked
+            </option>
+        </select>
+
+        <a href="{{ url_for('P25Survey.settings') }}"
+           class="btn btn-secondary btn-sm">
+            <i class="fas fa-cog"></i>
+        </a>
+    </div>
+</div>
+
+{# ============================================================ #}
+{# Active Call Banner                                           #}
+{# ============================================================ #}
+{% if status.get('active_call') %}
+{% set ac = status.active_call %}
+<div class="active-call-bar p-3 mb-3">
+    <div class="row align-items-center">
+        <div class="col-auto">
+            <span class="status-led led-active"></span>
+        </div>
+        <div class="col">
+            <div class="d-flex align-items-center
+                        gap-3 flex-wrap">
+                <div>
+                    <small class="text-muted d-block">
+                        Phase {{ ac.get('phase', 1) }}
+                        Voice
+                    </small>
+                    <strong class="text-success fs-5">
+                        {{ ac.get('duid_name', 'LDU') }}
+                    </strong>
+                </div>
+                <div>
+                    <small class="text-muted d-block">
+                        NAC
+                    </small>
+                    <span class="badge bg-info
+                                 font-monospace">
+                        {{ ac.get('nac', '?') }}
+                    </span>
+                </div>
+                <div>
+                    <small class="text-muted d-block">
+                        Talk Group
+                    </small>
+                    <span class="badge bg-primary
+                                 nac-badge">
+                        {{ ac.get('talkgroup', '?') }}
+                        ({{ ac.get('talkgroup_hex', '') }})
+                    </span>
+                </div>
+                <div>
+                    <small class="text-muted d-block">
+                        Source Unit
+                    </small>
+                    <span class="font-monospace
+                                 text-light">
+                        {{ ac.get('source_unit', '?') }}
+                    </span>
+                </div>
+                {% if ac.get('is_encrypted') %}
+                <div>
+                    <span class="badge bg-warning">
+                        <i class="fas fa-lock me-1"></i>
+                        {{ ac.get('encryption_algo',
+                           'ENCRYPTED') }}
+                    </span>
+                </div>
+                {% endif %}
+                {% if ac.get('emergency') %}
+                <div>
+                    <span class="badge bg-danger
+                                 emg-icon">
+                        <i class="fas fa-exclamation-triangle
+                                  me-1"></i>
+                        EMERGENCY
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-success btn-sm"
+                    data-bs-toggle="modal"
+                    data-bs-target=
+                        "#logContactModal">
+                <i class="fas fa-book me-1"></i>
+                Log QSO
+            </button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ============================================================ #}
+{# Top row: Channel | Signal | Stats                           #}
+{# ============================================================ #}
+<div class="row mb-3">
+
+    {# Channel control #}
+    <div class="col-md-4 mb-3">
+        <div class="card h-100 bg-dark text-light
+                    border-secondary">
+            <div class="card-header border-secondary py-2">
+                <h6 class="mb-0 text-secondary">
+                    <i class="fas fa-sliders-h me-1"></i>
+                    Channel
+                </h6>
+            </div>
+            <div class="card-body py-2">
+
+                <div class="text-center mb-3">
+                    <div class="freq-display"
+                         id="freq-display">
+                        {{ "%.4f"|format(
+                           config.get(
+                               'center_frequency_mhz',
+                               851.0125)) }}
+                    </div>
+                    <small class="text-muted">MHz</small>
+                    <div class="input-group
+                                input-group-sm mt-2">
+                        <input type="number"
+                               class="form-control
+                                      bg-dark text-light
+                                      border-secondary"
+                               id="freq-input"
+                               value="{{ config.get(
+                                   'center_frequency_mhz',
+                                   851.0125) }}"
+                               step="0.00125"
+                               min="25"
+                               max="1300">
+                        <span class="input-group-text
+                                     bg-dark text-muted
+                                     border-secondary">
+                            MHz
+                        </span>
+                        <button class="btn
+                                       btn-outline-primary
+                                       btn-sm"
+                                onclick="setFrequency()">
+                            Set
+                        </button>
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="text-muted
+                                      small d-block">
+                            NAC Filter (hex)
+                        </label>
+                        <input type="text"
+                               class="form-control
+                                      form-control-sm
+                                      bg-dark text-light
+                                      border-secondary
+                                      font-monospace"
+                               id="nac-input"
+                               value="{{ config.get(
+                                   'nac', '0') }}"
+                               placeholder="0 = all"
+                               maxlength="5">
+                    </div>
+                    <div class="col-6">
+                        <label class="text-muted
+                                      small d-block">
+                            Phase
+                        </label>
+                        <select class="form-select
+                                       form-select-sm
+                                       bg-dark text-light
+                                       border-secondary"
+                                id="phase-sel">
+                            <option value="1"
+                                {% if config.get('phase',1)==1 %}
+                                selected{% endif %}>
+                                Phase 1 (FDMA)
+                            </option>
+                            <option value="2"
+                                {% if config.get('phase',1)==2 %}
+                                selected{% endif %}>
+                                Phase 2 (TDMA)
+                            </option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="d-grid gap-1">
+                    {% if status.get('running') %}
+                    <button class="btn
+                                   btn-outline-danger
+                                   btn-sm"
+                            onclick="stopRX()">
+                        <i class="fas fa-stop me-1"></i>
+                        Stop
+                    </button>
+                    {% else %}
+                    <button class="btn
+                                   btn-outline-success
+                                   btn-sm"
+                            onclick="startRX()">
+                        <i class="fas fa-play me-1"></i>
+                        Start
+                    </button>
+                    {% endif %}
+                    <button class="btn
+                                   btn-outline-info
+                                   btn-sm"
+                            onclick="syncRadio()">
+                        <i class="fas fa-sync me-1"></i>
+                        Sync Radio Freq
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Signal quality #}
+    <div class="col-md-4 mb-3">
+        <div class="card h-100 bg-dark text-light
+                    border-secondary">
+            <div class="card-header border-secondary py-2">
+                <h6 class="mb-0 text-secondary">
+                    <i class="fas fa-chart-bar me-1"></i>
+                    Signal Quality
+                </h6>
+            </div>
+            <div class="card-body py-2">
+
+                <div class="mb-3">
+                    <div class="d-flex
+                                justify-content-between
+                                mb-1">
+                        <small class="text-muted">
+                            RSSI
+                        </small>
+                        <span class="font-monospace
+                                     text-info small"
+                              id="rssi-val">
+                            {{ status.get('rssi', '—') }}
+                            {% if status.get('rssi') %}
+                            dBm{% endif %}
+                        </span>
+                    </div>
+                    <div class="signal-bar">
+                        <div class="signal-fill"
+                             id="rssi-bar"
+                             style="width:{% if status.get('rssi') %}{{ [0, ((status.rssi|float + 120) / 60 * 100)]|max|min(100) }}{% else %}0{% endif %}%">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <div class="d-flex
+                                justify-content-between
+                                mb-1">
+                        <small class="text-muted">
+                            BER (avg)
+                        </small>
+                        <span class="font-monospace small
+                            {% set b = status.get('ber_avg', 0) %}
+                            {% if b < 1 %}text-success
+                            {% elif b < 3 %}text-warning
+                            {% else %}text-danger{% endif %}"
+                              id="ber-val">
+                            {{ "%.2f"|format(
+                               status.get('ber_avg', 0)) }}%
+                        </span>
+                    </div>
+                    <div class="signal-bar">
+                        <div class="signal-fill"
+                             id="ber-bar"
+                             style="width:{{ [0, 100 - status.get('ber_avg', 0) * 10]|max|min(100) }}%">
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="border-secondary my-2">
+
+                {# Scan state #}
+                <div class="d-flex
+                            justify-content-between
+                            align-items-center mb-2">
+                    <small class="text-muted">
+                        State
+                    </small>
+                    <span class="badge
+                        scan-state-badge
+                        {% if status.get('running') %}
+                            bg-success
+                        {% else %}
+                            bg-secondary
+                        {% endif %}"
+                          id="scan-state">
+                        <span class="status-led
+                            {% if status.get('running') %}
+                                led-active
+                            {% else %}
+                                led-idle
+                            {% endif %}
+                            me-1"></span>
+                        {{ status.get(
+                            'scan_state', 'IDLE') }}
+                    </span>
+                </div>
+
+                {# P25 protocol info #}
+                <dl class="row small mb-0">
+                    <dt class="col-6 text-muted">
+                        Modulation:
+                    </dt>
+                    <dd class="col-6 font-monospace">
+                        {% if config.get('phase',1) == 1 %}
+                        C4FM
+                        {% else %}
+                        HDQPSK
+                        {% endif %}
+                    </dd>
+                    <dt class="col-6 text-muted">
+                        Access:
+                    </dt>
+                    <dd class="col-6 font-monospace">
+                        {% if config.get('phase',1) == 1 %}
+                        FDMA
+                        {% else %}
+                        TDMA/2
+                        {% endif %}
+                    </dd>
+                    <dt class="col-6 text-muted">
+                        Symbol rate:
+                    </dt>
+                    <dd class="col-6 font-monospace">
+                        4800 Bd
+                    </dd>
+                    <dt class="col-6 text-muted">
+                        Codec:
+                    </dt>
+                    <dd class="col-6 font-monospace">
+                        {% if config.get('phase',1) == 1 %}
+                        IMBE
+                        {% else %}
+                        AMBE+2
+                        {% endif %}
+                    </dd>
+                    <dt class="col-6 text-muted">
+                        Channel BW:
+                    </dt>
+                    <dd class="col-6 font-monospace">
+                        12.5 kHz
+                    </dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    {# Statistics #}
+    <div class="col-md-4 mb-3">
+        <div class="card h-100 bg-dark text-light
+                    border-secondary">
+            <div class="card-header border-secondary py-2">
+                <h6 class="mb-0 text-secondary">
+                    <i class="fas fa-chart-line me-1"></i>
+                    Survey Statistics
+                </h6>
+            </div>
+            <div class="card-body py-2">
+                {% set stats = status.get('stats', {}) %}
+                <dl class="row small mb-0">
+                    <dt class="col-7 text-muted">
+                        Frames decoded:
+                    </dt>
+                    <dd class="col-5 font-monospace"
+                        id="stat-frames">
+                        {{ stats.get(
+                            'frames_decoded', 0) }}
+                    </dd>
+
+                    <dt class="col-7 text-muted">
+                        Voice frames (LDU):
+                    </dt>
+                    <dd class="col-5 font-monospace
+                               text-success"
+                        id="stat-voice">
+                        {{ stats.get('voice_frames', 0) }}
+                    </dd>
+
+                    <dt class="col-7 text-muted">
+                        Control (TSBK):
+                    </dt>
+                    <dd class="col-5 font-monospace
+                               text-info"
+                        id="stat-tsbk">
+                        {{ stats.get('tsbk_frames', 0) }}
+                    </dd>
+
+                    <dt class="col-7 text-muted">
+                        Systems found:
+                    </dt>
+                    <dd class="col-5">
+                        <span class="badge bg-warning
+                                     font-monospace"
+                              id="stat-systems">
+                            {{ stats.get(
+                                'systems_found', 0) }}
+                        </span>
+                    </dd>
+
+                    <dt class="col-7 text-muted">
+                        Talkgroups heard:
+                    </dt>
+                    <dd class="col-5 font-monospace"
+                        id="stat-tgs">
+                        {{ stats.get(
+                            'talkgroups_heard', 0) }}
+                    </dd>
+
+                    <dt class="col-7 text-muted">
+                        Units heard:
+                    </dt>
+                    <dd class="col-5 font-monospace"
+                        id="stat-units">
+                        {{ stats.get('units_heard', 0) }}
+                    </dd>
+                </dl>
+
+                <hr class="border-secondary my-2">
+
+                <div class="d-grid gap-1">
+                    <button class="btn
+                                   btn-outline-warning
+                                   btn-sm"
+                            onclick="clearSystems()">
+                        <i class="fas fa-trash me-1"></i>
+                        Clear Systems
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{# ============================================================ #}
+{# Discovered Systems                                           #}
+{# ============================================================ #}
+{% if systems %}
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header border-secondary
+                        d-flex justify-content-between
+                        py-2">
+                <h6 class="mb-0 text-secondary">
+                    <i class="fas fa-broadcast-tower me-1"></i>
+                    Discovered P25 Systems
+                    <span class="badge bg-warning ms-1">
+                        {{ systems|length }}
+                    </span>
+                </h6>
+                <button class="btn
+                               btn-outline-secondary
+                               btn-sm"
+                        onclick="refreshSystems()">
+                    <i class="fas fa-sync"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="row" id="systems-grid">
+                    {% for sys in systems %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="card system-card
+                                    bg-dark text-light
+                                    border-secondary h-100"
+                             style="border-left-color:
+                             var(--bs-{{ sys.get(
+                                 'trunking_color',
+                                 'secondary') }}) !important">
+                            <div class="card-body py-2">
+                                <div class="d-flex
+                                            justify-content-between
+                                            align-items-start">
+                                    <span class="badge
+                                        bg-{{ sys.get(
+                                            'trunking_color',
+                                            'secondary') }}
+                                        small">
+                                        {{ sys.get(
+                                            'trunking_name',
+                                            '?') }}
+                                    </span>
+                                    <span class="badge
+                                                 bg-dark
+                                                 border
+                                                 font-monospace">
+                                        P{{ sys.get(
+                                            'phase', 1) }}
+                                    </span>
+                                </div>
+
+                                <div class="mt-2">
+                                    <div class="d-flex gap-2
+                                                align-items-center">
+                                        <span class="badge
+                                                     nac-badge
+                                                     bg-info">
+                                            NAC:{{ sys.get(
+                                                'nac', '?') }}
+                                        </span>
+                                        {% if sys.get(
+                                            'is_encrypted') %}
+                                        <span class="badge
+                                                     bg-warning
+                                                     enc-icon">
+                                            <i class="fas
+                                               fa-lock"></i>
+                                            ENC
+                                        </span>
+                                        {% endif %}
+                                    </div>
+
+                                    <div class="mt-1 small">
+                                        <span class="text-muted">
+                                            CC:
+                                        </span>
+                                        <span class="font-monospace
+                                                     text-info">
+                                            {{ sys.get(
+                                                'control_channel',
+                                                '?') }}
+                                            MHz
+                                        </span>
+                                    </div>
+
+                                    {% if sys.get('rfss_id') %}
+                                    <div class="small">
+                                        <span class="text-muted">
+                                            RFSS/Site:
+                                        </span>
+                                        <span class="font-monospace">
+                                            {{ sys.rfss_id }}/
+                                            {{ sys.site_id }}
+                                        </span>
+                                    </div>
+                                    {% endif %}
+
+                                    {% if sys.get(
+                                        'talkgroup_count', 0)
+                                        > 0 %}
+                                    <div class="mt-1">
+                                        <small class="text-muted">
+                                            TGs ({{ sys.get(
+                                                'talkgroup_count',
+                                                0) }}):
+                                        </small>
+                                        <div class="mt-1">
+                                            {% for tg in sys.get(
+                                                'talkgroups', []
+                                            )[:8] %}
+                                            <span class="tg-pill
+                                                         bg-secondary">
+                                                {{ tg }}
+                                            </span>
+                                            {% endfor %}
+                                            {% if sys.get(
+                                                'talkgroup_count',
+                                                0) > 8 %}
+                                            <span class="tg-pill
+                                                         bg-dark
+                                                         border">
+                                                +{{ sys.talkgroup_count - 8 }}
+                                            </span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="d-flex
+                                            justify-content-between
+                                            mt-2 small">
+                                    <span class="text-muted">
+                                        {{ sys.get(
+                                            'frame_count',
+                                            0) }} frames
+                                    </span>
+                                    {% if sys.get('avg_rssi') %}
+                                    <span class="font-monospace
+                                                 text-info">
+                                        {{ sys.avg_rssi }}dBm
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ============================================================ #}
+{# Frame decode table and log                                   #}
+{# ============================================================ #}
+<div class="row">
+
+    <div class="col-md-8 mb-3">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header border-secondary
+                        d-flex justify-content-between
+                        py-2">
+                <h6 class="mb-0 text-secondary">
+                    <i class="fas fa-th-list me-1"></i>
+                    Decoded Frames
+                </h6>
+                <div class="d-flex gap-2
+                            align-items-center">
+                    <select class="form-select
+                                   form-select-sm
+                                   bg-dark text-light
+                                   border-secondary"
+                            id="nac-filter"
+                            style="width:120px"
+                            onchange="refreshFrames()">
+                        <option value="">All NAC</option>
+                        {% for sys in systems %}
+                        <option value="{{ sys.get('nac_int') }}">
+                            {{ sys.get('nac', '?') }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn
+                                   btn-outline-secondary
+                                   btn-sm"
+                            onclick="refreshFrames()">
+                        <i class="fas fa-sync"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0"
+                 style="max-height:400px;
+                        overflow-y:auto;">
+                <table class="table table-dark
+                               table-sm mb-0
+                               frame-table">
+                    <thead class="sticky-top bg-dark">
+                        <tr>
+                            <th>Time</th>
+                            <th>NAC</th>
+                            <th>DUID</th>
+                            <th>TG</th>
+                            <th>Unit</th>
+                            <th>RSSI</th>
+                            <th>BER</th>
+                            <th>Flags</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="frames-tbody">
+                        {% for frame in frames %}
+                        <tr class="
+                            {% if frame.duid_name == 'LDU1' %}
+                                frame-ldu1
+                            {% elif frame.duid_name == 'LDU2' %}
+                                frame-ldu2
+                            {% elif frame.duid_name == 'TSBK' %}
+                                frame-tsbk
+                            {% elif frame.duid_name == 'HDU' %}
+                                frame-hdu
+                            {% elif 'TDU' in frame.get('duid_name', '') %}
+                                frame-tdu
+                            {% endif %}
+                            {% if frame.is_encrypted %}
+                                frame-enc
+                            {% endif %}">
+                            <td>{{ frame.timestamp[11:19] }}</td>
+                            <td class="font-monospace">
+                                {{ frame.get('nac', '?') }}
+                            </td>
+                            <td>
+                                <strong>{{ frame.get('duid_name', '?') }}</strong>
+                            </td>
+                            <td class="font-monospace">
+                                {{ frame.get('talkgroup', '—') }}
+                                {% if frame.get('talkgroup') %}
+                                <small class="text-muted">
+                                    ({{ frame.get('talkgroup_hex', '') }})
+                                </small>
+                                {% endif %}
+                            </td>
+                            <td class="font-monospace small">
+                                {{ frame.get('source_unit', '—') }}
+                            </td>
+                            <td class="font-monospace small">
+                                {{ frame.get('rssi', '—') }}
+                            </td>
+                            <td class="font-monospace small">
+                                {{ "%.1f"|format(frame.get('ber', 0)) if frame.get('ber') is not none else '—' }}
+                            </td>
+                            <td>
+                                {% if frame.get('is_encrypted') %}
+                                <i class="fas fa-lock enc-icon"
+                                   title="{{ frame.get('encryption_algo', '') }}"></i>
+                                {% endif %}
+                                {% if frame.get('emergency') %}
+                                <i class="fas fa-exclamation-triangle emg-icon"
+                                   title="Emergency"></i>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if frame.get('source_unit') or frame.get('talkgroup') %}
+                                <button class="btn btn-xs btn-outline-success"
+                                        onclick="openLog(
+                                            'Unit:{{ frame.get("source_unit", "") }}',
+                                            {{ frame.get('talkgroup', 0) }},
+                                            '{{ frame.get("nac", "0") }}',
+                                            {{ config.get('center_frequency_mhz', 851) }}
+                                        )"
+                                        title="Log contact">
+                                    <i class="fas fa-book"></i>
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9"
+                                class="text-center
+                                       text-muted py-4">
+                                {% if status.get('running') %}
+                                Waiting for P25 frames...
+                                {% else %}
+                                Start receive to decode P25
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-3">
+        <div class="card bg-dark border-secondary h-100">
+            <div class="card-header border-secondary
+                        d-flex justify-content-between
+                        py-2">
+                <h6 class="mb-0 text-secondary">
+                    <i class="fas fa-terminal me-1"></i>
+                    Engine Log
+                </h6>
+                <button class="btn
+                               btn-outline-secondary
+                               btn-sm"
+                        onclick="refreshLogs()">
+                    <i class="fas fa-sync"></i>
+                </button>
+            </div>
+            <div id="p25-log"
+                 style="height:400px;
+                        overflow-y:auto;
+                        background:#0d1117;
+                        padding:8px;
+                        font-family:monospace;
+                        font-size:0.78rem;">
+                {% for log in logs %}
+                <div class="
+                    {% if log.level == 'error' %}text-danger
+                    {% elif log.level == 'warning' %}text-warning
+                    {% else %}text-success{% endif %}">
+                    <small>{{ log.timestamp[11:19] }}</small>
+                    {{ log.message }}
+                </div>
+                {% else %}
+                <div class="text-muted">No log entries</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{# Log Contact Modal #}
+<div class="modal fade" id="logContactModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-book me-1"></i>
+                    Log P25 Contact
+                </h5>
+                <button type="button"
+                        class="btn-close btn-close-white"
+                        data-bs-dismiss="modal">
+                </button>
+            </div>
+            <div class="modal-body">
+                {{ log_form.hidden_tag() }}
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ log_form.callsign.label(
+                           class="form-label") }}
+                        {{ log_form.callsign(
+                           class="form-control",
+                           id="log-callsign") }}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ log_form.talkgroup.label(
+                           class="form-label") }}
+                        {{ log_form.talkgroup(
+                           class="form-control",
+                           id="log-tg") }}
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        {{ log_form.nac.label(
+                           class="form-label") }}
+                        {{ log_form.nac(
+                           class="form-control
+                                  font-monospace",
+                           id="log-nac") }}
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        {{ log_form.frequency.label(
+                           class="form-label") }}
+                        {{ log_form.frequency(
+                           class="form-control",
+                           id="log-freq") }}
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        {{ log_form.rst_sent.label(
+                           class="form-label") }}
+                        {{ log_form.rst_sent(
+                           class="form-control") }}
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        {{ log_form.rst_rcvd.label(
+                           class="form-label") }}
+                        {{ log_form.rst_rcvd(
+                           class="form-control") }}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    {{ log_form.notes.label(
+                       class="form-label") }}
+                    {{ log_form.notes(
+                       class="form-control",
+                       id="log-notes", rows="2") }}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button"
+                        class="btn btn-secondary"
+                        data-bs-dismiss="modal">
+                    Cancel
+                </button>
+                <button type="button"
+                        class="btn btn-success"
+                        onclick="submitLog()">
+                    <i class="fas fa-save me-1"></i>
+                    Log Contact
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Toast #}
+<div class="position-fixed bottom-0 end-0 p-3"
+     style="z-index:11">
+    <div id="p25-toast"
+         class="toast align-items-center text-white"
+         role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toast-msg">
+                Done
+            </div>
+            <button type="button"
+                    class="btn-close btn-close-white
+                           me-2 m-auto"
+                    data-bs-dismiss="toast">
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+/* ============================================================
+   P25 Survey Plugin JavaScript
+   ============================================================ */
+
+function showToast(msg, type) {
+    const el = document.getElementById('p25-toast');
+    document.getElementById('toast-msg').textContent = msg;
+    el.className = (
+        'toast align-items-center text-white bg-' + type
+    );
+    new bootstrap.Toast(el, {delay: 3500}).show();
+}
+
+function getCsrfToken() {
+    const el = document.querySelector(
+        'input[name=csrf_token]'
+    );
+    return el ? el.value : '';
+}
+
+function apiPost(url, data) {
+    return fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(data || {})
+    }).then(r => r.json());
+}
+
+// ---------------------------------------------------------------
+// Controls
+// ---------------------------------------------------------------
+function setFrequency() {
+    const freq = parseFloat(
+        document.getElementById('freq-input').value
+    );
+    if (!freq || freq < 25 || freq > 1300) {
+        showToast('Invalid frequency', 'warning');
+        return;
+    }
+    apiPost(
+        '{{ url_for("P25Survey.api_set_frequency") }}',
+        {frequency_mhz: freq}
+    ).then(data => {
+        if (data.success) {
+            document.getElementById(
+                'freq-display'
+            ).textContent = freq.toFixed(4);
+            showToast(freq.toFixed(4) + ' MHz', 'success');
+        }
+    });
+}
+
+function setSource(source) {
+    apiPost(
+        '{{ url_for("P25Survey.api_set_source") }}',
+        {source: source}
+    ).then(data => {
+        if (data.success) {
+            showToast('Source: ' + source, 'info');
+            const sdrBtn = document.getElementById(
+                'btn-sdr'
+            );
+            const radioBtn = document.getElementById(
+                'btn-radio'
+            );
+            if (source === 'sdr') {
+                sdrBtn.className =
+                    'btn btn-sm btn-primary';
+                radioBtn.className =
+                    'btn btn-sm btn-outline-success';
+            } else {
+                sdrBtn.className =
+                    'btn btn-sm btn-outline-primary';
+                radioBtn.className =
+                    'btn btn-sm btn-success';
+            }
+        }
+    });
+}
+
+function setMode(mode) {
+    apiPost(
+        '{{ url_for("P25Survey.api_set_mode") }}',
+        {mode: mode}
+    ).then(data => {
+        showToast('Mode: ' + mode, 'info');
+    });
+}
+
+function startRX() {
+    apiPost('{{ url_for("P25Survey.api_start_rx") }}')
+        .then(data => {
+        showToast(
+            data.success ? data.message : data.error,
+            data.success ? 'success' : 'danger'
+        );
+        if (data.success) {
+            setTimeout(() => location.reload(), 1000);
+        }
+    });
+}
+
+function stopRX() {
+    apiPost('{{ url_for("P25Survey.api_stop_rx") }}')
+        .then(data => {
+        showToast('Receive stopped', 'info');
+        setTimeout(() => location.reload(), 1000);
+    });
+}
+
+function syncRadio() {
+    apiPost(
+        '{{ url_for("P25Survey.api_sync_radio") }}'
+    ).then(data => {
+        if (data.success) {
+            const freq = parseFloat(
+                data.frequency_mhz
+            ).toFixed(4);
+            document.getElementById(
+                'freq-input'
+            ).value = freq;
+            document.getElementById(
+                'freq-display'
+            ).textContent = freq;
+            showToast(data.message, 'info');
+        } else {
+            showToast(data.error, 'warning');
+        }
+    });
+}
+
+function clearSystems() {
+    if (!confirm('Clear all discovered systems?')) return;
+    apiPost(
+        '{{ url_for("P25Survey.api_clear_systems") }}'
+    ).then(data => {
+        showToast('Systems cleared', 'info');
+        setTimeout(() => location.reload(), 500);
+    });
+}
+
+
+// ---------------------------------------------------------------
+// Data refresh
+// ---------------------------------------------------------------
+function refreshFrames() {
+    const nacFilter = document.getElementById(
+        'nac-filter'
+    ).value;
+    let url = (
+        '{{ url_for("P25Survey.api_frames") }}?limit=60'
+    );
+    if (nacFilter) url += '&nac=' + nacFilter;
+
+    $.get(url, function(data) {
+        const tbody = document.getElementById(
+            'frames-tbody'
+        );
+        if (!data.frames || !data.frames.length) {
+            tbody.innerHTML = (
+                '<tr><td colspan="9" ' +
+                'class="text-center text-muted py-4">' +
+                'No P25 frames decoded yet' +
+                '</td></tr>'
+            );
+            return;
+        }
+
+        tbody.innerHTML = data.frames.map(function(f) {
+            const duid = f.duid_name || '?';
+            const cls = (
+                duid === 'LDU1' ? 'frame-ldu1' :
+                duid === 'LDU2' ? 'frame-ldu2' :
+                duid === 'TSBK' ? 'frame-tsbk' :
+                duid === 'HDU'  ? 'frame-hdu'  :
+                duid.includes('TDU') ? 'frame-tdu' :
+                ''
+            );
+            const encCls = f.is_encrypted ?
+                ' frame-enc' : '';
+
+            const encIcon = f.is_encrypted ?
+                '<i class="fas fa-lock enc-icon" ' +
+                'title="' + f.encryption_algo +
+                '"></i> ' : '';
+            const emgIcon = f.emergency ?
+                '<i class="fas fa-exclamation-triangle' +
+                ' emg-icon"></i>' : '';
+
+            const logBtn = (
+                f.source_unit || f.talkgroup
+            ) ?
+                '<button class="btn btn-xs ' +
+                'btn-outline-success" ' +
+                'onclick="openLog(\'Unit:' +
+                (f.source_unit || '') + '\',' +
+                (f.talkgroup || 0) + ',\'' +
+                (f.nac || '0') + '\',' +
+                '{{ config.get("center_frequency_mhz", 851) }})">' +
+                '<i class="fas fa-book"></i>' +
+                '</button>' : '';
+
+            const tgHex = f.talkgroup_hex ?
+                '<small class="text-muted">(' +
+                f.talkgroup_hex + ')</small>' : '';
+
+            const ber = f.ber !== null ?
+                parseFloat(f.ber).toFixed(1) : '—';
+
+            return '<tr class="' + cls + encCls + '">' +
+                '<td>' + f.timestamp.substring(11, 19) +
+                '</td>' +
+                '<td class="font-monospace">' +
+                (f.nac || '?') + '</td>' +
+                '<td><strong>' + duid + '</strong></td>' +
+                '<td class="font-monospace">' +
+                (f.talkgroup || '—') + ' ' + tgHex +
+                '</td>' +
+                '<td class="font-monospace small">' +
+                (f.source_unit || '—') + '</td>' +
+                '<td class="font-monospace small">' +
+                (f.rssi || '—') + '</td>' +
+                '<td class="font-monospace small">' +
+                ber + '</td>' +
+                '<td>' + encIcon + emgIcon + '</td>' +
+                '<td>' + logBtn + '</td>' +
+                '</tr>';
+        }).join('');
+
+        // Update active call banner visibility
+        if (data.active_call) {
+            document.getElementById(
+                'active-call-section'
+            )?.style?.removeProperty('display');
+        }
+    });
+}
+
+function refreshSystems() {
+    location.reload();
+}
+
+function refreshLogs() {
+    $.get(
+        '{{ url_for("P25Survey.api_logs") }}?limit=40',
+        function(data) {
+            const div = document.getElementById(
+                'p25-log'
+            );
+            if (!data.logs || !data.logs.length) {
+                div.innerHTML = (
+                    '<div class="text-muted">' +
+                    'No entries</div>'
+                );
+                return;
+            }
+            div.innerHTML = data.logs.map(function(l) {
+                const cls = (
+                    l.level === 'error' ? 'text-danger' :
+                    l.level === 'warning' ? 'text-warning' :
+                    'text-success'
+                );
+                return '<div class="' + cls + '">' +
+                    '<small>' +
+                    l.timestamp.substring(11, 19) +
+                    '</small> ' + l.message + '</div>';
+            }).join('');
+            div.scrollTop = div.scrollHeight;
+        }
+    );
+}
+
+function pollStatus() {
+    $.get(
+        '{{ url_for("P25Survey.api_status") }}',
+        function(data) {
+            // RSSI
+            if (data.rssi !== null &&
+                    data.rssi !== undefined) {
+                const pct = Math.max(0, Math.min(100,
+                    ((data.rssi + 120) / 60 * 100)
+                ));
+                document.getElementById(
+                    'rssi-val'
+                ).textContent =
+                    data.rssi + ' dBm';
+                document.getElementById(
+                    'rssi-bar'
+                ).style.width = pct + '%';
+            }
+
+            // BER
+            if (data.ber_avg !== undefined) {
+                document.getElementById(
+                    'ber-val'
+                ).textContent =
+                    parseFloat(data.ber_avg)
+                    .toFixed(2) + '%';
+                const bp = Math.max(0,
+                    100 - data.ber_avg * 10
+                );
+                document.getElementById(
+                    'ber-bar'
+                ).style.width = bp + '%';
+            }
+
+            // Statistics
+            if (data.stats) {
+                const s = data.stats;
+                document.getElementById(
+                    'stat-frames'
+                ).textContent =
+                    s.frames_decoded || 0;
+                document.getElementById(
+                    'stat-voice'
+                ).textContent =
+                    s.voice_frames || 0;
+                document.getElementById(
+                    'stat-tsbk'
+                ).textContent =
+                    s.tsbk_frames || 0;
+                document.getElementById(
+                    'stat-systems'
+                ).textContent =
+                    s.systems_found || 0;
+                document.getElementById(
+                    'stat-tgs'
+                ).textContent =
+                    s.talkgroups_heard || 0;
+                document.getElementById(
+                    'stat-units'
+                ).textContent =
+                    s.units_heard || 0;
+            }
+
+            // Scan state badge
+            const stateEl = document.getElementById(
+                'scan-state'
+            );
+            if (stateEl && data.scan_state) {
+                stateEl.innerHTML = (
+                    '<span class="status-led ' +
+                    (data.running ?
+                        'led-active' : 'led-idle') +
+                    ' me-1"></span>' +
+                    data.scan_state
+                );
+                stateEl.className = (
+                    'badge scan-state-badge ' +
+                    (data.running ?
+                        'bg-success' : 'bg-secondary')
+                );
+            }
+        }
+    );
+}
+
+
+// ---------------------------------------------------------------
+// Logbook
+// ---------------------------------------------------------------
+function openLog(callsign, tg, nac, freq) {
+    document.getElementById(
+        'log-callsign'
+    ).value = callsign || '';
+    document.getElementById(
+        'log-tg'
+    ).value = tg || '';
+    document.getElementById(
+        'log-nac'
+    ).value = nac || '0';
+    document.getElementById(
+        'log-freq'
+    ).value = parseFloat(freq || 0).toFixed(4);
+    document.getElementById(
+        'log-notes'
+    ).value = 'P25 contact via P25 Survey plugin';
+
+    new bootstrap.Modal(
+        document.getElementById('logContactModal')
+    ).show();
+}
+
+function submitLog() {
+    const data = {
+        callsign: document.getElementById(
+            'log-callsign'
+        ).value.trim().toUpperCase(),
+        talkgroup: parseInt(
+            document.getElementById('log-tg').value
+        ) || null,
+        nac: document.getElementById('log-nac').value,
+        frequency: parseFloat(
+            document.getElementById('log-freq').value
+        ) || null,
+        rst_sent: $('[name=rst_sent]').val() || '59',
+        rst_rcvd: $('[name=rst_rcvd]').val() || '59',
+        notes: document.getElementById(
+            'log-notes'
+        ).value,
+    };
+
+    if (!data.callsign) {
+        showToast('Callsign required', 'warning');
+        return;
+    }
+
+    apiPost(
+        '{{ url_for("P25Survey.api_log_contact") }}',
+        data
+    ).then(result => {
+        if (result.success) {
+            bootstrap.Modal.getInstance(
+                document.getElementById(
+                    'logContactModal'
+                )
+            ).hide();
+            showToast(result.message, 'success');
+        } else {
+            showToast(
+                'Failed: ' + result.error, 'danger'
+            );
+        }
+    });
+}
+
+
+// ---------------------------------------------------------------
+// Initialisation
+// ---------------------------------------------------------------
+$(document).ready(function() {
+    setInterval(refreshFrames, 2000);
+    setInterval(pollStatus, 3000);
+    setInterval(refreshLogs, 5000);
+
+    const log = document.getElementById('p25-log');
+    if (log) log.scrollTop = log.scrollHeight;
+});
+</script>
+{% endblock %}
