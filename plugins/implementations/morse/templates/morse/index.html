@@ -215,105 +215,278 @@
 {# ============================================================ #}
 <div class="row mb-3">
 
-    {# Receive status card #}
-    <div class="col-md-3 mb-3">
-        <div class="card h-100">
-            <div class="card-header bg-dark text-white
-                        py-2">
-                <h6 class="mb-0">
-                    <i class="fas fa-headphones me-1"></i>
-                    Receive Status
-                </h6>
-            </div>
-            <div class="card-body py-2">
-                <div class="d-flex
-                            justify-content-between
-                            align-items-center mb-2">
-                    <small class="text-muted">Tone</small>
-                    <span id="tone-indicator"
-                          class="tone-indicator">
-                    </span>
-                </div>
-
-                <div class="mb-2">
-                    <div class="d-flex
-                                justify-content-between mb-1">
-                        <small class="text-muted">
-                            Signal
-                        </small>
-                        <small id="signal-pct"
-                               class="text-muted">
-                            0%
-                        </small>
-                    </div>
-                    <div class="signal-meter">
-                        <div class="signal-meter-fill"
-                             id="signal-bar"
-                             style="width:0%">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="d-flex
-                            justify-content-between
-                            align-items-center mb-2">
-                    <small class="text-muted">
-                        Source
-                    </small>
-                    <span class="badge bg-secondary"
-                          id="source-badge">
-                        {{ config.default_source|upper }}
-                    </span>
-                </div>
-
-                <div class="d-flex
-                            justify-content-between
-                            align-items-center mb-2">
-                    <small class="text-muted">Speed</small>
-                    <span class="badge bg-info">
-                        {{ timing.get('wpm', 20) }} WPM
-                    </span>
-                </div>
-
-                <div class="d-flex
-                            justify-content-between
-                            align-items-center">
-                    <small class="text-muted">Tone</small>
-                    <span class="badge bg-secondary">
-                        {{ timing.get('tone_hz', 700) }} Hz
-                    </span>
-                </div>
-
-                <hr class="my-2">
-
-                <div class="d-grid gap-1">
-                    {% if receiver_status.get('running') %}
-                    <button class="btn btn-danger btn-sm"
-                            onclick="stopReceiver()">
-                        <i class="fas fa-stop me-1"></i>
-                        Stop RX
-                    </button>
-                    {% else %}
-                    <button class="btn btn-success btn-sm"
-                            onclick="startReceiver()">
-                        <i class="fas fa-play me-1"></i>
-                        Start RX
-                    </button>
-                    {% endif %}
-                </div>
-
-                {% if receiver_status.get('error') %}
-                <div class="alert alert-warning
-                            py-1 px-2 mt-2 mb-0 small">
-                    <small>
-                        {{ receiver_status.error }}
-                    </small>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-
+   {# Status Card — updated to show SDR availability #}
+   <div class="col-md-4 mb-4">
+       <div class="card h-100">
+           <div class="card-header bg-primary text-white">
+               <h5 class="mb-0">
+                   <i class="fas fa-headphones me-1"></i>
+                   Receive Status
+               </h5>
+           </div>
+           <div class="card-body">
+               <div class="d-flex justify-content-between
+                           align-items-center mb-2">
+                   <small class="text-muted">Tone</small>
+                   <span id="tone-indicator"
+                         class="tone-indicator">
+                   </span>
+               </div>
+   
+               <div class="mb-2">
+                   <div class="d-flex justify-content-between
+                               mb-1">
+                       <small class="text-muted">Signal</small>
+                       <small id="signal-pct" class="text-muted">
+                           0%
+                       </small>
+                   </div>
+                   <div class="signal-meter">
+                       <div class="signal-meter-fill"
+                            id="signal-bar"
+                            style="width:0%">
+                       </div>
+                   </div>
+               </div>
+   
+               <div class="d-flex justify-content-between
+                           align-items-center mb-1">
+                   <small class="text-muted">Source</small>
+                   <span class="badge bg-secondary"
+                         id="source-badge">
+                       {{ config.default_source|upper }}
+                   </span>
+               </div>
+   
+               <div class="d-flex justify-content-between
+                           align-items-center mb-1">
+                   <small class="text-muted">Speed</small>
+                   <span class="badge bg-info">
+                       {{ timing.get('wpm', 20) }} WPM
+                   </span>
+               </div>
+   
+               <div class="d-flex justify-content-between
+                           align-items-center mb-2">
+                   <small class="text-muted">Tone</small>
+                   <span class="badge bg-secondary">
+                       {{ timing.get('tone_hz', 700) }} Hz
+                   </span>
+               </div>
+   
+               {# RTL-SDR availability indicator #}
+               <div class="d-flex justify-content-between
+                           align-items-center mb-2">
+                   <small class="text-muted">RTL-SDR</small>
+                   <span class="badge
+                       {% if receiver_status.get('rtlsdr_available') %}
+                           bg-success
+                       {% else %}
+                           bg-warning text-dark
+                       {% endif %}">
+                       {% if receiver_status.get('rtlsdr_available') %}
+                           <i class="fas fa-check-circle me-1"></i>
+                           Available
+                       {% else %}
+                           <i class="fas fa-exclamation-triangle me-1"></i>
+                           Not installed
+                       {% endif %}
+                   </span>
+               </div>
+   
+               {# Fallback reason if in mock mode #}
+               {% if receiver_status.get('fallback_reason') %}
+               <div class="alert alert-warning py-1 px-2
+                           mb-2 small">
+                   <i class="fas fa-info-circle me-1"></i>
+                   Demo mode:
+                   {{ receiver_status.fallback_reason }}
+               </div>
+               {% endif %}
+   
+               {# Error message #}
+               {% if receiver_status.get('error') %}
+               <div class="alert alert-danger py-1 px-2
+                           mb-2 small">
+                   <small>
+                       {{ receiver_status.error }}
+                   </small>
+               </div>
+               {% endif %}
+   
+               <hr class="my-2">
+   
+               <div class="d-grid gap-1">
+                   {% if receiver_status.get('running') %}
+                   <button class="btn btn-danger btn-sm"
+                           onclick="stopReceiver()">
+                       <i class="fas fa-stop me-1"></i>
+                       Stop RX
+                   </button>
+                   {% else %}
+                   <button class="btn btn-success btn-sm"
+                           onclick="startReceiver()">
+                       <i class="fas fa-play me-1"></i>
+                       Start RX
+                   </button>
+                   {% endif %}
+   
+                   {# Install instructions button #}
+                   {% if not receiver_status.get(
+                       'rtlsdr_available') %}
+                   <button class="btn btn-outline-warning
+                                  btn-sm"
+                           data-bs-toggle="modal"
+                           data-bs-target=
+                               "#rtlsdrHelpModal">
+                       <i class="fas fa-question-circle me-1"></i>
+                       How to enable RTL-SDR
+                   </button>
+                   {% endif %}
+               </div>
+           </div>
+       </div>
+   </div>
+   
+   {# RTL-SDR help modal #}
+   <div class="modal fade" id="rtlsdrHelpModal"
+        tabindex="-1">
+       <div class="modal-dialog modal-lg">
+           <div class="modal-content">
+               <div class="modal-header bg-warning">
+                   <h5 class="modal-title">
+                       <i class="fas fa-info-circle me-1"></i>
+                       Enable RTL-SDR for Morse Receive
+                   </h5>
+                   <button type="button"
+                           class="btn-close"
+                           data-bs-dismiss="modal">
+                   </button>
+               </div>
+               <div class="modal-body">
+                   <p>
+                       The <code>pyrtlsdr</code> Python
+                       package is not installed or the
+                       RTL-SDR device is not accessible.
+                       The plugin is running in
+                       <strong>demo mode</strong> with a
+                       synthetic CW signal.
+                   </p>
+   
+                   <h6>Option 1: Add to Docker Image</h6>
+                   <p class="small text-muted">
+                       Add to <code>requirements.txt</code>
+                       and rebuild:
+                   </p>
+                   <pre class="bg-dark text-success
+                               p-2 rounded small">
+   # requirements.txt
+   pyrtlsdr==0.2.93</pre>
+                   <pre class="bg-dark text-success
+                               p-2 rounded small">
+   # Rebuild image:
+   docker compose build --no-cache
+   docker compose up -d</pre>
+   
+                   <h6>Option 2: Add Device Passthrough</h6>
+                   <p class="small text-muted">
+                       Ensure RTL-SDR USB is passed to
+                       the container in
+                       <code>docker-compose.yml</code>:
+                   </p>
+                   <pre class="bg-dark text-success
+                               p-2 rounded small">
+   services:
+     app:
+       devices:
+         - /dev/bus/usb:/dev/bus/usb
+       privileged: true</pre>
+   
+                   <h6>Option 3: Use Radio Mode</h6>
+                   <p class="small text-muted">
+                       Connect a radio audio output to a
+                       sound card and switch the Morse
+                       plugin to <strong>Radio</strong>
+                       mode. This uses the discriminator
+                       audio instead of RTL-SDR.
+                   </p>
+   
+                   <h6>Current Status</h6>
+                   <table class="table table-sm small">
+                       <tr>
+                           <td>pyrtlsdr:</td>
+                           <td>
+                               {% if receiver_status.get(
+                                   'rtlsdr_available') %}
+                               <span class="text-success">
+                                   ✓ Installed
+                               </span>
+                               {% else %}
+                               <span class="text-danger">
+                                   ✗ Not installed
+                               </span>
+                               {% endif %}
+                           </td>
+                       </tr>
+                       <tr>
+                           <td>numpy:</td>
+                           <td>
+                               {% if receiver_status.get(
+                                   'numpy_available') %}
+                               <span class="text-success">
+                                   ✓ Installed
+                               </span>
+                               {% else %}
+                               <span class="text-danger">
+                                   ✗ Not installed
+                               </span>
+                               {% endif %}
+                           </td>
+                       </tr>
+                       <tr>
+                           <td>sounddevice:</td>
+                           <td>
+                               {% if receiver_status.get(
+                                   'sounddevice_available') %}
+                               <span class="text-success">
+                                   ✓ Installed
+                               </span>
+                               {% else %}
+                               <span class="text-warning">
+                                   ⚠ Not installed
+                                   (optional for radio mode)
+                               </span>
+                               {% endif %}
+                           </td>
+                       </tr>
+                       <tr>
+                           <td>Active mode:</td>
+                           <td>
+                               {% if receiver_status.get(
+                                   'fallback_reason') %}
+                               <strong class="text-warning">
+                                   Demo/Mock mode
+                               </strong>
+                               {% else %}
+                               <strong class="text-success">
+                                   {{ config.default_source
+                                      |upper }}
+                               </strong>
+                               {% endif %}
+                           </td>
+                       </tr>
+                   </table>
+               </div>
+               <div class="modal-footer">
+                   <button type="button"
+                           class="btn btn-secondary"
+                           data-bs-dismiss="modal">
+                       Close
+                   </button>
+               </div>
+           </div>
+       </div>
+   </div>
     {# Frequency card #}
     <div class="col-md-3 mb-3">
         <div class="card h-100">
