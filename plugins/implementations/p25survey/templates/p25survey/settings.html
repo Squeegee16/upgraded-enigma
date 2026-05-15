@@ -1,0 +1,490 @@
+{% extends "base.html" %}
+
+{% block title %}P25 Survey Settings - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between
+            align-items-center mb-4">
+    <h2>
+        <i class="fas fa-cog me-2"></i>
+        P25 Survey Settings
+    </h2>
+    <a href="{{ url_for('P25Survey.index') }}"
+       class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>
+        Back
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <form method="POST"
+              action="{{ url_for(
+                  'P25Survey.settings') }}">
+            {{ form.hidden_tag() }}
+
+            {# RF / SDR #}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-signal me-1"></i>
+                        RF / SDR Settings
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.center_frequency_mhz
+                               .label(class="form-label") }}
+                            <div class="input-group">
+                                {{ form.center_frequency_mhz(
+                                   class="form-control") }}
+                                <span class="input-group-text">
+                                    MHz
+                                </span>
+                            </div>
+                            <small class="text-muted">
+                                {{ form.center_frequency_mhz
+                                   .description }}
+                            </small>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            {{ form.source.label(
+                               class="form-label") }}
+                            {{ form.source(
+                               class="form-select") }}
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            {{ form.sdr_gain.label(
+                               class="form-label") }}
+                            <div class="input-group">
+                                {{ form.sdr_gain(
+                                   class="form-control") }}
+                                <span class="input-group-text">
+                                    dB
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            {{ form.sdr_device_index.label(
+                               class="form-label") }}
+                            {{ form.sdr_device_index(
+                               class="form-control") }}
+                        </div>
+                    </div>
+
+                    {# Common P25 bands #}
+                    <div>
+                        <small class="text-muted
+                                      d-block mb-1">
+                            Common P25 frequency bands:
+                        </small>
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for band_name, (low, high)
+                               in p25_bands.items() %}
+                            <span class="badge
+                                         bg-secondary
+                                         small">
+                                {{ band_name }}:
+                                {{ low }}-{{ high }} MHz
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# P25 Protocol #}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-broadcast-tower
+                                  me-1"></i>
+                        P25 Protocol Settings
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            {{ form.nac.label(
+                               class="form-label") }}
+                            {{ form.nac(
+                               class="form-control
+                                      font-monospace") }}
+                            <small class="text-muted">
+                                {{ form.nac.description }}
+                            </small>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            {{ form.phase.label(
+                               class="form-label") }}
+                            {{ form.phase(
+                               class="form-select") }}
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            {{ form.scan_mode.label(
+                               class="form-label") }}
+                            {{ form.scan_mode(
+                               class="form-select",
+                               id="scan-mode-sel") }}
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            {{ form.op25_port.label(
+                               class="form-label") }}
+                            {{ form.op25_port(
+                               class="form-control") }}
+                            <small class="text-muted">
+                                {{ form.op25_port.description
+                                }}
+                            </small>
+                        </div>
+                    </div>
+
+                    {# Survey frequencies #}
+                    <div id="survey-freqs-section"
+                         style="display:none">
+                        <hr>
+                        <div class="mb-3">
+                            {{ form.survey_frequencies
+                               .label(class="form-label") }}
+                            {{ form.survey_frequencies(
+                               class="form-control
+                                      font-monospace",
+                               rows="8") }}
+                            <small class="text-muted">
+                                {{ form.survey_frequencies
+                                   .description }}
+                            </small>
+                        </div>
+                        <div class="mb-3">
+                            {{ form.dwell_time_ms.label(
+                               class="form-label") }}
+                            <div class="input-group">
+                                {{ form.dwell_time_ms(
+                                   class="form-control") }}
+                                <span class="input-group-text">
+                                    ms
+                                </span>
+                            </div>
+                            <small class="text-muted">
+                                {{ form.dwell_time_ms
+                                   .description }}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# Audio #}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-headphones
+                                  me-1"></i>
+                        Audio Settings
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.radio_audio_device
+                               .label(class="form-label") }}
+                            {{ form.radio_audio_device(
+                               class="form-control",
+                               placeholder=
+                                   "e.g. hw:1,0") }}
+                            <small class="text-muted">
+                                {{ form.radio_audio_device
+                                   .description }}
+                            </small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.audio_output_device
+                               .label(class="form-label") }}
+                            {{ form.audio_output_device(
+                               class="form-control",
+                               placeholder="default") }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# Logging #}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-book me-1"></i>
+                        Logging
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.callsign.label(
+                               class="form-label") }}
+                            {{ form.callsign(
+                               class="form-control",
+                               placeholder="W1ABC") }}
+                        </div>
+                        <div class="col-md-4 mb-3
+                                    d-flex
+                                    align-items-end">
+                            <div>
+                                <div class="form-check
+                                            mb-2">
+                                    {{ form.auto_log_calls(
+                                       class=
+                                           "form-check-input") }}
+                                    {{ form.auto_log_calls
+                                       .label(
+                                           class=
+                                           "form-check-label") }}
+                                </div>
+                                <div class="form-check">
+                                    {{ form.log_encrypted(
+                                       class=
+                                           "form-check-input") }}
+                                    {{ form.log_encrypted
+                                       .label(
+                                           class=
+                                           "form-check-label") }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            {{ form.log_min_duration_s
+                               .label(class="form-label") }}
+                            <div class="input-group">
+                                {{ form.log_min_duration_s(
+                                   class="form-control") }}
+                                <span class="input-group-text">
+                                    sec
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end
+                        gap-2 mb-4">
+                <a href="{{ url_for('P25Survey.index') }}"
+                   class="btn btn-secondary">
+                    Cancel
+                </a>
+                {{ form.submit(class="btn btn-primary") }}
+            </div>
+        </form>
+    </div>
+
+    {# Info panel #}
+    <div class="col-md-4">
+
+        <div class="card mb-3">
+            <div class="card-header bg-dark text-white">
+                <h6 class="mb-0">Current Status</h6>
+            </div>
+            <div class="card-body small">
+                <dl class="row mb-0">
+                    <dt class="col-5">Receive:</dt>
+                    <dd class="col-7">
+                        {% if status.get('running') %}
+                        <span class="text-success">
+                            ✓ Active
+                        </span>
+                        {% else %}
+                        <span class="text-muted">
+                            Stopped
+                        </span>
+                        {% endif %}
+                    </dd>
+                    <dt class="col-5">Decoder:</dt>
+                    <dd class="col-7">
+                        {% set di = status.get(
+                            'decoder', {}) %}
+                        {% if di.get('available') %}
+                        <span class="text-success">
+                            ✓ {{ di.name }}
+                        </span>
+                        {% else %}
+                        <span class="text-warning">
+                            Demo mode
+                        </span>
+                        {% endif %}
+                    </dd>
+                </dl>
+            </div>
+        </div>
+
+        {# Decoder status #}
+        <div class="card mb-3">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0">
+                    <i class="fas fa-code me-1"></i>
+                    P25 Decoder Status
+                </h6>
+            </div>
+            <div class="card-body small">
+                {% for name, info in
+                   decoder_info.items() %}
+                <div class="d-flex
+                            justify-content-between
+                            mb-1">
+                    <span class="font-monospace">
+                        {{ name }}
+                    </span>
+                    {% if info.available %}
+                    <span class="text-success">
+                        ✓
+                    </span>
+                    {% else %}
+                    <span class="text-muted">✗</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+
+                <hr class="my-2">
+                <p class="mb-1">
+                    <strong>Install OP25:</strong>
+                </p>
+                <pre class="bg-dark text-success
+                            p-2 rounded small">
+git clone https://github.com/boatbod/op25
+cd op25
+./install.sh</pre>
+            </div>
+        </div>
+
+        {# P25 protocol reference #}
+        <div class="card mb-3">
+            <div class="card-header bg-secondary
+                        text-white">
+                <h6 class="mb-0">
+                    P25 Protocol Reference
+                </h6>
+            </div>
+            <div class="card-body small">
+                {% for phase_n, phase in
+                   p25_phases.items() %}
+                <div class="mb-2">
+                    <strong>{{ phase.name }}</strong>
+                    <br>
+                    <span class="text-muted small">
+                        {{ phase.description }}
+                    </span>
+                    <table class="table table-sm
+                                  table-borderless
+                                  mb-0 small">
+                        <tr>
+                            <td class="text-muted py-0">
+                                Modulation:
+                            </td>
+                            <td class="font-monospace
+                                       py-0">
+                                {{ phase.modulation }}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted py-0">
+                                Access:
+                            </td>
+                            <td class="py-0">
+                                {{ phase.access }}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted py-0">
+                                Codec:
+                            </td>
+                            <td class="py-0">
+                                {{ phase.voice_codec }}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                {% if not loop.last %}
+                <hr class="my-1">
+                {% endif %}
+                {% endfor %}
+
+                <hr class="my-2">
+                <a href="https://github.com/blantonl/p25-survey"
+                   target="_blank"
+                   class="btn btn-outline-secondary
+                          btn-sm w-100 mb-1">
+                    <i class="fab fa-github me-1"></i>
+                    p25-survey on GitHub
+                </a>
+                <a href="https://github.com/boatbod/op25"
+                   target="_blank"
+                   class="btn btn-outline-secondary
+                          btn-sm w-100">
+                    <i class="fab fa-github me-1"></i>
+                    OP25 Decoder
+                </a>
+            </div>
+        </div>
+
+        {# Vocoders #}
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h6 class="mb-0">Vocoders</h6>
+            </div>
+            <div class="card-body small">
+                {% for vc_name, vc in vocoders.items() %}
+                <div class="mb-2">
+                    <strong>{{ vc_name }}</strong>
+                    {% if vc.open_source %}
+                    <span class="badge bg-success
+                                 ms-1 small">
+                        Open Source
+                    </span>
+                    {% else %}
+                    <span class="badge bg-secondary
+                                 ms-1 small">
+                        Proprietary
+                    </span>
+                    {% endif %}
+                    <br>
+                    <small class="text-muted">
+                        {{ vc.used_in }} |
+                        {{ vc.bitrate }}
+                    </small>
+                </div>
+                {% if not loop.last %}
+                <hr class="my-1">
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Show/hide survey frequency list
+function toggleSurveyFreqs() {
+    const sel = document.getElementById(
+        'scan-mode-sel'
+    );
+    const section = document.getElementById(
+        'survey-freqs-section'
+    );
+    if (sel && section) {
+        section.style.display = (
+            sel.value === 'survey' ? 'block' : 'none'
+        );
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const sel = document.getElementById('scan-mode-sel');
+    if (sel) {
+        sel.addEventListener('change', toggleSurveyFreqs);
+        toggleSurveyFreqs();
+    }
+});
+</script>
+{% endblock %}
