@@ -1,0 +1,616 @@
+{% extends "base.html" %}
+
+{% block title %}DMR Settings - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between
+            align-items-center mb-4">
+    <h2>
+        <i class="fas fa-cog me-2"></i>
+        DMR Settings
+    </h2>
+    <a href="{{ url_for('DMR.index') }}"
+       class="btn btn-secondary">
+        <i class="fas fa-arrow-left me-1"></i>
+        Back
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <form method="POST"
+              action="{{ url_for('DMR.settings') }}">
+            {{ form.hidden_tag() }}
+
+            {# ------------------------------------------------ #}
+            {# RF / SDR                                          #}
+            {# ------------------------------------------------ #}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-signal me-1"></i>
+                        RF / SDR Settings
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.center_frequency_mhz
+                               .label(class="form-label") }}
+                            <div class="input-group">
+                                {{ form.center_frequency_mhz(
+                                   class="form-control") }}
+                                <span class="input-group-text">
+                                    MHz
+                                </span>
+                            </div>
+                            <small class="text-muted">
+                                {{ form.center_frequency_mhz
+                                   .description }}
+                            </small>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            {{ form.source.label(
+                               class="form-label") }}
+                            {{ form.source(
+                               class="form-select") }}
+                            <small class="text-muted">
+                                {{ form.source.description }}
+                            </small>
+                        </div>
+
+                        <div class="col-md-2 mb-3">
+                            {{ form.sdr_gain.label(
+                               class="form-label") }}
+                            <div class="input-group">
+                                {{ form.sdr_gain(
+                                   class="form-control") }}
+                                <span class="input-group-text">
+                                    dB
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="col-md-2 mb-3">
+                            {{ form.sdr_device_index.label(
+                               class="form-label") }}
+                            {{ form.sdr_device_index(
+                               class="form-control") }}
+                        </div>
+                    </div>
+
+                    {# Common DMR frequencies #}
+                    <div>
+                        <small class="text-muted
+                                      d-block mb-1">
+                            Quick frequency presets:
+                        </small>
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for name, freq in
+                               common_frequencies.items() %}
+                            <button type="button"
+                                    class="btn btn-outline-secondary
+                                           btn-sm"
+                                    style="font-size:0.75rem"
+                                    onclick="document.querySelector(
+                                        '[name=center_frequency_mhz]'
+                                    ).value = '{{ freq }}'">
+                                {{ name }}
+                                <small>{{ freq }}</small>
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# ------------------------------------------------ #}
+            {# DMR Protocol                                      #}
+            {# ------------------------------------------------ #}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-broadcast-tower
+                                  me-1"></i>
+                        DMR Protocol Parameters
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            {{ form.tier.label(
+                               class="form-label") }}
+                            {{ form.tier(
+                               class="form-select") }}
+                            <small class="text-muted">
+                                {{ form.tier.description }}
+                            </small>
+                        </div>
+
+                        <div class="col-md-3 mb-3">
+                            {{ form.color_code.label(
+                               class="form-label") }}
+                            {{ form.color_code(
+                               class="form-control") }}
+                            <small class="text-muted">
+                                {{ form.color_code
+                                   .description }}
+                            </small>
+                        </div>
+
+                        <div class="col-md-3 mb-3">
+                            {{ form.timeslot.label(
+                               class="form-label") }}
+                            {{ form.timeslot(
+                               class="form-select") }}
+                            <small class="text-muted">
+                                {{ form.timeslot.description
+                                }}
+                            </small>
+                        </div>
+
+                        <div class="col-md-3 mb-3">
+                            {{ form.talkgroup.label(
+                               class="form-label") }}
+                            {{ form.talkgroup(
+                               class="form-control") }}
+                            <small class="text-muted">
+                                {{ form.talkgroup
+                                   .description }}
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            {{ form.source_id.label(
+                               class="form-label") }}
+                            {{ form.source_id(
+                               class="form-control") }}
+                            <small class="text-muted">
+                                {{ form.source_id
+                                   .description }}
+                            </small>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            {{ form.network_type.label(
+                               class="form-label") }}
+                            {{ form.network_type(
+                               class="form-select") }}
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            {{ form.repeater_callsign
+                               .label(class="form-label") }}
+                            {{ form.repeater_callsign(
+                               class="form-control",
+                               placeholder="W1XYZ") }}
+                            <small class="text-muted">
+                                {{ form.repeater_callsign
+                                   .description }}
+                            </small>
+                        </div>
+                    </div>
+
+                    {# Common talk groups reference #}
+                    <div class="alert alert-dark
+                                small mb-0">
+                        <strong>Common Talk Groups:</strong>
+                        <div class="d-flex flex-wrap
+                                    gap-1 mt-1">
+                            {% for tg_id, tg_name in
+                               talkgroups.items() %}
+                            {% if loop.index <= 12 %}
+                            <span class="badge
+                                         bg-secondary
+                                         font-monospace"
+                                  style="cursor:pointer"
+                                  onclick="document.querySelector(
+                                      '[name=talkgroup]'
+                                  ).value = '{{ tg_id }}'"
+                                  title="{{ tg_name }}">
+                                {{ tg_id }}
+                            </span>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# ------------------------------------------------ #}
+            {# Audio                                             #}
+            {# ------------------------------------------------ #}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-headphones me-1"></i>
+                        Audio Settings
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.radio_audio_device
+                               .label(class="form-label") }}
+                            {{ form.radio_audio_device(
+                               class="form-control",
+                               placeholder=
+                                   "e.g. hw:1,0 or default"
+                            ) }}
+                            <small class="text-muted">
+                                {{ form.radio_audio_device
+                                   .description }}
+                            </small>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            {{ form.audio_output_device
+                               .label(class="form-label") }}
+                            {{ form.audio_output_device(
+                               class="form-control",
+                               placeholder="default") }}
+                            <small class="text-muted">
+                                {{ form.audio_output_device
+                                   .description }}
+                            </small>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            {{ form.squelch_level.label(
+                               class="form-label") }}
+                            {{ form.squelch_level(
+                               class="form-control") }}
+                            <small class="text-muted">
+                                {{ form.squelch_level
+                                   .description }}
+                            </small>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            {{ form.mic_gain.label(
+                               class="form-label") }}
+                            <div class="input-group">
+                                {{ form.mic_gain(
+                                   class="form-control") }}
+                                <span class="input-group-text">
+                                    %
+                                </span>
+                            </div>
+                            <small class="text-muted">
+                                {{ form.mic_gain.description
+                                }}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# ------------------------------------------------ #}
+            {# TX / PTT                                          #}
+            {# ------------------------------------------------ #}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-microphone me-1"></i>
+                        Transmit / PTT Settings
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.ptt_port.label(
+                               class="form-label") }}
+                            {{ form.ptt_port(
+                               class="form-control",
+                               placeholder=
+                                   "/dev/ttyUSB0") }}
+                            <small class="text-muted">
+                                {{ form.ptt_port.description
+                                }}
+                            </small>
+                        </div>
+
+                        <div class="col-md-3 mb-3">
+                            {{ form.tx_power.label(
+                               class="form-label") }}
+                            {{ form.tx_power(
+                               class="form-control") }}
+                            <small class="text-muted">
+                                {{ form.tx_power.description
+                                }}
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning small">
+                        <i class="fas fa-exclamation-triangle
+                                  me-1"></i>
+                        <strong>TX Requirements:</strong>
+                        RTL-SDR is receive-only. For
+                        transmit you need a HackRF One,
+                        PlutoSDR, or use Radio mode with
+                        a compatible transceiver and
+                        serial PTT control.
+                    </div>
+                </div>
+            </div>
+
+            {# ------------------------------------------------ #}
+            {# Logging                                           #}
+            {# ------------------------------------------------ #}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-book me-1"></i>
+                        Logging
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            {{ form.callsign.label(
+                               class="form-label") }}
+                            {{ form.callsign(
+                               class="form-control",
+                               placeholder="W1ABC") }}
+                        </div>
+
+                        <div class="col-md-4
+                                    d-flex
+                                    align-items-end">
+                            <div class="form-check mb-3">
+                                {{ form.auto_log_calls(
+                                   class=
+                                       "form-check-input") }}
+                                {{ form.auto_log_calls
+                                   .label(
+                                       class=
+                                       "form-check-label") }}
+                                <div class="form-text">
+                                    {{ form.auto_log_calls
+                                       .description }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            {{ form.log_min_duration_s
+                               .label(class="form-label") }}
+                            <div class="input-group">
+                                {{ form.log_min_duration_s(
+                                   class="form-control") }}
+                                <span class="input-group-text">
+                                    sec
+                                </span>
+                            </div>
+                            <small class="text-muted">
+                                {{ form.log_min_duration_s
+                                   .description }}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end
+                        gap-2 mb-4">
+                <a href="{{ url_for('DMR.index') }}"
+                   class="btn btn-secondary">
+                    Cancel
+                </a>
+                {{ form.submit(class="btn btn-primary") }}
+            </div>
+        </form>
+    </div>
+
+    {# Info panel #}
+    <div class="col-md-4">
+
+        {# Current status #}
+        <div class="card mb-3">
+            <div class="card-header bg-dark text-white">
+                <h6 class="mb-0">Current Status</h6>
+            </div>
+            <div class="card-body small">
+                <dl class="row mb-0">
+                    <dt class="col-5">Receive:</dt>
+                    <dd class="col-7">
+                        {% if status.get('running') %}
+                        <span class="text-success">
+                            ✓ Active
+                        </span>
+                        {% else %}
+                        <span class="text-muted">
+                            Stopped
+                        </span>
+                        {% endif %}
+                    </dd>
+
+                    <dt class="col-5">Decoder:</dt>
+                    <dd class="col-7">
+                        {% set di = status.get(
+                            'decoder', {}) %}
+                        {% if di.get('available') %}
+                        <span class="text-success">
+                            ✓ {{ di.name }}
+                        </span>
+                        {% else %}
+                        <span class="text-warning">
+                            Demo mode
+                        </span>
+                        {% endif %}
+                    </dd>
+
+                    <dt class="col-5">Freq:</dt>
+                    <dd class="col-7 font-monospace">
+                        {{ status.get('frequency',
+                           '—') }} MHz
+                    </dd>
+
+                    <dt class="col-5">CC/TS/TG:</dt>
+                    <dd class="col-7 font-monospace">
+                        {{ status.get('color_code','?') }}/
+                        {{ status.get('timeslot','?') }}/
+                        {{ status.get('talkgroup','?') }}
+                    </dd>
+                </dl>
+            </div>
+        </div>
+
+        {# Decoder availability #}
+        <div class="card mb-3">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0">
+                    <i class="fas fa-code me-1"></i>
+                    Decoder Status
+                </h6>
+            </div>
+            <div class="card-body small">
+                {% for name, info in
+                   decoder_info.items() %}
+                <div class="d-flex
+                            justify-content-between
+                            mb-1">
+                    <span class="font-monospace">
+                        {{ name }}
+                    </span>
+                    {% if info.available %}
+                    <span class="text-success">
+                        ✓ {{ info.path }}
+                    </span>
+                    {% else %}
+                    <span class="text-muted">
+                        ✗ Not found
+                    </span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+
+                <hr class="my-2">
+                <p class="mb-1">
+                    <strong>Install DSD:</strong>
+                </p>
+                <pre class="bg-dark text-success
+                            p-2 rounded small">
+apt-get install dsd
+# or build from source:
+# github.com/szechyjs/dsd</pre>
+            </div>
+        </div>
+
+        {# DMR protocol reference #}
+        <div class="card mb-3">
+            <div class="card-header bg-secondary
+                        text-white">
+                <h6 class="mb-0">
+                    DMR Protocol Reference
+                </h6>
+            </div>
+            <div class="card-body small">
+                <table class="table table-sm mb-0">
+                    <tr>
+                        <td class="text-muted">
+                            Modulation
+                        </td>
+                        <td>4FSK</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">
+                            Channel BW
+                        </td>
+                        <td>12.5 kHz</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">
+                            Symbol Rate
+                        </td>
+                        <td>4800 Bd</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">
+                            Slot duration
+                        </td>
+                        <td>30 ms</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">
+                            Frame
+                        </td>
+                        <td>2 slots / 60 ms</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">
+                            Superframe
+                        </td>
+                        <td>6 frames / 360 ms</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">
+                            Bits/slot
+                        </td>
+                        <td>144 bits</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Codec</td>
+                        <td>AMBE+2 / mbe</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">
+                            Voice bits
+                        </td>
+                        <td>2450 bps</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">
+                            FEC
+                        </td>
+                        <td>BPTC(196,96)</td>
+                    </tr>
+                </table>
+                <hr class="my-2">
+                <a href="https://qradiolink.org/open-source-DMR-transceiver-implementation.html"
+                   target="_blank"
+                   class="btn btn-outline-secondary
+                          btn-sm w-100">
+                    <i class="fas fa-external-link-alt
+                              me-1"></i>
+                    QRadioLink DMR Reference
+                </a>
+            </div>
+        </div>
+
+        {# Codec info #}
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h6 class="mb-0">Voice Codecs</h6>
+            </div>
+            <div class="card-body small">
+                {% for codec_name, info in
+                   codecs.items() %}
+                <div class="mb-2">
+                    <strong>{{ codec_name }}</strong>
+                    <br>
+                    <span class="text-muted">
+                        {{ info.description }}
+                    </span>
+                    <br>
+                    <span class="badge bg-secondary">
+                        {{ info.bitrate_bps }} bps
+                    </span>
+                    <small class="text-muted d-block">
+                        {{ info.note }}
+                    </small>
+                </div>
+                {% if not loop.last %}
+                <hr class="my-1">
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
