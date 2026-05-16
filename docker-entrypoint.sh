@@ -140,7 +140,8 @@ fi
 # ---------------------------------------------------------------
 # RTL-SDR detection
 # ---------------------------------------------------------------
-echo -e "\n${BLUE}--- RTL-SDR Status ---${NC}"
+echo -e "\n${YELLOW}[6/7] Initializing devices...${NC}"
+echo -e "\n${BLUE}[6a/7]--- RTL-SDR Status ---${NC}"
 
 if [ -d "/dev/bus/usb" ]; then
     echo -e "${GREEN}  ✓ /dev/bus/usb accessible${NC}"
@@ -201,54 +202,54 @@ fi
 # ---------------------------------------------------------------
 # RTL-SDR detection and diagnosis
 # ---------------------------------------------------------------
-echo -e "\n${BLUE}--- RTL-SDR Status ---${NC}"
+# echo -e "\n${BLUE}--- RTL-SDR Status ---${NC}"
 
-# Check if /dev/bus/usb is accessible inside the container
-if [ -d "/dev/bus/usb" ]; then
-    echo "✓ /dev/bus/usb is accessible"
+# # Check if /dev/bus/usb is accessible inside the container
+# if [ -d "/dev/bus/usb" ]; then
+#     echo "✓ /dev/bus/usb is accessible"
 
-    # Count USB devices visible in container
-    USB_COUNT=$(find /dev/bus/usb -type c 2>/dev/null | wc -l)
-    echo "  USB device nodes visible: $USB_COUNT"
+#     # Count USB devices visible in container
+#     USB_COUNT=$(find /dev/bus/usb -type c 2>/dev/null | wc -l)
+#     echo "  USB device nodes visible: $USB_COUNT"
 
-    # Try to find RTL-SDR using lsusb if available
-    if command -v lsusb >/dev/null 2>&1; then
-        RTL_USB=$(lsusb 2>/dev/null | \
-            grep -iE "0bda:2832|0bda:2838|0bda:2839|realtek" || true)
-        if [ -n "$RTL_USB" ]; then
-            echo -e "${GREEN}  ✓ RTL-SDR detected via lsusb:${NC}"
-            echo "    $RTL_USB"
-        else
-            echo -e "${YELLOW}  ⚠ RTL-SDR not found via lsusb${NC}"
-        fi
-    fi
+#     # Try to find RTL-SDR using lsusb if available
+#     if command -v lsusb >/dev/null 2>&1; then
+#         RTL_USB=$(lsusb 2>/dev/null | \
+#             grep -iE "0bda:2832|0bda:2838|0bda:2839|realtek" || true)
+#         if [ -n "$RTL_USB" ]; then
+#             echo -e "${GREEN}  ✓ RTL-SDR detected via lsusb:${NC}"
+#             echo "    $RTL_USB"
+#         else
+#             echo -e "${YELLOW}  ⚠ RTL-SDR not found via lsusb${NC}"
+#         fi
+#     fi
 
-    # Try rtl_test if available in this container
-    if command -v rtl_test >/dev/null 2>&1; then
-        echo "  Testing RTL-SDR with rtl_test..."
-        RTL_TEST_OUTPUT=$(timeout 5 rtl_test -t 2>&1 || true)
-        if echo "$RTL_TEST_OUTPUT" | \
-                grep -q "Found.*device\|No supported"; then
-            if echo "$RTL_TEST_OUTPUT" | \
-                    grep -q "Found.*device"; then
-                echo -e "${GREEN}  ✓ RTL-SDR responds to rtl_test${NC}"
-            else
-                echo -e "${YELLOW}  ⚠ rtl_test: No RTL-SDR found${NC}"
-                echo "    This container uses OpenWebRX sidecar"
-                echo "    for SDR. RTL-SDR should be passed to"
-                echo "    the openwebrx container instead."
-            fi
-        fi
-    fi
+#     # Try rtl_test if available in this container
+#     if command -v rtl_test >/dev/null 2>&1; then
+#         echo "  Testing RTL-SDR with rtl_test..."
+#         RTL_TEST_OUTPUT=$(timeout 5 rtl_test -t 2>&1 || true)
+#         if echo "$RTL_TEST_OUTPUT" | \
+#                 grep -q "Found.*device\|No supported"; then
+#             if echo "$RTL_TEST_OUTPUT" | \
+#                     grep -q "Found.*device"; then
+#                 echo -e "${GREEN}  ✓ RTL-SDR responds to rtl_test${NC}"
+#             else
+#                 echo -e "${YELLOW}  ⚠ rtl_test: No RTL-SDR found${NC}"
+#                 echo "    This container uses OpenWebRX sidecar"
+#                 echo "    for SDR. RTL-SDR should be passed to"
+#                 echo "    the openwebrx container instead."
+#             fi
+#         fi
+#     fi
 
-else
-    echo -e "${YELLOW}  ⚠ /dev/bus/usb not accessible${NC}"
-    echo "    RTL-SDR is handled by the openwebrx sidecar."
-    echo "    Ensure docker-compose.yml has:"
-    echo "    devices:"
-    echo "      - /dev/bus/usb:/dev/bus/usb"
-    echo "    in the openwebrx service block."
-fi
+# else
+#     echo -e "${YELLOW}  ⚠ /dev/bus/usb not accessible${NC}"
+#     echo "    RTL-SDR is handled by the openwebrx sidecar."
+#     echo "    Ensure docker-compose.yml has:"
+#     echo "    devices:"
+#     echo "      - /dev/bus/usb:/dev/bus/usb"
+#     echo "    in the openwebrx service block."
+# fi
 
 # ---------------------------------------------------------------
 # Check if kernel drivers are blocking the device
@@ -281,7 +282,7 @@ fi
 # ---------------------------------------------------------------
 # GPS device
 # ---------------------------------------------------------------
-echo -e "\n${BLUE}--- GPS Status ---${NC}"
+echo -e "\n${BLUE}[6b/7]--- GPS Status ---${NC}"
 if [ "$USE_MOCK_DEVICES" = "false" ]; then
     if [ -e "$GPS_SERIAL_PORT" ]; then
         echo -e "${GREEN}  ✓ GPS device: $GPS_SERIAL_PORT${NC}"
@@ -296,7 +297,7 @@ fi
 # ---------------------------------------------------------------
 # Radio device
 # ---------------------------------------------------------------
-echo -e "\n${BLUE}--- Radio Status ---${NC}"
+echo -e "\n${BLUE}[6c/7]--- Radio Status ---${NC}"
 if [ "$USE_MOCK_DEVICES" = "false" ]; then
     if [ -e "$RADIO_PORT" ]; then
         echo -e "${GREEN}  ✓ Radio device: $RADIO_PORT${NC}"
@@ -313,7 +314,7 @@ fi
 # ---------------------------------------------------------------
 # Go toolchain check (for GrayWolf and other Go plugins)
 # ---------------------------------------------------------------
-echo -e "\n${BLUE}--- Go Toolchain ---${NC}"
+echo -e "\n${BLUE}[6d/7]--- Checking Go Toolchain ---${NC}"
 
 if command -v go >/dev/null 2>&1; then
     GO_INSTALLED=$(go version 2>/dev/null | \
@@ -351,7 +352,7 @@ fi
 # ---------------------------------------------------------------
 # OpenWebRX sidecar availability check
 # ---------------------------------------------------------------
-echo -e "\n${BLUE}--- OpenWebRX Sidecar ---${NC}"
+echo -e "\n${BLUE}[6e/7]--- Check OpenWebRX Sidecar ---${NC}"
 OWRX_URL="${OPENWEBRX_URL:-http://openwebrx:8073}"
 echo "  OpenWebRX URL: $OWRX_URL"
 
@@ -378,7 +379,7 @@ fi
 # sound card in Docker we create a virtual null sink.
 # This allows FLdigi to initialise and XML-RPC to start.
 # =================================================================
-echo -e "\n${YELLOW}[6a/7] Starting PulseAudio virtual audio...${NC}"
+echo -e "\n${YELLOW}[6f/7] Starting PulseAudio virtual audio...${NC}"
 
 # Kill any stale PulseAudio instance
 pulseaudio --kill 2>/dev/null || true
@@ -454,7 +455,7 @@ echo -e "${GREEN}  ✓ ALSA configured for PulseAudio${NC}"
 # Start Xvfb virtual display for GUI applications
 # FLdigi and QSSTV require an X11 display to launch.
 # =================================================================
-echo -e "\n${YELLOW}[6b/7] Starting virtual display (Xvfb)...${NC}"
+echo -e "\n${YELLOW}[6g/7] Starting virtual display (Xvfb)...${NC}"
 
 # Ensure X11 socket directory exists with correct permissions
 # This is needed because /tmp/.X11-unix may not exist yet
@@ -505,7 +506,7 @@ fi
 # =================================================================
 # Start VNC server for remote GUI access
 # =================================================================
-echo -e "\n${YELLOW}[6c/7] Starting VNC server...${NC}"
+echo -e "\n${YELLOW}[6h/7] Starting VNC server...${NC}"
 
 if command -v vncserver >/dev/null 2>&1; then
     # Start VNC server on display :99 (same as Xvfb)
@@ -532,7 +533,7 @@ fi
 # =================================================================
 # Initialize FLdigi XML-RPC configuration
 # =================================================================
-echo -e "\n${YELLOW}[6d/7] Configuring FLdigi XML-RPC...${NC}"
+echo -e "\n${YELLOW}[6i/7] Configuring FLdigi XML-RPC...${NC}"
 
 if command -v fldigi >/dev/null 2>&1; then
     # FLdigi config directory
@@ -561,113 +562,6 @@ if command -v fldigi >/dev/null 2>&1; then
     fi
 else
     echo -e "${YELLOW}  ⚠ FLdigi not installed${NC}"
-fi
-
-# =================================================================
-# [6e/7] Detecting USB Sound Card (SoundBlaster Play 3)
-# =================================================================
-echo -e "\n${YELLOW}[6e/7] Detecting USB audio devices...${NC}"
-
-# Find the SoundBlaster Play 3 (USB Vendor 041e = Creative Labs)
-# Also matches other USB audio class devices
-USB_AUDIO_CARD=""
-USB_AUDIO_DEV_IN=""
-USB_AUDIO_DEV_OUT=""
-
-if command -v aplay >/dev/null 2>&1; then
-    echo "Available audio output devices:"
-    aplay -l 2>/dev/null | grep -E "card|USB" | head -10 || \
-        echo "  (none found)"
-
-    # Find SoundBlaster Play 3 or any USB audio device
-    SB_CARD=$(aplay -l 2>/dev/null | \
-        grep -iE "soundblaster|creative|usb.*audio|SB.*Play" | \
-        head -1 | \
-        grep -oP 'card \K[0-9]+' || echo "")
-
-    if [ -n "$SB_CARD" ]; then
-        USB_AUDIO_DEV_OUT="hw:${SB_CARD},0"
-        echo -e "${GREEN}  ✓ USB audio output detected: card ${SB_CARD} -> ${USB_AUDIO_DEV_OUT}${NC}"
-    else
-        # Try any USB audio card
-        USB_CARD=$(aplay -l 2>/dev/null | \
-            grep -i "usb\|USB" | \
-            head -1 | \
-            grep -oP 'card \K[0-9]+' || echo "")
-        if [ -n "$USB_CARD" ]; then
-            USB_AUDIO_DEV_OUT="hw:${USB_CARD},0"
-            echo -e "${GREEN}  ✓ USB audio card detected: card ${USB_CARD} -> ${USB_AUDIO_DEV_OUT}${NC}"
-        else
-            echo -e "${YELLOW}  ⚠ No USB audio card found${NC}"
-        fi
-    fi
-fi
-
-if command -v arecord >/dev/null 2>&1; then
-    echo "Available audio input devices:"
-    arecord -l 2>/dev/null | grep -E "card|USB" | head -10 || \
-        echo "  (none found)"
-
-    SB_CARD_IN=$(arecord -l 2>/dev/null | \
-        grep -iE "soundblaster|creative|usb.*audio|SB.*Play" | \
-        head -1 | \
-        grep -oP 'card \K[0-9]+' || echo "")
-
-    if [ -n "$SB_CARD_IN" ]; then
-        USB_AUDIO_DEV_IN="hw:${SB_CARD_IN},0"
-        echo -e "${GREEN}  ✓ USB audio input detected: card ${SB_CARD_IN} -> ${USB_AUDIO_DEV_IN}${NC}"
-    elif [ -n "$USB_CARD" ]; then
-        USB_AUDIO_DEV_IN="hw:${USB_CARD},0"
-    fi
-fi
-
-# Export for use by the application and plugins
-# Only set if not already overridden by environment
-if [ -z "$AUDIO_OUTPUT_DEVICE" ] && [ -n "$USB_AUDIO_DEV_OUT" ]; then
-    export AUDIO_OUTPUT_DEVICE="$USB_AUDIO_DEV_OUT"
-    echo "  AUDIO_OUTPUT_DEVICE set to: $AUDIO_OUTPUT_DEVICE"
-fi
-
-if [ -z "$AUDIO_INPUT_DEVICE" ] && [ -n "$USB_AUDIO_DEV_IN" ]; then
-    export AUDIO_INPUT_DEVICE="$USB_AUDIO_DEV_IN"
-    echo "  AUDIO_INPUT_DEVICE set to: $AUDIO_INPUT_DEVICE"
-fi
-
-# Configure ALSA to use USB card as default
-if [ -n "$USB_AUDIO_DEV_OUT" ] || [ -n "$USB_AUDIO_DEV_IN" ]; then
-    CARD_NUM="${USB_CARD:-${SB_CARD:-0}}"
-
-    cat > /home/hamradio/.asoundrc << ASOUNDRC
-# ALSA configuration — USB SoundBlaster Play 3
-# Auto-generated by docker-entrypoint.sh
-# Card number: ${CARD_NUM}
-
-pcm.!default {
-    type asym
-    playback.pcm {
-        type plug
-        slave.pcm "hw:${CARD_NUM},0"
-    }
-    capture.pcm {
-        type plug
-        slave.pcm "hw:${CARD_NUM},0"
-    }
-}
-
-ctl.!default {
-    type hw
-    card ${CARD_NUM}
-}
-
-pcm.usb_audio {
-    type plug
-    slave.pcm "hw:${CARD_NUM},0"
-}
-
-pcm.null { type null }
-ASOUNDRC
-
-    echo -e "${GREEN}  ✓ ALSA configured for USB audio card ${CARD_NUM}${NC}"
 fi
 # =================================================================
 # [7/7] Starting application
