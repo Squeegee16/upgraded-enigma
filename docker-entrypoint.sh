@@ -513,7 +513,7 @@ if command -v vncserver >/dev/null 2>&1; then
     # SecurityTypes None allows passwordless access (for internal use only)
     export VNCPASSWD="hamradio"
     vncserver :99 \
-        -geometry 1920x1080 \
+        -geometry 1024x768 \
         -depth 24 \
         -SecurityTypes None \
         2>/dev/null &
