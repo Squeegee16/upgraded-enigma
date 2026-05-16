@@ -402,7 +402,20 @@ docker compose run --rm app \
     FLASK_HOST  0.0.0.0  Listen address
     FLASK_PORT  5000  Listen port
     TZ  UTC	Server  timezone
+### uart config
+# On the Raspberry Pi host, edit cmdline.txt
+# For Pi 4/5 with Ubuntu/Pi OS:
+sudo nano /boot/firmware/cmdline.txt
 
+# Add to the SAME LINE (do not add a new line):
+# cgroup_enable=memory cgroup_memory=1
+
+# Example result:
+# console=serial0,115200 console=tty1 root=PARTUUID=xxx
+# rootfstype=ext4 fsck.repair=yes rootwait
+# cgroup_enable=memory cgroup_memory=1
+
+sudo reboot
 ### Finding Your Hamlib Radio Model Number
 ##### List all supported radios
     rigctl --list | grep -i "yaesu\|icom\|kenwood"
