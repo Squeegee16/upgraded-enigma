@@ -113,6 +113,17 @@ RUN apt-get update && apt-get install -y \
     libtool \
     && rm -rf /var/lib/apt/lists/*
 
+# Audio libraries for USB sound card support
+# Required by sounddevice Python package
+# SoundBlaster Play 3 uses standard USB Audio Class
+# and is supported by ALSA/PulseAudio automatically
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    portaudio19-dev \
+    libportaudio2 \
+    alsa-utils \
+    && rm -rf /var/lib/apt/lists/*
+
 # ============================================================
 # Package Group 2: USB and device support
 # Required for RTL-SDR, GPS serial, and radio CAT control.
