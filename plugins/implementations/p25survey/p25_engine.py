@@ -47,8 +47,13 @@ from datetime import datetime
 from collections import deque
 
 from plugins.implementations.p25survey.p25_constants import (
-    P25_DUID, TSBK_OPCODES, TRUNKING_TYPES,
-    ENCRYPTION_ALGOS, NAC_SPECIAL, P25_SYNC_WORD,
+    P25_DUID,
+    TSBK_OPCODES,
+    TRUNKING_TYPES,
+    ENCRYPTION_ALGOS,
+    NAC_SPECIAL,
+    NAC_DEFAULT,          # ← ADD THIS
+    P25_SYNC_WORD,
     SCAN_STATES,
 )
 
