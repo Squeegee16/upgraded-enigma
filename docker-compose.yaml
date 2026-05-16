@@ -21,6 +21,14 @@
 # Named Volumes
 # ============================================================
 volumes:
+    # Single volume covers all /data subdirectories
+    - app_data:/data
+    - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    - ~/.Xauthority:/tmp/.Xauthority:ro
+  # USB device passthrough for GPS and Radio CAT port.
+  # RTL-SDR is passed to openwebrx service below.
+  # Uncomment when real hardware is connected.
+  #
   # Single volume for all application persistent data.
   # Subdirectories created by entrypoint script:
   #   /data/db          - SQLite database
@@ -97,21 +105,7 @@ services:
       - AUDIO_DEVICE=${AUDIO_DEVICE:-}
       - AUDIO_INPUT_DEVICE=${AUDIO_INPUT_DEVICE:-}
       - AUDIO_OUTPUT_DEVICE=${AUDIO_OUTPUT_DEVICE:-}
-
-    volumes:
-      # Single volume covers all /data subdirectories
-      - app_data:/data
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - ~/.Xauthority:/tmp/.Xauthority:ro
-    # USB device passthrough for GPS and Radio CAT port.
-    # RTL-SDR is passed to openwebrx service below.
-    # Uncomment when real hardware is connected.
-    #
-    devices:
-      - /dev/bus/usb:/dev/bus/usb
-    #   - /dev/ttyUSB0:/dev/ttyUSB0   # GPS
-    #   - /dev/ttyUSB1:/dev/ttyUSB1   # Radio CAT
-    
+   
     privileged: true
     
     networks:
@@ -151,7 +145,6 @@ services:
     labels:
       - "com.hamradio.service=app"
       - "com.hamradio.version=0.2.0"
-
 
   # ==========================================================
   # OpenWebRX SDR Receiver - Official Docker Image
