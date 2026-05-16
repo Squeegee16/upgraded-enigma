@@ -17,8 +17,6 @@
 #   If OpenWebRX is not used, assign it to the app service
 #   by moving the devices block from openwebrx to app.
 
-version: '3.8'
-
 # ============================================================
 # Named Volumes
 # ============================================================
@@ -72,52 +70,33 @@ services:
       - /dev/ttyAMA0:/dev/ttyAMA0    # Pi hardware UART
       # - /dev/ttyUSB0:/dev/ttyUSB0    # USB GPS dongle
     environment:
-      # Flask configuration
       - FLASK_ENV=${FLASK_ENV:-production}
       - FLASK_DEBUG=${FLASK_DEBUG:-0}
-      - DISPLAY=host.docker.internal:99
-
-      # Database
       - DATABASE_URL=sqlite:////data/db/ham_radio.db
-
-      # Device configuration
-      # Set USE_MOCK_DEVICES=false when real hardware is connected
       - USE_MOCK_DEVICES=${USE_MOCK_DEVICES:-true}
       - GPS_SOURCE=${GPS_SOURCE:-uart}
-      - GPS_SERIAL_PORT=${GPS_SERIAL_PORT:-/dev/ttyAMA0}
+      - GPS_SERIAL_PORT=${GPS_SERIAL_PORT:-/dev/ttyUSB0}
       - GPS_BAUD_RATE=${GPS_BAUD_RATE:-9600}
-      - GPSD_HOST=${GPSD_HOST:-127.0.0.1}
-      - GPSD_PORT=${GPSD_PORT:-2947}
-      - GRID_PRECISION=${GRID_PRECISION:-6}
-      # radio
       - RADIO_MODEL=${RADIO_MODEL:-1035}
       - RADIO_PORT=${RADIO_PORT:-/dev/ttyUSB1}
       - RADIO_BAUD_RATE=${RADIO_BAUD_RATE:-38400}
       - SDR_DEVICE_INDEX=${SDR_DEVICE_INDEX:-0}
       - SDR_SAMPLE_RATE=${SDR_SAMPLE_RATE:-2048000}
-
-      # SSL configuration
       - USE_SSL=${USE_SSL:-true}
       - SSL_CERT=/data/certs/cert.pem
       - SSL_KEY=/data/certs/key.pem
-
-      # Server
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=5000
-
-      # Callsign database
       - VALIDATE_CALLSIGNS=${VALIDATE_CALLSIGNS:-false}
-
-      # Timezone
       - TZ=${TZ:-UTC}
-
-      # Tells plugin installers not to attempt runtime pip/apt
       - PLUGIN_SKIP_PIP_INSTALL=true
-      
-      # x display gui
-      - XAUTHORITY=/tmp/.Xauthority
-      # OpenWebRX sidecar URL (internal Docker network)
       - OPENWEBRX_URL=http://openwebrx:8073
+      # USB Sound Card: Creative SoundBlaster Play 3
+      # Device is auto-detected by the entrypoint script.
+      # Override here if auto-detection picks wrong card:
+      - AUDIO_DEVICE=${AUDIO_DEVICE:-}
+      - AUDIO_INPUT_DEVICE=${AUDIO_INPUT_DEVICE:-}
+      - AUDIO_OUTPUT_DEVICE=${AUDIO_OUTPUT_DEVICE:-}
 
     volumes:
       # Single volume covers all /data subdirectories
@@ -128,10 +107,13 @@ services:
     # RTL-SDR is passed to openwebrx service below.
     # Uncomment when real hardware is connected.
     #
-    # devices:
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
     #   - /dev/ttyUSB0:/dev/ttyUSB0   # GPS
     #   - /dev/ttyUSB1:/dev/ttyUSB1   # Radio CAT
-
+    
+    privileged: true
+    
     networks:
       - hamradio_net
 
@@ -154,11 +136,17 @@ services:
         max-file: "3"
 
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request, ssl; ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE; urllib.request.urlopen('https://localhost:5000/', context=ctx).read()"]
+      test:
+        - CMD
+        - python
+        - -c
+        - >
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:5000/')
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 120s
+      retries: 3
+      start_period: 60s
 
     labels:
       - "com.hamradio.service=app"
@@ -190,9 +178,9 @@ services:
     # Do NOT also assign it to the app service above.
     # Uncomment when RTL-SDR dongle is connected.
     #
-    # devices:
-    #   - /dev/bus/usb:/dev/bus/usb
-    # privileged: true
+    devices:
+     - /dev/bus/usb:/dev/bus/usb
+    privileged: true
 
     networks:
       - hamradio_net
@@ -242,14 +230,12 @@ services:
           if cp /data/db/ham_radio.db "$${BF}"; then
             gzip "$${BF}";
             echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Created: $${BF}.gz";
-          else
-            echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] ERROR: backup copy failed";
           fi;
           find /data/backups -name "ham_radio_*.db.gz" \
             -mtime +$${BACKUP_RETENTION} -delete;
           echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Pruned backups older than $${BACKUP_RETENTION}d";
         else
-          echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] DB not found at /data/db/ham_radio.db";
+          echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] DB not found";
         fi;
         sleep $${BACKUP_INTERVAL};
       done
