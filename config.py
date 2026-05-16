@@ -75,11 +75,17 @@ class Config:
     HOST = os.environ.get('FLASK_HOST', '0.0.0.0')
     PORT = int(os.environ.get('FLASK_PORT', '5000'))
     DEBUG = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-
+    # Audio Device Configuration
+    # USB SoundBlaster Play 3 or other USB audio card
+    # These are read from environment variables set by
+    # the entrypoint script's auto-detection, or can
+    # be set manually in .env
+    AUDIO_OUTPUT_DEVICE = os.environ.get('AUDIO_OUTPUT_DEVICE', '')
+    AUDIO_INPUT_DEVICE = os.environ.get('AUDIO_INPUT_DEVICE', '')
+    # Generic audio device (used when in/out are the same)
+    AUDIO_DEVICE = os.environ.get('AUDIO_DEVICE', '')
 # Callsign Database Configuration
-    CALLSIGN_DB_URL = (
-        'https://apc-cap.ic.gc.ca/datafiles/amateur_delim.zip'
-    )
+    CALLSIGN_DB_URL = ('https://apc-cap.ic.gc.ca/datafiles/amateur_delim.zip')
 
     # Set to True to enforce Canadian DB validation on register
     VALIDATE_CALLSIGNS = os.environ.get(
