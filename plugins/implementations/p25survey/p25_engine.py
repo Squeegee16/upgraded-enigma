@@ -1077,18 +1077,35 @@ class P25SurveyEngine:
             self.start_receive()
 
     def set_nac(self, nac):
-        """Set Network Access Code filter."""
+        """
+        Set Network Access Code filter.
+
+        Always converts to integer internally regardless
+        of whether a hex string or integer is passed.
+
+        Args:
+            nac: NAC as hex string ('293', '0x293')
+                 or integer (659)
+        """
         try:
             if isinstance(nac, str):
-                self._channel['nac'] = int(nac, 16)
+                clean = nac.strip().lstrip('0x').lstrip('0X')
+                self._channel['nac'] = (
+                    int(clean, 16) if clean else 0
+                )
             else:
                 self._channel['nac'] = int(nac)
+
             self._add_log(
                 f"NAC filter: "
                 f"0x{self._channel['nac']:03X}"
             )
-        except ValueError:
-            pass
+        except (ValueError, TypeError) as e:
+            self._add_log(
+                f"Invalid NAC value '{nac}': {e}",
+                'warning'
+            )
+            self._channel['nac'] = 0
 
     def set_scan_mode(self, mode):
         """Set scan mode (conventional/survey/trunked)."""
@@ -1125,16 +1142,38 @@ class P25SurveyEngine:
                 if self._active_call else None
             )
 
-        tgs = self._stats['talkgroups_heard']
-        units = self._stats['units_heard']
+        tg = self._channel['talkgroup']
+        tg_name = COMMON_TALKGROUPS.get(tg, '')
+
+        # FIX: Convert NAC to int safely before formatting.
+        # Config stores NAC as a hex string (e.g. '293')
+        # or integer. We need int for :03X format code.
+        raw_nac = self._channel.get('nac', 0)
+        try:
+            if isinstance(raw_nac, str):
+                # Handle '0x293', '293', or '0' formats
+                nac_int = int(
+                    raw_nac, 16
+                ) if raw_nac.strip() else 0
+            else:
+                nac_int = int(raw_nac)
+        except (ValueError, TypeError):
+            nac_int = 0
+
+        decoder_info = {
+            'name': self._decoder_name or 'None',
+            'path': self._decoder_path or '',
+            'available': self._decoder_name is not None,
+        }
 
         return {
             'running': self._running,
             'scan_state': self._scan_state,
             'source': self._source,
             'frequency': self._channel['frequency'],
-            'nac': f'0x{self._channel["nac"]:03X}',
-            'nac_int': self._channel['nac'],
+            # FIX: format nac_int (integer), not raw_nac
+            'nac': f'0x{nac_int:03X}',
+            'nac_int': nac_int,
             'phase': self._channel['phase'],
             'scan_mode': self._channel['mode'],
             'active_call': active,
@@ -1156,27 +1195,25 @@ class P25SurveyEngine:
                 'systems_found': (
                     self._stats['systems_found']
                 ),
-                'talkgroups_heard': len(tgs),
-                'units_heard': len(units),
+                'talkgroups_heard': len(
+                    self._stats['talkgroups_heard']
+                ),
+                'units_heard': len(
+                    self._stats['units_heard']
+                ),
                 'ber_avg': self._stats['ber_avg'],
                 'active_since': (
                     self._stats['active_since']
                 ),
             },
-            'decoder': {
-                'name': self._decoder_name or 'None',
-                'path': self._decoder_path or '',
-                'available': (
-                    self._decoder_name is not None
-                ),
-            },
+            'decoder': decoder_info,
             'survey_freq_count': len(
                 self._survey_freqs
             ),
             'survey_index': self._survey_index,
             'last_update': datetime.utcnow().isoformat(),
         }
-
+    
     def get_frames(self, limit=50, nac_filter=None):
         """Get recent decoded frames."""
         with self._frames_lock:
