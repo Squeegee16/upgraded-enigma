@@ -792,5 +792,12 @@ $(document).ready(function() {
     }, 30000);
     {% endif %}
 });
+// Register navigation warning for devices used by DMR
+$(document).ready(function() {
+    registerDeviceNavigationGuard(
+        'DMR',
+        ['sdr', 'radio']  // devices this plugin uses
+    );
+});
 </script>
 {% endblock %}
