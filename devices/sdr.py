@@ -39,24 +39,35 @@ class RTLSDRDevice(BaseDevice):
         """Test connection to RTL-SDR device."""
         if self.use_mock:
             return self.device.connect()
-        
+
         try:
-            # Test by querying device info
             result = subprocess.run(
                 ['rtl_test', '-t'],
                 capture_output=True,
-                text=True,
+                # FIX: Use errors='replace' to handle
+                # non-UTF-8 bytes in rtl_test output
                 timeout=5
             )
+            # Decode with error replacement instead of
+            # strict UTF-8 which causes the codec error
+            stdout = result.stdout.decode(
+                'utf-8', errors='replace'
+            )
+            stderr = result.stderr.decode(
+                'utf-8', errors='replace'
+            )
             self.connected = result.returncode == 0
-            if self.connected:
-                print(f"RTL-SDR device {self.device_index} connected")
             return self.connected
+
         except FileNotFoundError:
-            print("rtl_test not found, falling back to mock SDR device")
+            print(
+                "rtl_test not found, "
+                "falling back to mock SDR device"
+            )
             self.use_mock = True
             self.device = MockSDRDevice()
             return self.device.connect()
+
         except Exception as e:
             print(f"RTL-SDR connection error: {e}")
             print("Falling back to mock SDR device")
