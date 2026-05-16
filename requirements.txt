@@ -28,7 +28,6 @@ requests==2.31.0
 urllib3==2.1.0
 websockets==12.0
 aiohttp==3.9.1
-
 adif-io==0.6.0
 
 # System monitoring (used by plugins)
@@ -40,10 +39,19 @@ Pillow==10.2.0
 # File monitoring (QSSTV, SatDump plugins)
 watchdog==4.0.0
 
-# Numerical computing (SDR, SatDump)
+# Numerical / DSP
 numpy==1.26.4
 
-# RTL-SDR Python bindings (optional — for Morse/SDR plugins)
-# Requires librtlsdr system library:
-#   apt-get install librtlsdr-dev
+# DSP filtering (for Morse and P25 plugins)
+scipy==1.12.0
+
+# Audio I/O — SoundBlaster Play 3 and other USB cards
+# Requires portaudio system library:
+#   apt-get install portaudio19-dev libportaudio2
+sounddevice==0.4.6
+
+# RTL-SDR Python bindings
+# Requires librtlsdr system library (already built
+# from source in Dockerfile):
+#   RUN apt-get install librtlsdr-dev
 pyrtlsdr==0.2.93
