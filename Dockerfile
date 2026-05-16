@@ -263,7 +263,8 @@ RUN set -eux; \
         libasound2 \
         libsamplerate0 \
         libsndfile1 \
-        portaudio19-dev; \
+        portaudio19-dev \
+        flrig \
     rm -rf /var/lib/apt/lists/*; \
     if command -v fldigi >/dev/null 2>&1; then \
         echo "✓ FLdigi installed: $(fldigi --version 2>&1 | head -1)"; \
