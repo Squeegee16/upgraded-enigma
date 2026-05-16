@@ -1,8 +1,5 @@
 """
-DMR Plugin Main
-================
-Flask plugin class for DMR (Digital Mobile Radio)
-receive, transmit, and logbook integration.
+DMR Digital Mobile Radio Plugin Main
 """
 
 import os
@@ -17,23 +14,25 @@ from flask import (
 from flask_login import login_required, current_user
 
 from plugins.base import BasePlugin
-from plugins.implementations.dmr.installer import (
-    DMRInstaller
-)
-from plugins.implementations.dmr.dmr_engine import (
-    DMREngine
-)
+from plugins.implementations.dmr.installer import DMRInstaller
+from plugins.implementations.dmr.dmr_engine import DMREngine
 from plugins.implementations.dmr.dmr_constants import (
-    COMMON_TALKGROUPS, DMR_TIERS,
-    COMMON_FREQUENCIES, CODECS,
-    CHANNEL_BW_KHZ, SYMBOL_RATE,
-    TDMA_SLOTS := 2,
+    COMMON_TALKGROUPS,
+    DMR_TIERS,
+    COMMON_FREQUENCIES,
+    CODECS,
+    CHANNEL_BW_KHZ,
+    SYMBOL_RATE,
 )
 from plugins.implementations.dmr.forms import (
     DMRSettingsForm,
     DMRLogForm
 )
 
+# TDMA_SLOTS is a plain integer constant — not imported
+# from dmr_constants because it was never defined there
+TDMA_SLOTS = 2
+### end imports
 
 class DMRPlugin(BasePlugin):
     """
