@@ -374,5 +374,12 @@ $(document).ready(function() {
     const log = document.getElementById('log-container');
     if (log) log.scrollTop = log.scrollHeight;
 });
+    // Register navigation warning for devices used by DMR
+$(document).ready(function() {
+    registerDeviceNavigationGuard(
+        'SatDump',
+        ['sdr']  // devices this plugin uses
+    );
+});
 </script>
 {% endblock %}
