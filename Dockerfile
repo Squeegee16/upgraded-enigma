@@ -479,9 +479,9 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # /etc/modprobe.d/ requires root ownership
 # ============================================================
 COPY blacklist-rtl.conf /etc/modprobe.d/blacklist-rtl.conf
-update-initramfs -u
-modprobe -r dvb_usb_rtl28xxu 2>/dev/null || true
-modprobe -r rtl2832 2>/dev/null || true
+RUN update-initramfs -u
+RUN modprobe -r dvb_usb_rtl28xxu 2>/dev/null || true
+RUN modprobe -r rtl2832 2>/dev/null || true
 # ============================================================
 # Create non-root runtime user
 #
