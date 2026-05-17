@@ -78,7 +78,84 @@ class BasePlugin(ABC):
             'author': self.author,
             'enabled': self.enabled
         }
-    
+        
+    def claim_device(self, device_name):
+        """
+        Claim exclusive access to a hardware device.
+
+        Checks the device manager to see if the device
+        is available. Returns a warning message if it
+        is already claimed by another plugin.
+
+        Args:
+            device_name: 'sdr', 'radio', or 'gps'
+
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        try:
+            from flask import current_app
+            dm = current_app.extensions.get(
+                'device_manager'
+            )
+            if dm:
+                return dm.claim(device_name, self.name)
+            return True, "Device manager not available"
+        except RuntimeError:
+            return True, "Outside app context"
+
+    def release_device(self, device_name):
+        """
+        Release a previously claimed device.
+
+        Args:
+            device_name: Device to release
+
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        try:
+            from flask import current_app
+            dm = current_app.extensions.get(
+                'device_manager'
+            )
+            if dm:
+                return dm.release(device_name, self.name)
+            return True, "Device manager not available"
+        except RuntimeError:
+            return True, "Outside app context"
+
+    def release_all_devices(self):
+        """Release all devices claimed by this plugin."""
+        try:
+            from flask import current_app
+            dm = current_app.extensions.get(
+                'device_manager'
+            )
+            if dm:
+                return dm.release_all(self.name)
+            return []
+        except RuntimeError:
+            return []
+
+    def get_device_status(self):
+        """
+        Get the ownership status of all devices.
+
+        Returns:
+            dict: Device status from device manager
+        """
+        try:
+            from flask import current_app
+            dm = current_app.extensions.get(
+                'device_manager'
+            )
+            if dm:
+                return dm.get_status()
+            return {}
+        except RuntimeError:
+            return {}
+            
     def enable(self):
         """Enable the plugin."""
         self.enabled = True
