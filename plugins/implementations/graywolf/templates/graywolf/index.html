@@ -292,5 +292,12 @@ $(document).ready(function() {
         ['sdr', 'radio']  // devices this plugin uses
     );
 });
+    // Register navigation warning for devices used by DMR
+$(document).ready(function() {
+    registerDeviceNavigationGuard(
+        'GrayWolf',
+        ['sdr', 'radio']  // devices this plugin uses
+    );
+});
 </script>
 {% endblock %}
