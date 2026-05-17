@@ -82,192 +82,186 @@ def index():
         db_stats=db_stats,
     )
 
-
 @dashboard_bp.route('/api/devices')
 @login_required
 def get_devices():
     """
-    Device status API endpoint.
+    Get device status with ownership information.
 
-    Always returns a valid JSON response even if
-    device queries fail. Each device is queried
-    independently so one failure does not affect others.
-
-    Returns:
-        JSON: Status dict for gps, radio, and sdr devices
+    Returns each device's connection status AND which
+    plugin currently has it claimed/active.
     """
     from flask import current_app
 
     devices = {}
+    dm = current_app.extensions.get('device_manager')
+    dm_status = dm.get_status() if dm else {}
 
-    # -------------------------------------------------------
-    # GPS Device
-    # -------------------------------------------------------
+    # GPS
     try:
         gps = current_app.extensions.get('gps_device')
-        if gps is None:
-            devices['gps'] = {
-                'name': 'GPS',
-                'available': False,
-                'connected': False,
-                'info': 'Not configured'
-            }
-        else:
-            connected = False
-            info_data = {}
-
+        owner_info = dm_status.get('gps', {})
+        devices['gps'] = {
+            'name': 'GPS',
+            'available': gps is not None,
+            'connected': (
+                gps.is_connected() if gps else False
+            ),
+            'owner': owner_info.get('owner'),
+            'device_available': owner_info.get(
+                'available', True
+            ),
+        }
+        if gps and gps.is_connected():
             try:
-                connected = bool(gps.is_connected())
-            except Exception as e:
-                print(f"[Dashboard] GPS is_connected error: {e}")
-
-            if connected:
-                try:
-                    pos = gps.get_position()
-                    if pos:
-                        info_data = {
-                            'grid': pos.get('grid', 'N/A'),
-                            'latitude': round(
-                                pos.get('latitude', 0), 4
-                            ),
-                            'longitude': round(
-                                pos.get('longitude', 0), 4
-                            ),
-                            'satellites': pos.get(
-                                'satellites', 0
-                            ),
-                        }
-                except Exception as e:
-                    print(f"[Dashboard] GPS position error: {e}")
-
-            devices['gps'] = {
-                'name': 'GPS',
-                'available': True,
-                'connected': connected,
-                'info': info_data
-            }
-
+                pos = gps.get_position()
+                if pos:
+                    devices['gps']['info'] = {
+                        'grid': pos.get('grid', 'N/A'),
+                        'latitude': round(
+                            pos.get('latitude', 0), 4
+                        ),
+                        'longitude': round(
+                            pos.get('longitude', 0), 4
+                        ),
+                    }
+            except Exception:
+                pass
     except Exception as e:
-        print(f"[Dashboard] GPS device block error: {e}")
         devices['gps'] = {
             'name': 'GPS',
             'available': False,
             'connected': False,
-            'info': f'Error: {str(e)[:50]}'
+            'owner': None,
+            'error': str(e)[:50]
         }
 
-    # -------------------------------------------------------
-    # Radio Device (Hamlib)
-    # -------------------------------------------------------
+    # Radio
     try:
         radio = current_app.extensions.get('radio_device')
-        if radio is None:
-            devices['radio'] = {
-                'name': 'Radio (Hamlib)',
-                'available': False,
-                'connected': False,
-                'info': 'Not configured'
-            }
-        else:
-            connected = False
-            info_data = {}
-
+        owner_info = dm_status.get('radio', {})
+        devices['radio'] = {
+            'name': 'Radio (Hamlib)',
+            'available': radio is not None,
+            'connected': (
+                radio.is_connected() if radio else False
+            ),
+            'owner': owner_info.get('owner'),
+            'device_available': owner_info.get(
+                'available', True
+            ),
+        }
+        if radio and radio.is_connected():
             try:
-                connected = bool(radio.is_connected())
-            except Exception as e:
-                print(
-                    f"[Dashboard] Radio is_connected error: {e}"
-                )
-
-            if connected:
-                try:
-                    radio_info = radio.get_info()
-                    if radio_info:
-                        freq = radio_info.get('frequency')
-                        info_data = {
-                            'frequency': (
-                                f"{freq:.3f} MHz"
-                                if freq else 'N/A'
-                            ),
-                            'mode': radio_info.get(
-                                'mode', 'N/A'
-                            ),
-                        }
-                except Exception as e:
-                    print(
-                        f"[Dashboard] Radio info error: {e}"
-                    )
-
-            devices['radio'] = {
-                'name': 'Radio (Hamlib)',
-                'available': True,
-                'connected': connected,
-                'info': info_data
-            }
-
+                info = radio.get_info()
+                if info:
+                    freq = info.get('frequency')
+                    devices['radio']['info'] = {
+                        'frequency': (
+                            f"{freq:.3f} MHz" if freq
+                            else 'N/A'
+                        ),
+                        'mode': info.get('mode', 'N/A'),
+                    }
+            except Exception:
+                pass
     except Exception as e:
-        print(f"[Dashboard] Radio device block error: {e}")
         devices['radio'] = {
             'name': 'Radio (Hamlib)',
             'available': False,
             'connected': False,
-            'info': f'Error: {str(e)[:50]}'
+            'owner': None,
+            'error': str(e)[:50]
         }
 
-    # -------------------------------------------------------
-    # SDR Device (RTL-SDR)
-    # -------------------------------------------------------
+    # SDR
     try:
         sdr = current_app.extensions.get('sdr_device')
-        if sdr is None:
-            devices['sdr'] = {
-                'name': 'RTL-SDR',
-                'available': False,
-                'connected': False,
-                'info': 'Not configured'
-            }
-        else:
-            connected = False
-            info_data = {}
-
+        owner_info = dm_status.get('sdr', {})
+        devices['sdr'] = {
+            'name': 'RTL-SDR',
+            'available': sdr is not None,
+            'connected': (
+                sdr.is_connected() if sdr else False
+            ),
+            'owner': owner_info.get('owner'),
+            'device_available': owner_info.get(
+                'available', True
+            ),
+        }
+        if sdr and sdr.is_connected():
             try:
-                connected = bool(sdr.is_connected())
-            except Exception as e:
-                print(
-                    f"[Dashboard] SDR is_connected error: {e}"
-                )
-
-            if connected:
-                try:
-                    freq = sdr.get_frequency()
-                    info_data = {
-                        'frequency': (
-                            f"{freq:.3f} MHz"
-                            if freq else 'N/A'
-                        ),
-                    }
-                except Exception as e:
-                    print(f"[Dashboard] SDR info error: {e}")
-
-            devices['sdr'] = {
-                'name': 'RTL-SDR',
-                'available': True,
-                'connected': connected,
-                'info': info_data
-            }
-
+                freq = sdr.get_frequency()
+                devices['sdr']['info'] = {
+                    'frequency': (
+                        f"{freq:.3f} MHz" if freq
+                        else 'N/A'
+                    ),
+                }
+            except Exception:
+                pass
     except Exception as e:
-        print(f"[Dashboard] SDR device block error: {e}")
         devices['sdr'] = {
             'name': 'RTL-SDR',
             'available': False,
             'connected': False,
-            'info': f'Error: {str(e)[:50]}'
+            'owner': None,
+            'error': str(e)[:50]
         }
 
-    # Always return valid JSON
     return jsonify(devices)
 
+
+@dashboard_bp.route('/api/device_manager')
+@login_required
+def get_device_manager_status():
+    """Get full device manager status and history."""
+    from flask import current_app
+    dm = current_app.extensions.get('device_manager')
+    if not dm:
+        return jsonify({'available': False})
+    return jsonify({
+        'available': True,
+        'devices': dm.get_status(),
+        'history': dm.get_history(10),
+    })
+
+
+@dashboard_bp.route(
+    '/api/release_device', methods=['POST']
+)
+@login_required
+def release_device():
+    """
+    Force-release a device from the dashboard.
+
+    Called when the user confirms they want to
+    disconnect a device from the current plugin.
+    """
+    from flask import current_app
+    data = request.get_json() or {}
+    device_name = data.get('device')
+
+    if not device_name:
+        return jsonify({
+            'success': False,
+            'error': 'device required'
+        }), 400
+
+    dm = current_app.extensions.get('device_manager')
+    if not dm:
+        return jsonify({
+            'success': False,
+            'error': 'Device manager not available'
+        })
+
+    # Force release (admin action from dashboard)
+    success, message = dm.release(device_name, None)
+    return jsonify({
+        'success': success,
+        'message': message,
+        'devices': dm.get_status(),
+    })
 
 @dashboard_bp.route('/api/time')
 @login_required
