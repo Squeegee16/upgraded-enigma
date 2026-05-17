@@ -277,7 +277,12 @@ def create_app(config_name='default'):
 
         app.extensions['plugin_loader'] = _EmptyLoader()
         plugins = {}
-
+    # Register device manager
+    from devices.device_manager import DeviceManager
+    device_manager = DeviceManager()
+    app.extensions['device_manager'] = device_manager
+    print("✓ Device manager registered")
+    
     # ------------------------------------------------------------------
     # Template Context Processor
     # Injects shared variables into every template render.
