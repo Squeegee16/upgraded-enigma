@@ -46,6 +46,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     python3-dev \
     libpq-dev \
+    nano \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
