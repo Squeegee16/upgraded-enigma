@@ -346,7 +346,7 @@ def create_app(config_name='default'):
     # Plugin release
     # ------------------------------------------------------------------        
     @app.route('/plugin/release_devices', methods=['POST'])
-    @login_required
+    #@login_required
     def release_plugin_devices():
         """
         Release all devices claimed by a plugin.
