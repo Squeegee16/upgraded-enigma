@@ -337,7 +337,31 @@ def create_app(config_name='default'):
                 '<p><a href="/auth/register">Register</a></p>'
                 '</body></html>'
             ), 200
+    # ------------------------------------------------------------------
+    # Plugin release
+    # ------------------------------------------------------------------        
+    @app.route('/plugin/release_devices', methods=['POST'])
+    @login_required
+    def release_plugin_devices():
+        """
+        Release all devices claimed by a plugin.
 
+        Called when navigating away from a plugin page.
+        """
+        from flask_login import current_user
+        data = request.get_json() or {}
+        plugin_name = data.get('plugin', '')
+
+        dm = app.extensions.get('device_manager')
+        released = []
+        if dm and plugin_name:
+            released = dm.release_all(plugin_name)
+
+        return jsonify({
+            'success': True,
+            'released': released,
+            'plugin': plugin_name
+        })
     # ------------------------------------------------------------------
     # Error Handlers
     # ------------------------------------------------------------------
