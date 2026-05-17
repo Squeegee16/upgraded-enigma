@@ -495,7 +495,9 @@ RUN groupadd -r hamradio -g 1000 && \
         -d /home/hamradio \
         hamradio && \
     usermod -a -G plugdev hamradio 2>/dev/null || true
-
+# Add hamradio user to dialout group for serial access
+RUN usermod -a -G dialout hamradio 2>/dev/null || true && \
+    usermod -a -G tty hamradio 2>/dev/null || true
 # ============================================================
 # Create data directories
 # Must happen as root before USER hamradio so chown works.
