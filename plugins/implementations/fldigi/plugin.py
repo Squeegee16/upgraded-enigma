@@ -59,31 +59,31 @@ class FldigiPlugin(BasePlugin):
         self.install_complete = False
         self.install_error = None
 
-    def initialize(self):
+   def initialize(self):
         """
         Initialize plugin on application load.
 
-        Returns:
-            bool: True if initialization successful
+        Attempts to:
+        1. Check if FLdigi is installed
+        2. Start FLdigi with Xvfb if not running
+        3. Connect via XML-RPC
+        4. Fall back to connect-only mode if start fails
         """
         print(f"\n[{self.name}] Initializing plugin...")
 
         try:
-            # Run installation check
-            print(f"[{self.name}] Checking installation...")
             install_success = self.installer.run()
+            self.install_complete = install_success
 
             if not install_success:
                 self.install_error = (
                     "FLdigi not installed. "
-                    "Add 'fldigi' to Dockerfile and rebuild."
+                    "Add to Dockerfile and rebuild."
                 )
                 print(
                     f"[{self.name}] WARNING: "
                     f"{self.install_error}"
                 )
-
-            self.install_complete = install_success
 
             # Initialise manager
             self.manager = FldigiManager(
@@ -95,29 +95,71 @@ class FldigiPlugin(BasePlugin):
             # Update GPS grid
             self._update_gps_locator()
 
-            # Set callsign from user if not configured
+            # Set callsign from user
             if not self.manager.config.get('callsign'):
                 try:
-                    callsign = getattr(
+                    cs = getattr(
                         current_user, 'callsign', ''
                     )
-                    if callsign:
+                    if cs:
                         self.manager.save_config(
-                            {'callsign': callsign}
+                            {'callsign': cs}
                         )
                 except RuntimeError:
-                    # Outside request context — skip
                     pass
 
-            # Auto-connect to existing FLdigi
-            if self.manager.config.get('auto_connect', True):
+            # Step 1: Try to connect to existing FLdigi
+            if self.manager.config.get(
+                'auto_connect', True
+            ):
                 success, msg = (
                     self.manager.connect_to_existing()
                 )
                 if success:
                     print(f"[{self.name}] ✓ {msg}")
+                    print(
+                        f"[{self.name}] ✓ Plugin initialized"
+                    )
+                    return True
                 else:
-                    print(f"[{self.name}] INFO: {msg}")
+                    print(
+                        f"[{self.name}] INFO: "
+                        f"FLdigi not running yet. "
+                        f"Will auto-start if configured."
+                    )
+
+            # Step 2: Auto-start FLdigi if configured
+            if (self.manager.config.get('auto_start') and
+                    self.install_complete):
+                print(
+                    f"[{self.name}] Auto-starting FLdigi..."
+                )
+                success, msg = (
+                    self.manager.start_fldigi()
+                )
+                if success:
+                    print(f"[{self.name}] ✓ {msg}")
+                else:
+                    print(
+                        f"[{self.name}] WARNING: "
+                        f"FLdigi auto-start failed: {msg}"
+                    )
+                    self.manager._add_log(
+                        "FLdigi not started. Use the "
+                        "Start FLdigi button on the "
+                        "plugin page.",
+                        'info'
+                    )
+            else:
+                # Not auto-starting — log info message
+                if self.install_complete:
+                    self.manager._add_log(
+                        "FLdigi ready. Click "
+                        "'Start FLdigi' or "
+                        "'Connect to FLdigi' on the "
+                        "plugin page to begin.",
+                        'info'
+                    )
 
             print(f"[{self.name}] ✓ Plugin initialized")
             return True
