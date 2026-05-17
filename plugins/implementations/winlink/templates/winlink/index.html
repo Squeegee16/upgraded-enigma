@@ -344,5 +344,12 @@ $(document).ready(function() {
     const container = document.getElementById('log-container');
     if (container) container.scrollTop = container.scrollHeight;
 });
+    // Register navigation warning for devices used by DMR
+$(document).ready(function() {
+    registerDeviceNavigationGuard(
+        'Winlink',
+        ['radio']  // devices this plugin uses
+    );
+});
 </script>
 {% endblock %}
