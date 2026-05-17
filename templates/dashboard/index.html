@@ -885,18 +885,20 @@ setInterval(updateDashClock, 1000);
 
 
 // ---------------------------------------------------------------
-// Device status
+// Device Status — with ownership display
 // ---------------------------------------------------------------
 function loadDeviceStatus() {
+    const card = document.getElementById('device-status');
+
     $.ajax({
         url: '{{ url_for("dashboard.get_devices") }}',
         method: 'GET',
         timeout: 8000,
         success: function(data) {
             if (!data || typeof data !== 'object') {
-                $('#device-status').html(
-                    '<p class="text-warning small text-center">' +
-                    'Invalid device response</p>'
+                card.innerHTML = (
+                    '<p class="text-warning small">' +
+                    'Invalid response</p>'
                 );
                 return;
             }
@@ -913,79 +915,156 @@ function loadDeviceStatus() {
                 const icon = icons[key] || 'microchip';
                 const name = device.name || key.toUpperCase();
                 const connected = device.connected === true;
-                const available = device.available !== false;
+                const owner = device.owner || null;
+                const deviceAvailable = (
+                    device.device_available !== false
+                );
 
-                let badgeCls, badgeTxt;
-                if (!available) {
-                    badgeCls = 'bg-secondary';
-                    badgeTxt = 'Not Available';
+                // Status badge
+                let badgeClass, badgeText;
+                if (!device.available) {
+                    badgeClass = 'bg-secondary';
+                    badgeText = 'Not Available';
                 } else if (connected) {
-                    badgeCls = 'bg-success';
-                    badgeTxt = 'Connected';
+                    badgeClass = 'bg-success';
+                    badgeText = 'Connected';
                 } else {
-                    badgeCls = 'bg-danger';
-                    badgeTxt = 'Offline';
+                    badgeClass = 'bg-danger';
+                    badgeText = 'Offline';
                 }
 
                 html += `
-                    <li class="list-group-item
-                               d-flex justify-content-between
-                               align-items-center px-0 py-2">
-                        <span class="small">
-                            <i class="fas fa-${icon}
-                                      me-2 text-muted"></i>
-                            ${name}
-                        </span>
-                        <span class="badge ${badgeCls} small">
-                            ${badgeTxt}
-                        </span>
-                    </li>`;
+                    <li class="list-group-item px-0 py-2">
+                        <div class="d-flex
+                                    justify-content-between
+                                    align-items-center">
+                            <span class="small">
+                                <i class="fas fa-${icon}
+                                          me-2 text-muted"></i>
+                                ${name}
+                            </span>
+                            <span class="badge ${badgeClass}
+                                         small">
+                                ${badgeText}
+                            </span>
+                        </div>`;
 
+                // Show which plugin owns the device
+                if (owner) {
+                    html += `
+                        <div class="mt-1 d-flex
+                                    justify-content-between
+                                    align-items-center">
+                            <small class="text-warning ms-4">
+                                <i class="fas fa-plug
+                                          me-1"></i>
+                                In use by:
+                                <strong>${owner}</strong>
+                            </small>
+                            <button class="btn btn-xs
+                                           btn-outline-danger"
+                                    style="font-size:0.65rem;
+                                           padding:1px 5px"
+                                    onclick="releaseDevice(
+                                        '${key}', '${owner}'
+                                    )"
+                                    title="Disconnect from ${owner}">
+                                <i class="fas fa-unlink"></i>
+                                Release
+                            </button>
+                        </div>`;
+                }
+
+                // Show device info if available
                 if (connected && device.info &&
-                        typeof device.info === 'object' &&
-                        Object.keys(device.info).length > 0) {
+                        typeof device.info === 'object') {
                     const infoStr = Object.values(
                         device.info
-                    ).join(' | ');
-                    html += `
-                        <li class="list-group-item
-                                   px-0 py-1 border-0">
-                            <small class="text-muted ms-4">
+                    ).filter(Boolean).join(' | ');
+                    if (infoStr) {
+                        html += `
+                            <small class="text-muted ms-4
+                                          d-block">
                                 ${infoStr}
-                            </small>
-                        </li>`;
+                            </small>`;
+                    }
                 }
+
+                html += '</li>';
             });
 
             html += '</ul>';
+
             html += `
                 <div class="mt-2 text-end">
-                    <button class="btn btn-outline-secondary btn-sm"
+                    <button class="btn
+                                   btn-outline-secondary
+                                   btn-sm"
                             onclick="loadDeviceStatus()">
                         <i class="fas fa-sync me-1"></i>
                         Refresh
                     </button>
                 </div>`;
 
-            $('#device-status').html(html);
+            card.innerHTML = html;
         },
         error: function(xhr, status) {
             let msg = 'Device status unavailable';
-            if (status === 'timeout') msg = 'Request timed out';
-            $('#device-status').html(
-                `<div class="text-center py-2">
-                    <p class="text-muted small mb-2">${msg}</p>
-                    <button class="btn btn-outline-secondary btn-sm"
+            if (status === 'timeout') msg = 'Timeout';
+            card.innerHTML = `
+                <div class="text-center py-2">
+                    <p class="text-muted small mb-2">
+                        ${msg}
+                    </p>
+                    <button class="btn
+                                   btn-outline-secondary
+                                   btn-sm"
                             onclick="loadDeviceStatus()">
                         <i class="fas fa-sync me-1"></i>
                         Retry
                     </button>
-                 </div>`
-            );
+                </div>`;
         }
     });
 }
 
+/**
+ * Release a device from a plugin.
+ * Called from the Release button on the device card.
+ */
+function releaseDevice(deviceName, ownerPlugin) {
+    if (!confirm(
+        `Disconnect ${deviceName.toUpperCase()} ` +
+        `from ${ownerPlugin}?\n\n` +
+        `This will stop the ${ownerPlugin} plugin ` +
+        `from using the ${deviceName.toUpperCase()} ` +
+        `device.`
+    )) return;
+
+    $.ajax({
+        url: '{{ url_for("dashboard.release_device") }}',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({device: deviceName}),
+        success: function(data) {
+            if (data.success) {
+                showToast(
+                    `${deviceName.toUpperCase()} released`,
+                    'success'
+                );
+                loadDeviceStatus();
+            } else {
+                showToast(
+                    data.message || 'Release failed',
+                    'danger'
+                );
+            }
+        },
+        error: function() {
+            showToast('Server error', 'danger');
+        }
+    });
+}
 
 // ---------------------------------------------------------------
 // GPS location refresh
