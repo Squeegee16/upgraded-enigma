@@ -15,8 +15,19 @@ import os
 import sys
 import traceback
 from datetime import datetime
-from flask import Flask, redirect, url_for, render_template
-from flask_login import LoginManager, login_required
+
+from flask import (
+    Flask, redirect, url_for,
+    render_template, request, jsonify
+)
+
+# Flask-Login — import login_required here so it is
+# available throughout app.py including inline routes
+from flask_login import (
+    LoginManager,
+    login_required,   # ← THIS WAS MISSING
+    current_user
+)
 
 def create_app(config_name='default'):
     """
