@@ -176,7 +176,11 @@ services:
     # Uncomment when RTL-SDR dongle is connected.
     #
     devices:
-     - /dev/bus/usb:/dev/bus/usb
+      - /dev/bus/usb:/dev/bus/usb
+      # GPS on USB serial — uncomment when connected
+      - /dev/ttyUSB0:/dev/ttyUSB0
+      # If GPS is on Raspberry Pi hardware UART:
+      - /dev/ttyAMA0:/dev/ttyAMA0
     privileged: true
 
     networks:
