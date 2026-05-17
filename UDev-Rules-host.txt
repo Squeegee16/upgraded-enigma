@@ -41,7 +41,6 @@ EOF
 
 sudo udevadm control --reload-rules
 sudo udevadm trigger
-
-# Also add the device to docker-compose.yaml
-# Uncomment in the app service devices section:
-#   - /dev/ttyAMA0:/dev/ttyAMA0
+# Verify permissions
+ls -la /dev/ttyUSB0
+# Should show: crw-rw-rw- ... dialout ... /dev/ttyUSB0
