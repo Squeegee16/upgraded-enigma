@@ -479,7 +479,9 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # /etc/modprobe.d/ requires root ownership
 # ============================================================
 COPY blacklist-rtl.conf /etc/modprobe.d/blacklist-rtl.conf
-
+sudo update-initramfs -u
+sudo modprobe -r dvb_usb_rtl28xxu 2>/dev/null || true
+sudo modprobe -r rtl2832 2>/dev/null || true
 # ============================================================
 # Create non-root runtime user
 #
@@ -553,7 +555,44 @@ RUN cp -r /root/.cargo /home/hamradio/.cargo \
         /home/hamradio/.cargo \
         /home/hamradio/.rustup \
         2>/dev/null || true
-
+# ============================================================
+# SatDump — Try official repo, fall back to skip
+#
+# SatDump ARM64 may not be in the official repo for
+# Debian Bookworm. The plugin will work in demo mode
+# without the binary and show install instructions.
+# ============================================================
+RUN set -eux; \
+    apt-get update; \
+    \
+    # Try to install from official SatDump repo
+    if apt-get install -y --no-install-recommends \
+        curl gnupg 2>/dev/null; then \
+        \
+        # Add SatDump GPG key (non-fatal if fails)
+        curl -fsSL https://downloads.satdump.org/key.gpg \
+            | apt-key add - 2>/dev/null || true; \
+        \
+        # Detect distro for repo URL
+        DISTRO=$(. /etc/os-release 2>/dev/null && \
+            echo "$VERSION_CODENAME" || echo "bookworm"); \
+        \
+        echo "deb [arch=$(dpkg --print-architecture)] \
+https://downloads.satdump.org/apt ${DISTRO} main" \
+            > /etc/apt/sources.list.d/satdump.list \
+            2>/dev/null || true; \
+        \
+        apt-get update -q 2>/dev/null || true; \
+        \
+        # Install SatDump (non-fatal if not available)
+        apt-get install -y --no-install-recommends \
+            satdump 2>/dev/null \
+        && echo "✓ SatDump installed" \
+        || echo "INFO: SatDump not available for \
+$(dpkg --print-architecture) — plugin runs in demo mode"; \
+    fi; \
+    \
+    rm -rf /var/lib/apt/lists/*
 # ============================================================
 # Configure PulseAudio for the hamradio user
 #
