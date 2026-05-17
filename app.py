@@ -16,7 +16,7 @@ import sys
 import traceback
 from datetime import datetime
 from flask import Flask, redirect, url_for, render_template
-
+from flask_login import LoginManager, login_required
 
 def create_app(config_name='default'):
     """
@@ -346,7 +346,7 @@ def create_app(config_name='default'):
     # Plugin release
     # ------------------------------------------------------------------        
     @app.route('/plugin/release_devices', methods=['POST'])
-    #@login_required
+    @login_required
     def release_plugin_devices():
         """
         Release all devices claimed by a plugin.
