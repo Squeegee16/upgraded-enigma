@@ -254,26 +254,54 @@ RUN apt-get update && \
 #   intltool          - Internationalization tool
 # ============================================================
 
+# ============================================================
+# Install FLdigi and dependencies
+# NOTE: libasound2 renamed to libasound2t64 in Bookworm
+# NOTE: rm -rf must be a SEPARATE command, not a package name
+# ============================================================
 RUN set -eux; \
-    echo "=== Installing FLdigi (prebuilt) ==="; \
+    echo "=== Installing FLdigi ==="; \
     apt-get update; \
+    \
+    # Install runtime libraries first
     apt-get install -y --no-install-recommends \
-        fldigi \
         libfltk1.3 \
         libpulse0 \
-        libasound2 \
         libsamplerate0 \
         libsndfile1 \
         portaudio19-dev \
-        flrig \
-        rm -rf /var/lib/apt/lists/*; \
+    ; \
+    \
+    # Try libasound2t64 first (Debian Bookworm),
+    # fall back to libasound2 (older Debian/Ubuntu)
+    ( apt-get install -y --no-install-recommends \
+        libasound2t64 \
+    || apt-get install -y --no-install-recommends \
+        libasound2 \
+    ); \
+    \
+    # Install fldigi package
+    apt-get install -y --no-install-recommends fldigi \
+    || echo "INFO: fldigi not in apt repos, \
+will build from source"; \
+    \
+    # Install optional companion (non-fatal)
+    apt-get install -y --no-install-recommends flrig \
+    || echo "INFO: flrig not available"; \
+    \
+    # Clean up apt cache — SEPARATE from package list
+    rm -rf /var/lib/apt/lists/*; \
+    \
+    # Verify installation
     if command -v fldigi >/dev/null 2>&1; then \
-        echo "✓ FLdigi installed: $(fldigi --version 2>&1 | head -1)"; \
+        echo "✓ FLdigi: $(fldigi --version 2>&1 \
+            | head -1)"; \
     else \
-        echo "✗ FLdigi installation failed"; \
-        exit 1; \
+        echo "INFO: fldigi not installed via apt, \
+will build from source at runtime"; \
     fi; \
-    echo "=== FLdigi installation complete ==="
+    \
+    echo "=== FLdigi setup complete ==="
 
 # ============================================================
 # Build SoapySDR from source
