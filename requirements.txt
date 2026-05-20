@@ -54,4 +54,5 @@ sounddevice==0.4.6
 # Requires librtlsdr system library (already built
 # from source in Dockerfile):
 #   RUN apt-get install librtlsdr-dev
+pyrtlsdrlib
 pyrtlsdr==0.2.93
