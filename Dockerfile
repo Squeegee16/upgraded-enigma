@@ -500,6 +500,12 @@ RUN apt-get update && \
     apt-get update && \
     apt-get install -y satdump && \
     rm -rf /var/lib/apt/lists/*
+# ============================================================
+#  Install wsjtx
+# ============================================================
+RUN apt-get update && \
+    apt-get install -y wsjtx && \
+    rm -rf /var/lib/apt/lists/*
 
 
 # ============================================================
