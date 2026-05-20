@@ -223,6 +223,25 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================================
+#  Install pyrtlsdr
+# ============================================================
+RUN set -eux; \
+    echo "=== Installing pyrtlsdr ==="; \
+    cd /tmp; \
+    git clone https://github.com/pyrtlsdr/pyrtlsdr.git; \
+    cd pyrtlsdr; \
+    cd librtlsdr; \
+    git checkout development; \
+    mkdir build && cd build; \
+    cmake ../ -DINSTALL_UDEV_RULES=ON ;\
+    make; \
+    make install; \
+    ldconfig; \
+    cd /; \
+    rm -rf /tmp/pyrtlsdr; \
+    echo "=== pyrtlsdr complete ==="
+
+# ============================================================
 # Install FLdigi build dependencies AND build from source
 #
 # All dependencies are installed in the same RUN block as
@@ -490,7 +509,7 @@ RUN set -eux; \
     echo "=== Building SatDump ==="; \
     cd /tmp; \
     git clone https://github.com/SatDump/SatDump.git; \
-    cd SatDump; \
+    cd ; \
     mkdir build; \
     cd build; \
 # If you do not want to build the GUI Version, add -DBUILD_GUI=OFF to the command
@@ -501,7 +520,7 @@ RUN set -eux; \
     make install; \
         ldconfig; \
     cd /; \
-    rm -rf /tmp/rtl-sdr; \
+    rm -rf /tmp/SatDump; \
     echo "=== Satdump installed ==="
 # ============================================================
 #  Install wsjtx
