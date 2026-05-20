@@ -113,6 +113,8 @@ RUN apt-get update && apt-get install -y \
     autoconf \
     automake \
     libtool \
+    swig \
+    
     && rm -rf /var/lib/apt/lists/*
 
 # Audio libraries for USB sound card support
@@ -466,24 +468,6 @@ RUN set -eux; \
     echo "=== Rust installed ==="
 
 # ============================================================
-# Copy and configure entrypoint script AS ROOT
-#
-# Must happen BEFORE USER hamradio because:
-#   /usr/local/bin/ requires root to write to
-#   chmod +x requires file owner or root
-# ============================================================
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-# ============================================================
-# Copy RTL-SDR kernel module blacklist AS ROOT
-# /etc/modprobe.d/ requires root ownership
-# ============================================================
-COPY blacklist-rtl.conf /etc/modprobe.d/blacklist-rtl.conf
-#update-initramfs -u
-#modprobe -r dvb_usb_rtl28xxu 2>/dev/null || true
-#modprobe -r rtl2832 2>/dev/null || true
-# ============================================================
 #  Install qsstv
 # ============================================================
 RUN apt-get update && \
@@ -507,6 +491,24 @@ RUN apt-get update && \
     apt-get install -y wsjtx && \
     rm -rf /var/lib/apt/lists/*
 
+# ============================================================
+# Copy and configure entrypoint script AS ROOT
+#
+# Must happen BEFORE USER hamradio because:
+#   /usr/local/bin/ requires root to write to
+#   chmod +x requires file owner or root
+# ============================================================
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# ============================================================
+# Copy RTL-SDR kernel module blacklist AS ROOT
+# /etc/modprobe.d/ requires root ownership
+# ============================================================
+COPY blacklist-rtl.conf /etc/modprobe.d/blacklist-rtl.conf
+#update-initramfs -u
+#modprobe -r dvb_usb_rtl28xxu 2>/dev/null || true
+#modprobe -r rtl2832 2>/dev/null || true
 
 # ============================================================
 # Create non-root runtime user
