@@ -206,7 +206,7 @@ RUN apt-get update && \
         libpulse-dev \
         pulseaudio \
         pulseaudio-utils \
-    && rm -rf /var/lib/apt/lists/*
+        && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
 # Package Group 6: GNURadio (optional)
