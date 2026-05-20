@@ -151,7 +151,7 @@ RUN apt-get update && apt-get install -y \
 # ============================================================
 # Package Group 3: X11 display support + VNC
 # Required for FLdigi and QSSTV which are GUI applications.
-# Xvfb provides a virtual framebuffer — no real monitor needed.
+# Xvfb provides a virtual framebuffer â€” no real monitor needed.
 # TigerVNC allows remote access to the virtual display.
 # ============================================================
 RUN apt-get update && apt-get install -y \
@@ -213,13 +213,13 @@ RUN apt-get update && \
 # Package Group 6: GNURadio (optional)
 #
 # GNURadio is a large dependency chain and may not be
-# available on all ARM64 distributions. It is optional —
+# available on all ARM64 distributions. It is optional â€”
 # RTL-SDR via rtl-sdr tools works without it.
 # The build continues if GNURadio is not available.
 # ============================================================
 RUN apt-get update && \
     apt-get install -y --no-install-recommends gnuradio \
-    || echo "INFO: gnuradio not available on $(uname -m) — skipping" && \
+    || echo "INFO: gnuradio not available on $(uname -m) â€” skipping" && \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================================
@@ -305,12 +305,246 @@ will build from source"; \
     apt-get install -y --no-install-recommends flrig \
     || echo "INFO: flrig not available"; \
     \
-    # Clean up apt cache — SEPARATE from package list
+    # Clean up apt cache â€” SEPARATE from package list
     rm -rf /var/lib/apt/lists/*; \
     \
     # Verify installation
     if command -v fldigi >/dev/null 2>&1; then \
-        echo "✓ FLdigi: $(fldigi --version 2>&1 \
+        echo "âœ“ FLdigi: $(fldigi --version 2>&1 \
+            | head -1)"; \
+    else \
+        echo "INFO: fldigi not installed via apt, \
+will build from source at runtime"; \
+    fi; \
+    \
+    echo "=== FLdigi setup complete ==="
+
+# ============================================================
+# Build SoapySDR from source
+#
+# SoapySDR is the SDR hardware abstraction layer used by
+# OpenWebRX and other SDR applications. Building from source
+# ensures the correct version for the target architecture.
+# ============================================================
+RUN set -eux; \
+    echo "=== Building SoapySDR ==="; \
+    cd /tmp; \
+    git clone \
+        --depth 1 \
+        https://github.com/pothosware/SoapySDR.git; \
+    cd SoapySDR; \
+    mkdir build; \
+    cd build; \
+    cmake \
+        -DCMAKE_BUILD_TYPE=Release \
+        ..; \
+    make -j$(nproc); \
+    make install; \
+    ldconfig; \
+    cd /; \
+    rm -rf /tmp/SoapySDR; \
+    echo "=== SoapySDR build complete ==="
+
+# ============================================================
+# Build Hamlib from source
+#
+# Hamlib provides radio control for 400+ radio models
+# including the Yaesu FT-891.
+# Version 4.7.0 used for stability and broad compatibility.
+# ============================================================
+RUN set -eux; \
+    echo "=== Building Hamlib 4.7.0 ==="; \
+    cd /tmp; \
+    wget -q \
+        "https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download" \
+        -O hamlib-4.7.0.tar.gz; \
+    tar -xzf hamlib-4.7.0.tar.gz; \
+    cd hamlib-4.7.0; \
+    ./configure --prefix=/usr/local; \
+    make -j$(nproc); \
+    make install; \
+    ldconfig; \
+    cd /; \
+    rm -rf /tmp/hamlib-4.7.0 /tmp/hamlib-4.7.0.tar.gz; \
+    echo "=== Hamlib build complete ==="
+
+# ============================================================
+# Build RTL-SDR from source
+#
+# Provides rtl_sdr, rtl_test, and other utilities for
+# RTL2832U-based SDR USB dongles.
+# ============================================================
+RUN set -eux; \
+    echo "=== Building RTL-SDR ==="; \
+    cd /tmp; \
+    git clone \
+        --depth 1 \
+        https://github.com/osmocom/rtl-sdr.git; \
+    cd rtl-sdr; \
+    mkdir build; \
+    cd build; \
+    cmake \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DINSTALL_UDEV_RULES=ON \
+        ..; \
+    make -j$(nproc); \
+    make install; \
+    ldconfig; \
+    cd /; \
+    rm -rf /tmp/rtl-sdr; \
+    echo "=== RTL-SDR build complete ==="
+
+# ============================================================
+# Install Go from official distribution
+#
+# Uses TARGETARCH (set by Docker buildx) to select the
+# correct binary for the build platform.
+#
+# Architecture mapping:
+#   TARGETARCH   Go arch    Platform
+#   amd64        amd64      x86_64 PC / server
+#   arm64        arm64      Raspberry Pi 4/5, Apple M1
+#   arm          armv6l     Raspberry Pi 3 (32-bit)
+#   386          386        32-bit x86
+# ============================================================
+RUN set -eux; \
+    \
+    # Determine Go architecture from Docker TARGETARCH.
+    # Fall back to uname -m if TARGETARCH is not set
+    # (e.g. plain docker build without buildx).
+    if [ -n "${TARGETARCH}" ]; then \
+        case "${TARGETARCH}" in \
+            amd64)  GO_ARCH=amd64 ;; \
+            arm64)  GO_ARCH=arm64 ;; \
+            arm)    GO_ARCH=armv6l ;; \
+            386)    GO_ARCH=386 ;; \
+            *) \
+                echo "Unknown TARGETARCH: ${TARGETARCH}"; \
+                exit 1 ;; \
+        esac; \
+    else \
+        MACHINE=$(uname -m); \
+        case "$MACHINE" in \
+            x86_64)  GO_ARCH=amd64 ;; \
+            aarch64) GO_ARCH=arm64 ;; \
+            armv7l)  GO_ARCH=armv6l ;; \
+            armv6l)  GO_ARCH=armv6l ;; \
+            *) \
+                echo "Unsupported machine: $MACHINE"; \
+                exit 1 ;; \
+        esac; \
+    fi; \
+    \
+    echo "TARGETARCH : ${TARGETARCH:-not set}"; \
+    echo "uname -m   : $(uname -m)"; \
+    echo "GO_ARCH    : ${GO_ARCH}"; \
+    echo "GO_VERSION : ${GO_VERSION}"; \
+    \
+    GO_URL="https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"; \
+    echo "Downloading: ${GO_URL}"; \
+    wget -q "${GO_URL}" -O /tmp/go.tar.gz; \
+    \
+    # Verify the download is a reasonable size (>10 MB)
+    GO_SIZE=$(stat -c%s /tmp/go.tar.gz 2>/dev/null || echo 0); \
+    echo "Downloaded : ${GO_SIZE} bytes"; \
+    if [ "${GO_SIZE}" -lt 10000000 ]; then \
+        echo "ERROR: Downloaded file is too small."; \
+        echo "Expected >10 MB, got ${GO_SIZE} bytes."; \
+        echo "Check URL: ${GO_URL}"; \
+        exit 1; \
+    fi; \
+    \
+    rm -rf /usr/local/go; \
+    tar -C /usr/local -xzf /tmp/go.tar.gz; \
+    rm /tmp/go.tar.gz; \
+    \
+    # Verify Go runs on this architecture
+    /usr/local/go/bin/go version; \
+    echo "=== Go ${GO_VERSION} installed ==="
+
+# ============================================================
+# Install Rust for building graywolf-modem
+#
+# graywolf-modem is a Rust binary required by the GrayWolf
+# Winlink plugin. Installed system-wide then copied to the
+# hamradio user home directory.
+# ============================================================
+RUN set -eux; \
+    echo "=== Installing Rust ==="; \
+    curl --proto '=https' --tlsv1.2 \
+        -sSf https://sh.rustup.rs \
+        | sh -s -- -y \
+            --no-modify-path \
+            --default-toolchain stable; \
+    /root/.cargo/bin/rustup --version; \
+    /root/.cargo/bin/cargo --version; \
+    echo "=== Rust installed ==="
+
+# ============================================================
+#  Install qsstv
+# ============================================================
+RUN apt-get update && \
+    apt-get install -y qsstv && \
+    rm -rf /var/lib/apt/lists/*
+# ============================================================
+#  Install satdump
+# ============================================================
+# ============================================================
+# SatDump — Optional, try building from source
+#
+# Many Bookworm dev packages unavailable. Attempt with only
+# available packages; skip gracefully if build fails.
+# ============================================================
+RUN set +e; \
+    apt-get update; \
+    echo "=== Attempting SatDump build ==="; \
+    apt-get install -y --no-install-recommends \
+        build-essential cmake g++ pkg-config libpng-dev \
+        portaudio19-dev librtlsdr-dev libssl-dev libcurl4 \
+        libsqlite3-dev 2>/dev/null; \
+    \
+    if git clone --depth 1 https://github.com/SatDump/SatDump.git /tmp/SatDump 2>/dev/null; then \
+        cd /tmp/SatDump && \
+        mkdir -p build && \
+        cd build && \
+        cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=OFF -DCMAKE_INSTALL_PREFIX=/usr .. 2>/dev/null && \
+        make -j$(nproc) 2>/dev/null && \
+        make install 2>/dev/null && \
+        ldconfig && \
+        echo "✓ SatDump built" || \
+        echo "INFO: SatDump build failed — skipping"; \
+    else \
+        echo "INFO: SatDump not available — skipping"; \
+    fi; \
+    rm -rf /tmp/SatDump /var/lib/apt/lists/*; \
+    set -e
+
+        portaudio19-dev \
+    ; \
+    \
+    # Try libasound2t64 first (Debian Bookworm),
+    # fall back to libasound2 (older Debian/Ubuntu)
+    ( apt-get install -y --no-install-recommends \
+        libasound2t64 \
+    || apt-get install -y --no-install-recommends \
+        libasound2 \
+    ); \
+    \
+    # Install fldigi package
+    apt-get install -y --no-install-recommends fldigi \
+    || echo "INFO: fldigi not in apt repos, \
+will build from source"; \
+    \
+    # Install optional companion (non-fatal)
+    apt-get install -y --no-install-recommends flrig \
+    || echo "INFO: flrig not available"; \
+    \
+    # Clean up apt cache â€” SEPARATE from package list
+    rm -rf /var/lib/apt/lists/*; \
+    \
+    # Verify installation
+    if command -v fldigi >/dev/null 2>&1; then \
+        echo "âœ“ FLdigi: $(fldigi --version 2>&1 \
             | head -1)"; \
     else \
         echo "INFO: fldigi not installed via apt, \
@@ -616,7 +850,7 @@ RUN cp -r /root/.cargo /home/hamradio/.cargo \
         /home/hamradio/.rustup \
         2>/dev/null || true
 # ============================================================
-# SatDump — Try official repo, fall back to skip
+# SatDump â€” Try official repo, fall back to skip
 #
 # SatDump ARM64 may not be in the official repo for
 # Debian Bookworm. The plugin will work in demo mode
@@ -647,9 +881,9 @@ https://downloads.satdump.org/apt ${DISTRO} main" \
         # Install SatDump (non-fatal if not available)
         apt-get install -y --no-install-recommends \
             satdump 2>/dev/null \
-        && echo "✓ SatDump installed" \
+        && echo "âœ“ SatDump installed" \
         || echo "INFO: SatDump not available for \
-$(dpkg --print-architecture) — plugin runs in demo mode"; \
+$(dpkg --print-architecture) â€” plugin runs in demo mode"; \
     fi; \
     \
     rm -rf /var/lib/apt/lists/*
@@ -784,7 +1018,7 @@ RUN mkdir -p /app/plugins/implementations && \
 # Switch to non-root user
 #
 # ALL subsequent operations run as hamradio (UID 1000).
-# This is the final configuration step — nothing requiring
+# This is the final configuration step â€” nothing requiring
 # root should appear after this line.
 # ============================================================
 USER hamradio
