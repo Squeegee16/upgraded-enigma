@@ -489,6 +489,18 @@ COPY blacklist-rtl.conf /etc/modprobe.d/blacklist-rtl.conf
 RUN apt-get update && \
     apt-get install -y qsstv && \
     rm -rf /var/lib/apt/lists/*
+# ============================================================
+#  Install satdump
+# ============================================================
+
+RUN apt-get update && \
+    apt-get install -y curl gnupg && \
+    curl -fsSL https://downloads.satdump.org/key.gpg | apt-key add - && \
+    echo "deb https://downloads.satdump.org/apt stable main" > /etc/apt/sources.list.d/satdump.list && \
+    apt-get update && \
+    apt-get install -y satdump && \
+    rm -rf /var/lib/apt/lists/*
+
 
 # ============================================================
 # Create non-root runtime user
