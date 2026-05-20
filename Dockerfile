@@ -225,21 +225,15 @@ RUN apt-get update && \
 # ============================================================
 #  Install pyrtlsdr
 # ============================================================
-RUN set -eux; \
-    echo "=== Installing pyrtlsdr ==="; \
-    cd /tmp; \
-    git clone https://github.com/pyrtlsdr/pyrtlsdr.git; \
-    cd pyrtlsdr; \
-    cd librtlsdr; \
-    git checkout development; \
-    mkdir build && cd build; \
-    cmake ../ -DINSTALL_UDEV_RULES=ON ;\
-    make; \
-    make install; \
-    ldconfig; \
-    cd /; \
-    rm -rf /tmp/pyrtlsdr; \
-    echo "=== pyrtlsdr complete ==="
+#RUN set -eux; \
+#    echo "=== Installing pyrtlsdr ==="; \
+#    cd /tmp; \
+#    git clone https://github.com/pyrtlsdr/pyrtlsdr.git; \
+#    uv sync; \
+#    ldconfig; \
+#    cd /; \
+#    rm -rf /tmp/pyrtlsdr; \
+#    echo "=== pyrtlsdr complete ==="
 
 # ============================================================
 # Install FLdigi build dependencies AND build from source
