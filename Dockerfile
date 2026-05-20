@@ -498,7 +498,7 @@ RUN set -eux; \
     libhackrf-dev libairspy-dev libairspyhf-dev libad9361-dev libiio-dev \
     libbladerf-dev libomp-dev ocl-icd-opencl-dev intel-opencl-icd mesa-opencl-icd \
     libdbus-1-dev libarmadillo-dev libsqlite3-dev; \
-    && rm -rf /var/lib/apt/lists/*; \
+    rm -rf /var/lib/apt/lists/*; \
     \
     echo "=== Building SatDump ==="; \
     cd /tmp; \
@@ -508,11 +508,11 @@ RUN set -eux; \
     cd build; \
 # If you do not want to build the GUI Version, add -DBUILD_GUI=OFF to the command
 # If you want to disable some SDRs, you can add -DPLUGIN_HACKRF_SDR_SUPPORT=OFF or similar
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr ..; \
+    cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_GUI=OFF -DCMAKE_INSTALL_PREFIX=/usr ..; \
     make -j`nproc`; \
 # To install system-wide
     make install; \
-        ldconfig; \
+    ldconfig; \
     cd /; \
     rm -rf /tmp/SatDump; \
     echo "=== Satdump installed ==="
