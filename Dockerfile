@@ -476,14 +476,23 @@ RUN apt-get update && \
 # ============================================================
 #  Install satdump
 # ============================================================
-
-RUN apt-get update && \
-    apt-get install -y curl gnupg && \
-    curl -fsSL https://downloads.satdump.org/key.gpg | apt-key add - && \
-    echo "deb https://downloads.satdump.org/apt stable main" > /etc/apt/sources.list.d/satdump.list && \
-    apt-get update && \
-    apt-get install -y satdump && \
-    rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    echo "=== Building RTL-SDR ==="; \
+    cd /tmp; \
+    git clone https://github.com/SatDump/SatDump.git; \
+    cd SatDump; \
+    mkdir build; \
+    cd build; \
+# If you do not want to build the GUI Version, add -DBUILD_GUI=OFF to the command
+# If you want to disable some SDRs, you can add -DPLUGIN_HACKRF_SDR_SUPPORT=OFF or similar
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr ..; \
+    make -j`nproc`; \
+# To install system-wide
+    make install; \
+        ldconfig; \
+    cd /; \
+    rm -rf /tmp/rtl-sdr; \
+    echo "=== Satdump installed ==="
 # ============================================================
 #  Install wsjtx
 # ============================================================
