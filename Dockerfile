@@ -477,7 +477,17 @@ RUN apt-get update && \
 #  Install satdump
 # ============================================================
 RUN set -eux; \
-    echo "=== Building RTL-SDR ==="; \
+    echo "=== installing SatDump dependancies==="; \
+    apt-get install -y --no-install-recommends \
+    build-essential cmake g++ pkgconf libfftw3-dev libpng-dev \
+    libtiff-dev libjemalloc-dev libcurl4-openssl-dev libvolk-dev libnng-dev \
+    libglfw3-dev zenity portaudio19-dev libzstd-dev libhdf5-dev librtlsdr-dev \
+    libhackrf-dev libairspy-dev libairspyhf-dev libad9361-dev libiio-dev \
+    libbladerf-dev libomp-dev ocl-icd-opencl-dev intel-opencl-icd mesa-opencl-icd \
+    libdbus-1-dev libarmadillo-dev libsqlite3-dev; \
+    && rm -rf /var/lib/apt/lists/*; \
+    \
+    echo "=== Building SatDump ==="; \
     cd /tmp; \
     git clone https://github.com/SatDump/SatDump.git; \
     cd SatDump; \
