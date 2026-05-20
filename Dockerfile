@@ -484,6 +484,13 @@ COPY blacklist-rtl.conf /etc/modprobe.d/blacklist-rtl.conf
 #modprobe -r dvb_usb_rtl28xxu 2>/dev/null || true
 #modprobe -r rtl2832 2>/dev/null || true
 # ============================================================
+#  Install qsstv
+# ============================================================
+RUN apt-get update && \
+    apt-get install -y qsstv && \
+    rm -rf /var/lib/apt/lists/*
+
+# ============================================================
 # Create non-root runtime user
 #
 # Fixed UID/GID (1000:1000) ensures volume-mounted
