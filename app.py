@@ -150,6 +150,45 @@ def create_app(config_name='default'):
 
     # ------------------------------------------------------------------
     # Register Blueprints
+    # Add signal percentage helpers as Jinja2 globals
+    # These are available in ALL templates without macros
+    # ------------------------------------------------------------------
+    def _rssi_pct(rssi_val):
+        """Convert RSSI dBm to 0-100% bar width."""
+        try:
+            v = float(rssi_val or -120)
+        except (TypeError, ValueError):
+            v = -120.0
+        return round(max(0, min(100,
+            (v + 120) / 60 * 100
+        )), 1)
+
+    def _ber_pct(ber_val):
+        """Convert BER % to 0-100% bar width (inverted)."""
+        try:
+            v = float(ber_val or 0)
+        except (TypeError, ValueError):
+            v = 0.0
+        return round(max(0, min(100,
+            100 - v * 10
+        )), 1)
+
+    def _clamp(value, low=0, high=100):
+        """Clamp a value between low and high."""
+        try:
+            v = float(value or 0)
+        except (TypeError, ValueError):
+            v = 0.0
+        return round(max(low, min(high, v)), 1)
+
+    # Register as Jinja2 globals so every template
+    # can call rssi_pct(), ber_pct(), clamp() directly
+    app.jinja_env.globals['rssi_pct'] = _rssi_pct
+    app.jinja_env.globals['ber_pct'] = _ber_pct
+    app.jinja_env.globals['clamp'] = _clamp
+    
+    # ------------------------------------------------------------------
+    # Register Blueprints
     # Each blueprint is imported and registered individually
     # with explicit error handling so one failure does not
     # prevent the others from loading.
