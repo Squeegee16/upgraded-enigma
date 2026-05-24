@@ -169,7 +169,7 @@ services:
 
     volumes:
       - openwebrx_data:/var/lib/openwebrx
-
+      - /var/lib/openwebrx/:/var/lib/openwebrx/ # settings
     # RTL-SDR USB device passthrough.
     # The RTL-SDR is assigned to THIS container.
     # Do NOT also assign it to the app service above.
