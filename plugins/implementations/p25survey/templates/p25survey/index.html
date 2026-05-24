@@ -4,24 +4,7 @@
 
 {% block extra_css %}
 {# Safe percentage calculation macro #}
-{# Avoids float/iterable errors in Jinja2 max/min filters #}
-{% macro signal_pct(value, min_val, max_val, scale=1) %}
-{% set v = (value or 0) | float %}
-{% set pct = ((v - min_val) / (max_val - min_val) * 100) * scale %}
-{% if pct < 0 %}0{% elif pct > 100 %}100{% else %}{{ pct | round(1) }}{% endif %}
-{% endmacro %}
 
-{% macro ber_pct(ber) %}
-{% set b = (ber or 0) | float %}
-{% set p = 100 - b * 10 %}
-{% if p < 0 %}0{% elif p > 100 %}100{% else %}{{ p | round(1) }}{% endif %}
-{% endmacro %}
-
-{% macro rssi_pct(rssi) %}
-{% set r = (rssi or -120) | float %}
-{% set p = (r + 120) / 60 * 100 %}
-{% if p < 0 %}0{% elif p > 100 %}100{% else %}{{ p | round(1) }}{% endif %}
-{% endmacro %}
 <style>
 /* ============================================================
    P25 Survey Plugin Styles
@@ -452,7 +435,7 @@
                     <div class="signal-bar">
                         <div class="signal-fill"
                              id="rssi-bar"
-                             style="width:{{ rssi_pct(status.get('rssi', -120)) }}%"
+                             style="width:{{ rssi_pct }}%"
                         </div>
                     </div>
                 </div>
@@ -477,7 +460,7 @@
                     <div class="signal-bar">
                         <div class="signal-fill"
                              id="ber-bar"
-                             style="width:{{ ber_pct(status.get('ber_avg', 0)) }}%"
+                             style="width:{{ ber_pct }}%"
                         </div>
                     </div>
                 </div>
