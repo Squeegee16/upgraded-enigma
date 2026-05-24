@@ -214,6 +214,30 @@ class P25SurveyPlugin(BasePlugin):
                     except Exception:
                         pass
 
+                # Pre-compute signal bar widths
+                rssi_raw = status.get('rssi') or -120
+                try:
+                    rssi_raw = float(rssi_raw)
+                except (TypeError, ValueError):
+                    rssi_raw = -120.0
+
+                ber_raw = status.get('ber_avg') or 0.0
+                try:
+                    ber_raw = float(ber_raw)
+                except (TypeError, ValueError):
+                    ber_raw = 0.0
+
+                rssi_pct = max(
+                    0, min(100,
+                        round((rssi_raw + 120) / 60 * 100, 1)
+                    )
+                )
+                ber_pct = max(
+                    0, min(100,
+                        round(100 - ber_raw * 10, 1)
+                    )
+                )
+
                 return render_template(
                     'p25survey/index.html',
                     plugin=self,
@@ -231,10 +255,15 @@ class P25SurveyPlugin(BasePlugin):
                     scan_states=SCAN_STATES,
                     install_complete=self.install_complete,
                     install_error=self.install_error,
+                    # Pre-computed bar widths
+                    rssi_pct=rssi_pct,
+                    ber_pct=ber_pct,
                 )
 
             except Exception as e:
-                print(f"[{self.name}] Index error: {e}")
+                print(
+                    f"[{self.name}] Index error: {e}"
+                )
                 traceback.print_exc()
                 return render_template(
                     'errors/500.html', error=str(e)
