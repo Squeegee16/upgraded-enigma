@@ -191,8 +191,8 @@ services:
 
     environment:
       - TZ=${TZ:-UTC}
-      - OPENWEBRX_ADMIN_USER = VE1WTF
-      - OPENWEBRX_ADMIN_PASSWORD = Password1!
+      - OPENWEBRX_ADMIN_USER=VE1WTF
+      - OPENWEBRX_ADMIN_PASSWORD=Password1!
     logging:
       driver: "json-file"
       options:
