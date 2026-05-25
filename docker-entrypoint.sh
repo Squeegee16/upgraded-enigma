@@ -353,7 +353,7 @@ fi
 # OpenWebRX sidecar availability check
 # ---------------------------------------------------------------
 echo -e "\n${BLUE}[6e/7]--- Check OpenWebRX Sidecar ---${NC}"
-OWRX_URL="${OPENWEBRX_URL:-http://openwebrx:8073}"
+OWRX_URL="${OPENWEBRX_URL:-http://0.0.0.0:8073}"
 echo "  OpenWebRX URL: $OWRX_URL"
 
 # Non-fatal — openwebrx may still be starting
