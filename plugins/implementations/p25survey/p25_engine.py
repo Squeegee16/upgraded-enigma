@@ -1142,8 +1142,10 @@ class P25SurveyEngine:
                 if self._active_call else None
             )
 
-        tg = self._channel['talkgroup']
-        tg_name = COMMON_TALKGROUPS.get(tg, '')
+# Use .get() — 'talkgroup' may be absent before
+        # any signal is received or after a channel reset.
+        tg = self._channel.get('talkgroup')
+        tg_name = COMMON_TALKGROUPS.get(tg, '') if tg else ''
 
         # FIX: Convert NAC to int safely before formatting.
         # Config stores NAC as a hex string (e.g. '293')
@@ -1170,12 +1172,12 @@ class P25SurveyEngine:
             'running': self._running,
             'scan_state': self._scan_state,
             'source': self._source,
-            'frequency': self._channel['frequency'],
+            'frequency': self._channel.get('frequency'),
             # FIX: format nac_int (integer), not raw_nac
             'nac': f'0x{nac_int:03X}',
             'nac_int': nac_int,
-            'phase': self._channel['phase'],
-            'scan_mode': self._channel['mode'],
+            'phase': self._channel.get('phase', 1),
+            'scan_mode': self._channel.get('mode', 'conventional'),
             'active_call': active,
             'rssi': self._stats.get('last_rssi'),
             'ber_avg': self._stats.get('ber_avg', 0),
