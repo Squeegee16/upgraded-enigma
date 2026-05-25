@@ -64,6 +64,10 @@ services:
 
     ports:
       - "5000:5000"
+      - "7362:7362"
+      - "8080:8080"
+      - "2237:2237"
+      
     environment:
       - FLASK_ENV=${FLASK_ENV:-production}
       - FLASK_DEBUG=${FLASK_DEBUG:-1}
@@ -148,8 +152,6 @@ services:
     labels:
       - "com.hamradio.service=app"
       - "com.hamradio.version=0.2.0"
-
-
   # ==========================================================
   # OpenWebRX SDR Receiver - Official Docker Image
   # https://github.com/jketterl/openwebrx
@@ -160,10 +162,8 @@ services:
   # ==========================================================
   openwebrx:
     image: jketterl/openwebrx:stable
-
     container_name: hamradio_openwebrx
     restart: unless-stopped
-
     ports:
       - "8073:8073"
 
@@ -201,7 +201,6 @@ services:
 
     labels:
       - "com.hamradio.service=openwebrx"
-
 
   # ==========================================================
   # Database Backup Service
@@ -242,7 +241,6 @@ services:
         sleep $${BACKUP_INTERVAL};
       done
       '
-
     networks:
       - hamradio_net
 
