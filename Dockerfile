@@ -47,6 +47,7 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     libpq-dev \
     librtlsdr0 \
+    librtlsdr-dev \
     nano \
     && rm -rf /var/lib/apt/lists/*
 
