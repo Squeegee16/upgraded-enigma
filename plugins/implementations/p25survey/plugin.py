@@ -68,7 +68,13 @@ class P25SurveyPlugin(BasePlugin):
 
         self.install_complete = False
         self.install_error = None
-
+        self._channel = {
+            'frequency': None,
+            'talkgroup': None,
+            'nac': 0,
+            'phase': 1,
+            'mode': 'conventional',
+        }
         self._active_call_start = None
 
     def _load_config(self):
