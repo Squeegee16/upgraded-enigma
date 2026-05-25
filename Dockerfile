@@ -45,10 +45,6 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     libssl-dev \
     python3-dev \
-    libpq-dev \
-    librtlsdr0 \
-    librtlsdr-dev \
-    nano \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
@@ -115,6 +111,10 @@ RUN apt-get update && apt-get install -y \
     automake \
     libtool \
     swig \
+    libpq-dev \
+    librtlsdr0 \
+    librtlsdr-dev \
+    nano \
     && rm -rf /var/lib/apt/lists/*
 
 # Audio libraries for USB sound card support
