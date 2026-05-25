@@ -97,6 +97,9 @@ services:
       - AUDIO_DEVICE=${AUDIO_DEVICE:-}
       - AUDIO_INPUT_DEVICE=${AUDIO_INPUT_DEVICE:-}
       - AUDIO_OUTPUT_DEVICE=${AUDIO_OUTPUT_DEVICE:-}
+      - QT_QPA_PLATFORM:-xcb
+      - QT_DEBUG_PLUGINS:-1
+      
 
     volumes:
       # Single volume covers all /data subdirectories
