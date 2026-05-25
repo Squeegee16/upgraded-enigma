@@ -115,6 +115,7 @@ RUN apt-get update && apt-get install -y \
     librtlsdr0 \
     librtlsdr-dev \
     nano \
+    libxcb-cursor0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Audio libraries for USB sound card support
