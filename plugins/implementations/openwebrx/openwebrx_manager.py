@@ -115,7 +115,7 @@ class OpenWebRXManager:
         )
         defaults = {
             'openwebrx_url': os.environ.get(
-                'OPENWEBRX_URL', 'http://openwebrx:8073'
+                'OPENWEBRX_URL', 'http://0.0.0.0:8073'
             ),
             'http_port': 8073,
             'log_ft8': True,
@@ -124,7 +124,7 @@ class OpenWebRXManager:
             'log_other': False,
             'min_snr_log': -20,
             'poll_interval': 15,
-            'receiver_name': 'Ham Radio SDR',
+            'receiver_name': 'Ham SDR',
             'callsign': '',
             'locator': '',
             'admin_password': '',
