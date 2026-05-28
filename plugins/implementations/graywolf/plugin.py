@@ -51,7 +51,7 @@ class GrayWolfPlugin(BasePlugin):
     name = "GrayWolf"
     description = "Winlink email over radio via GrayWolf client"
     version = "1.0.0"
-    author = "Ham Radio App Team"
+    author = "HRT - Ham Rad Team"
     url = "https://github.com/chrissnell/graywolf"
 
     def __init__(self, app=None, devices=None):
@@ -94,15 +94,15 @@ class GrayWolfPlugin(BasePlugin):
         Returns:
             bool: True if initialization was successful
         """
-        print(f"\n[{self.name}] Initializing plugin...")
+        print(f"\n[{self.name}] [init] Initializing plugin...")
 
         try:
             # Run installer (handles first-run detection internally)
-            print(f"[{self.name}] Checking installation...")
+            print(f"[{self.name}] [init] Checking installation...")
             install_success = self.installer.run()
 
             if not install_success:
-                self.install_error = "GrayWolf installation failed"
+                self.install_error = "[init] installation failed"
                 print(f"[{self.name}] ERROR: {self.install_error}")
                 # Continue anyway - show error in UI
                 # Don't return False as we still want the UI to load
@@ -124,23 +124,23 @@ class GrayWolfPlugin(BasePlugin):
                     # Pre-populate grid in config
                     if not self.manager.config.get('grid'):
                         self.manager.save_config({'grid': position['grid']})
-                        print(f"[{self.name}] Grid set from GPS: {position['grid']}")
+                        print(f"[{self.name}] [init] Grid set from GPS: {position['grid']}")
 
             # Auto-start if configured
             if self.manager.config.get('auto_start') and self.install_complete:
-                print(f"[{self.name}] Auto-starting GrayWolf...")
+                print(f"[{self.name}] [init] Auto-starting...")
                 success, message = self.manager.start()
                 if success:
-                    print(f"[{self.name}] ✓ Auto-start successful")
+                    print(f"[{self.name}] [init] ✓ Auto-start successful")
                 else:
-                    print(f"[{self.name}] Auto-start failed: {message}")
+                    print(f"[{self.name}] [init] Auto-start failed: {message}")
 
-            print(f"[{self.name}] ✓ Plugin initialized")
+            print(f"[{self.name}] [init] ✓ Plugin initialized")
             return True
 
         except Exception as e:
             self.install_error = str(e)
-            print(f"[{self.name}] ERROR during initialization: {e}")
+            print(f"[{self.name}] [init] ERROR during initialization: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -186,7 +186,6 @@ class GrayWolfPlugin(BasePlugin):
     def _register_routes(self, bp):
         """
         Register all Flask routes on the blueprint.
-
         Args:
             bp: Flask Blueprint instance
         """
@@ -225,7 +224,6 @@ class GrayWolfPlugin(BasePlugin):
         def settings():
             """
             GrayWolf settings page.
-
             Handles configuration updates.
             """
             form = GrayWolfSettingsForm()
@@ -303,7 +301,7 @@ class GrayWolfPlugin(BasePlugin):
 
             if form.validate_on_submit():
                 if not self.manager:
-                    flash('GrayWolf manager not available', 'danger')
+                    flash('[Route] GrayWolf manager not available', 'danger')
                     return redirect(url_for(f'{self.name}.compose'))
 
                 # Send message via GrayWolf
@@ -314,7 +312,7 @@ class GrayWolfPlugin(BasePlugin):
                 )
 
                 if success:
-                    flash(f'Message queued: {message}', 'success')
+                    flash(f'[Route] Message queued: {message}', 'success')
 
                     # Log contact to central logbook if requested
                     if form.log_as_contact.data:
@@ -323,7 +321,7 @@ class GrayWolfPlugin(BasePlugin):
                             subject=form.subject.data
                         )
                 else:
-                    flash(f'Failed to send: {message}', 'danger')
+                    flash(f'[Route] Failed to send: {message}', 'danger')
 
                 return redirect(url_for(f'{self.name}.inbox'))
 
@@ -342,10 +340,10 @@ class GrayWolfPlugin(BasePlugin):
         def api_start():
             """API endpoint to start GrayWolf."""
             if not self.manager:
-                return jsonify({'success': False, 'error': 'Manager not initialized'}), 503
+                return jsonify({'success': False, 'error': '[Route] GrayWolf Manager not initialized'}), 503
 
             if not self.install_complete:
-                return jsonify({'success': False, 'error': 'GrayWolf not installed'}), 503
+                return jsonify({'success': False, 'error': '[Route] GrayWolf not installed'}), 503
 
             data = request.get_json() or {}
             success, message = self.manager.start(
@@ -365,7 +363,7 @@ class GrayWolfPlugin(BasePlugin):
         def api_stop():
             """API endpoint to stop GrayWolf."""
             if not self.manager:
-                return jsonify({'success': False, 'error': 'Manager not initialized'}), 503
+                return jsonify({'success': False, 'error': '[Route] GrayWolf Manager not initialized'}), 503
 
             success, message = self.manager.stop()
 
@@ -423,7 +421,7 @@ class GrayWolfPlugin(BasePlugin):
 
                 return jsonify({
                     'success': success,
-                    'message': 'Installation complete' if success else 'Installation failed'
+                    'message': '[Route] API Installation complete' if success else '[Route] API Installation failed'
                 })
             except Exception as e:
                 return jsonify({'success': False, 'error': str(e)}), 500
@@ -467,9 +465,9 @@ class GrayWolfPlugin(BasePlugin):
             success = self.log_contact(contact_data)
 
             if success:
-                print(f"[{self.name}] ✓ Contact logged: {callsign}")
+                print(f"[{self.name}] [Route] ✓ Contact logged: {callsign}")
             else:
-                print(f"[{self.name}] Warning: Could not log contact for {callsign}")
+                print(f"[{self.name}] [Route] Warning: Could not log contact for {callsign}")
 
         except Exception as e:
-            print(f"[{self.name}] Error logging contact: {e}")
+            print(f"[{self.name}] [Route] Error logging contact: {e}")
