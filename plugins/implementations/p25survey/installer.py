@@ -108,7 +108,7 @@ except ImportError:
                 with open(path, 'w') as f:
                     json.dump(data, f, indent=2)
             except Exception as e:
-                print(f"[P25] Marker error: {e}")
+                print(f"[P25][INSTALL] Marker write error: {e}")
 
         def read_marker(self, path):
             if not os.path.exists(path):
@@ -116,9 +116,9 @@ except ImportError:
             try:
                 with open(path, 'r') as f:
                     return json.load(f)
-            except Exception:
+            except Exception as e:
+                print(f"[P25][INSTALL] Marker read error: {e}")
                 return {}
-
 
 class P25SurveyInstaller(BaseInstaller):
     """
@@ -252,12 +252,12 @@ class P25SurveyInstaller(BaseInstaller):
             bool: True always — plugin loads regardless
         """
         if self.is_installed():
-            print("[P25Survey] ✓ Already installed")
+            print("[P25][INSTALL] ✓ Already installed")
             return True
 
-        print("[P25Survey] ==========================================")
-        print("[P25Survey] Installing P25 Survey dependencies")
-        print("[P25Survey] ==========================================")
+        print("[P25][INSTALL] ==========================================")
+        print("[P25][INSTALL] Installing P25 Survey dependencies")
+        print("[P25][INSTALL] ==========================================")
 
         # Python packages
         available, failed = self.install_python_packages(
@@ -269,7 +269,7 @@ class P25SurveyInstaller(BaseInstaller):
 
         if failed and self.in_docker:
             print(
-                f"[P25Survey] Add to requirements.txt: "
+                f"[P25][INSTALL] Add to requirements.txt: "
                 f"{', '.join(failed)}"
             )
 
@@ -277,23 +277,23 @@ class P25SurveyInstaller(BaseInstaller):
         decoder_name, decoder_path = self.find_decoder()
         if decoder_name:
             print(
-                f"[P25Survey] ✓ Decoder: "
+                f"[P25][INSTALL] ✓ Decoder: "
                 f"{decoder_name} at {decoder_path}"
             )
         else:
             print(
-                "[P25Survey] INFO: No P25 decoder found."
+                "[P25][INSTALL] INFO: No P25 decoder found."
             )
             print(
-                "[P25Survey] For full decode, install OP25:"
+                "[P25][INSTALL] For full decode, install OP25:"
             )
             print(
-                "[P25Survey]   https://github.com/"
+                "[P25][INSTALL]   https://github.com/"
                 "boatbod/op25"
             )
             if self.in_docker:
                 print(
-                    "[P25Survey] Add to Dockerfile: "
+                    "[P25][INSTALL] Add to Dockerfile: "
                     "apt-get install -y gr-op25-repeater"
                 )
 
@@ -307,5 +307,5 @@ class P25SurveyInstaller(BaseInstaller):
             }
         )
 
-        print("[P25Survey] ✓ Installation complete")
+        print("[P25][INSTALL] ✓ Installation complete")
         return True
