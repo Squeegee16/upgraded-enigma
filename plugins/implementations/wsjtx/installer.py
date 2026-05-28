@@ -103,7 +103,7 @@ except ImportError:
                 with open(path, 'w') as f:
                     json.dump(data, f, indent=2)
             except Exception as e:
-                print(f"[WSJTX] Marker write error: {e}")
+                print(f"[WSJTX][INSTALL] Marker write error: {e}")
 
         def read_marker(self, path):
             if not os.path.exists(path):
@@ -111,7 +111,9 @@ except ImportError:
             try:
                 with open(path, 'r') as f:
                     return json.load(f)
-            except Exception:
+            except Exception as e:
+                print(f"[WSJTX][INSTALL] Marker read error: {e}")
+                
                 return {}
 
 
@@ -162,7 +164,7 @@ class WSJTXInstaller(BaseInstaller):
         )
 
         print(
-            f"[WSJTX] Installer init | "
+            f"[WSJTX][INSTALL] Installer init | "
             f"Docker: {self.in_docker} | "
             f"Root: {self.is_root} | "
             f"sudo: {self.sudo_available} | "
@@ -212,10 +214,10 @@ class WSJTXInstaller(BaseInstaller):
         except FileNotFoundError as e:
             return (
                 False, '',
-                f"Command not found: {cmd[0]} — {e}"
+                f"[WSJTX][INSTALL] File not found: {cmd[0]} — {e}"
             )
         except subprocess.TimeoutExpired:
-            return False, '', f"Timed out after {timeout}s"
+            return False, '', f"[WSJTX][INSTALL] Timed out after {timeout}s"
         except Exception as e:
             return False, '', str(e)
 
@@ -237,13 +239,13 @@ class WSJTXInstaller(BaseInstaller):
         Returns:
             bool: True if all packages available
         """
-        print("[WSJTX] Checking Python packages...")
+        print("[WSJTX][INSTALL] Checking Python packages...")
         available, failed = super().install_python_packages(
             self.REQUIRED_PACKAGES
         )
         if failed and self.in_docker:
             print(
-                f"[WSJTX] INFO: Add to requirements.txt: "
+                f"[WSJTX][INSTALL] INFO: Add to requirements.txt: "
                 f"{', '.join(failed)}"
             )
         return len(failed) == 0
@@ -259,19 +261,19 @@ class WSJTXInstaller(BaseInstaller):
         Returns:
             bool: True if installation successful
         """
-        print("[WSJTX] Installing via apt-get...")
+        print("[WSJTX][INSTALL] Installing via apt-get...")
 
         if not shutil.which('apt-get'):
-            print("[WSJTX] apt-get not available")
+            print("[WSJTX][INSTALL] apt-get not available")
             return False
 
         if self.in_docker and not self.is_root:
             print(
-                "[WSJTX] INFO: Cannot apt-get in Docker "
+                "[WSJTX][INSTALL] INFO: Cannot apt-get in Docker "
                 "as non-root. Add to Dockerfile:"
             )
             print(
-                "[WSJTX] INFO:   RUN apt-get update && "
+                "[WSJTX][INSTALL] INFO:   RUN apt-get update && "
                 "apt-get install -y wsjtx"
             )
             return False
@@ -283,7 +285,7 @@ class WSJTXInstaller(BaseInstaller):
         )
         if not ok:
             print(
-                f"[WSJTX] apt-get update failed: "
+                f"[WSJTX][INSTALL] apt-get update failed: "
                 f"{stderr[:150]}"
             )
             return False
@@ -297,11 +299,11 @@ class WSJTXInstaller(BaseInstaller):
         )
 
         if ok:
-            print("[WSJTX] ✓ Installed via apt-get")
+            print("[WSJTX][INSTALL] ✓ Installed via apt-get")
             return True
 
         print(
-            f"[WSJTX] apt-get failed: {stderr[:200]}"
+            f"[WSJTX][INSTALL] apt-get failed: {stderr[:200]}"
         )
         # Fall through to Flatpak
         return self._install_via_flatpak()
@@ -313,14 +315,14 @@ class WSJTXInstaller(BaseInstaller):
         Returns:
             bool: True if installation successful
         """
-        print("[WSJTX] Installing via dnf...")
+        print("[WSJTX][INSTALL] Installing via dnf...")
 
         if not shutil.which('dnf'):
             return False
 
         if self.in_docker and not self.is_root:
             print(
-                "[WSJTX] INFO: Add to Dockerfile: "
+                "[WSJTX][INSTALL] INFO: Add to Dockerfile: "
                 "RUN dnf install -y wsjtx"
             )
             return False
@@ -331,10 +333,10 @@ class WSJTXInstaller(BaseInstaller):
         )
 
         if ok:
-            print("[WSJTX] ✓ Installed via dnf")
+            print("[WSJTX][INSTALL] ✓ Installed via dnf")
             return True
 
-        print(f"[WSJTX] dnf failed: {stderr[:200]}")
+        print(f"[WSJTX][INSTALL] dnf failed: {stderr[:200]}")
         return self._install_via_flatpak()
 
     def _install_via_pacman(self):
@@ -344,14 +346,14 @@ class WSJTXInstaller(BaseInstaller):
         Returns:
             bool: True if installation successful
         """
-        print("[WSJTX] Installing via pacman...")
+        print("[WSJTX][INSTALL] Installing via pacman...")
 
         if not shutil.which('pacman'):
             return False
 
         if self.in_docker and not self.is_root:
             print(
-                "[WSJTX] INFO: Add to Dockerfile: "
+                "[WSJTX][INSTALL] INFO: Add to Dockerfile: "
                 "RUN pacman -S --noconfirm wsjtx"
             )
             return False
@@ -364,7 +366,7 @@ class WSJTXInstaller(BaseInstaller):
         )
 
         if ok:
-            print("[WSJTX] ✓ Installed via pacman")
+            print("[WSJTX][INSTALL] ✓ Installed via pacman")
             return True
 
         # Try AUR via yay
@@ -374,7 +376,7 @@ class WSJTXInstaller(BaseInstaller):
                 timeout=300
             )
             if ok:
-                print("[WSJTX] ✓ Installed via yay (AUR)")
+                print("[WSJTX][INSTALL] ✓ Installed via yay (AUR)")
                 return True
 
         return self._install_via_flatpak()
@@ -389,10 +391,10 @@ class WSJTXInstaller(BaseInstaller):
         Returns:
             bool: True if installation successful
         """
-        print("[WSJTX] Installing via Flatpak...")
+        print("[WSJTX][INSTALL] Installing via Flatpak...")
 
         if not shutil.which('flatpak'):
-            print("[WSJTX] Flatpak not available")
+            print("[WSJTX][INSTALL] Flatpak not available")
             return self._install_appimage()
 
         # Add Flathub remote
@@ -416,7 +418,7 @@ class WSJTXInstaller(BaseInstaller):
 
         if not ok:
             print(
-                f"[WSJTX] Flatpak failed: {stderr[:200]}"
+                f"[WSJTX][INSTALL] Flatpak failed: {stderr[:200]}"
             )
             return self._install_appimage()
 
@@ -434,15 +436,15 @@ class WSJTXInstaller(BaseInstaller):
                 )
             os.chmod(wrapper_path, 0o755)
             print(
-                f"[WSJTX] ✓ Flatpak wrapper: "
+                f"[WSJTX][INSTALL] ✓ Flatpak wrapper: "
                 f"{wrapper_path}"
             )
         except Exception as e:
             print(
-                f"[WSJTX] Wrapper error (non-fatal): {e}"
+                f"[WSJTX][INSTALL] Wrapper error (non-fatal): {e}"
             )
 
-        print("[WSJTX] ✓ Installed via Flatpak")
+        print("[WSJTX][INSTALL] ✓ Installed via Flatpak")
         return True
 
     def _install_appimage(self):
@@ -455,7 +457,7 @@ class WSJTXInstaller(BaseInstaller):
         Returns:
             bool: True if installation successful
         """
-        print("[WSJTX] Downloading AppImage...")
+        print("[WSJTX][INSTALL] Downloading AppImage...")
 
         try:
             arch = 'x86_64' if self._arch == 'x86_64' \
@@ -474,7 +476,7 @@ class WSJTXInstaller(BaseInstaller):
             )
 
             print(
-                f"[WSJTX] Downloading from {appimage_url}"
+                f"[WSJTX][INSTALL] Downloading from {appimage_url}"
             )
             urllib.request.urlretrieve(
                 appimage_url, appimage_path
@@ -494,17 +496,17 @@ class WSJTXInstaller(BaseInstaller):
             os.chmod(wrapper_path, 0o755)
 
             print(
-                f"[WSJTX] ✓ AppImage installed: "
+                f"[WSJTX][INSTALL] ✓ AppImage installed: "
                 f"{appimage_path}"
             )
             return True
 
         except Exception as e:
             print(
-                f"[WSJTX] AppImage failed: {e}"
+                f"[WSJTX][INSTALL] AppImage failed: {e}"
             )
             print(
-                "[WSJTX] Manual install: "
+                "[WSJTX][INSTALL] Manual install: "
                 "https://physics.princeton.edu/"
                 "pulsar/k1jt/wsjtx.html"
             )
@@ -563,57 +565,57 @@ class WSJTXInstaller(BaseInstaller):
             bool: True if installed or already present
         """
         if self.is_installed():
-            print("[WSJTX] ✓ Already installed")
+            print("[WSJTX][INSTALL] ✓ Already installed")
             return True
 
         if shutil.which(self.WSJTX_BINARY):
             version = self.get_version()
             self.write_install_marker('existing', version)
-            print("[WSJTX] ✓ Found in PATH")
+            print("[WSJTX][INSTALL] ✓ Found in PATH")
             return True
 
-        print("[WSJTX] ==========================================")
-        print("[WSJTX] Starting first-run installation")
-        print("[WSJTX] ==========================================")
+        print("[WSJTX][INSTALL] ==========================================")
+        print("[WSJTX][INSTALL] Starting installation")
+        print("[WSJTX][INSTALL] ==========================================")
 
         # Docker non-root: cannot install system packages
         if self.in_docker and not self.is_root:
             print(
-                "\n[WSJTX] ======================================"
+                "\n[WSJTX][INSTALL] ======================================"
             )
-            print("[WSJTX] DOCKER INSTALLATION REQUIRED")
+            print("[WSJTX][INSTALL] DOCKER INSTALLATION REQUIRED")
             print(
-                "[WSJTX] ======================================"
-            )
-            print(
-                "[WSJTX] Add to Dockerfile and rebuild:"
-            )
-            print()
-            print(
-                "[WSJTX]   RUN apt-get update && \\"
+                "[WSJTX][INSTALL] ======================================"
             )
             print(
-                "[WSJTX]       apt-get install -y wsjtx && \\"
-            )
-            print(
-                "[WSJTX]       rm -rf /var/lib/apt/lists/*"
+                "[WSJTX][INSTALL] Add to Dockerfile and rebuild:"
             )
             print()
             print(
-                "[WSJTX]   docker compose build --no-cache"
+                "[WSJTX][INSTALL]   RUN apt-get update && \\"
             )
             print(
-                "[WSJTX] ======================================"
+                "[WSJTX][INSTALL]      apt-get install -y wsjtx && \\"
+            )
+            print(
+                "[WSJTX][INSTALL]       rm -rf /var/lib/apt/lists/*"
+            )
+            print()
+            print(
+                "[WSJTX][INSTALL]   docker compose build --no-cache"
+            )
+            print(
+                "[WSJTX][INSTALL] ======================================"
             )
             return False
 
         # Step 1: Python packages
-        print("\n[WSJTX] Step 1: Python packages...")
+        print("\n[WSJTX][INSTALL] Step 1: Python packages...")
         self.install_python_packages()
 
         # Step 2: Install WSJT-X
         print(
-            f"\n[WSJTX] Step 2: Installing WSJT-X "
+            f"\n[WSJTX][INSTALL] Step 2: Installing WSJT-X "
             f"(pkg mgr: "
             f"{self._package_manager or 'none'})..."
         )
@@ -629,7 +631,7 @@ class WSJTXInstaller(BaseInstaller):
             success = self._install_via_flatpak()
 
         if not success:
-            print("[WSJTX] ERROR: Installation failed")
+            print("[WSJTX][INSTALL] ERROR: Installation failed")
             return False
 
         version = self.get_version()
@@ -638,10 +640,10 @@ class WSJTXInstaller(BaseInstaller):
             version
         )
 
-        print("\n[WSJTX] ==========================================")
-        print("[WSJTX] ✓ Installation complete!")
+        print("\n[WSJTX][INSTALL] ==========================================")
+        print("[WSJTX][INSTALL] ✓ Installation complete!")
         if version:
-            print(f"[WSJTX]   Version: {version}")
-        print("[WSJTX] ==========================================\n")
+            print(f"[WSJTX][INSTALL]   Version: {version}")
+        print("[WSJTX][INSTALL] ==========================================\n")
 
         return True
