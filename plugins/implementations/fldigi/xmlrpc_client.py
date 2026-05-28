@@ -72,7 +72,7 @@ class FldigiXMLRPC:
             # Test connection by calling fldigi.version()
             version = self._server.fldigi.version()
             self._connected = True
-            print(f"[FLdigi-XMLRPC] Connected: FLdigi {version}")
+            print(f"[FLdigi][XMLRPC] Connected: FLdigi {version}")
             return True
 
         except ConnectionRefusedError:
@@ -80,7 +80,7 @@ class FldigiXMLRPC:
             return False
         except Exception as e:
             self._connected = False
-            print(f"[FLdigi-XMLRPC] Connection error: {e}")
+            print(f"[FLdigi][XMLRPC] Connection error: {e}")
             return False
 
     def disconnect(self):
@@ -133,13 +133,13 @@ class FldigiXMLRPC:
             return method(*args)
 
         except xmlrpc.client.Fault as e:
-            print(f"[FLdigi-XMLRPC] Fault in {method_path}: {e}")
+            print(f"[FLdigi][XMLRPC] Fault in {method_path}: {e}")
             return default
         except ConnectionRefusedError:
             self._connected = False
             return default
         except Exception as e:
-            print(f"[FLdigi-XMLRPC] Error in {method_path}: {e}")
+            print(f"[FLdigi][XMLRPC] Error in {method_path}: {e}")
             return default
 
     # ================================================================
