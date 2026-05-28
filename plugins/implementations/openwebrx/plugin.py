@@ -59,7 +59,7 @@ class OpenWebRXPlugin(BasePlugin):
         "decoding and signal logging"
     )
     version = "1.0.0"
-    author = "Ham Radio App Team"
+    author = "HRT - Ham Rad Team"
     url = "https://github.com/jketterl/openwebrx"
 
     def __init__(self, app=None, devices=None):
