@@ -83,7 +83,10 @@ except ImportError:
                     timeout=120
                 )
                 return True
-            except Exception:
+            except Exception as e:
+                print(
+                    f"[SatDump][Install] PIP error: {e}"
+                )
                 return False
 
         def install_python_packages(self, packages):
@@ -109,7 +112,7 @@ except ImportError:
                     json.dump(data, f, indent=2)
             except Exception as e:
                 print(
-                    f"[SatDump] Marker write error: {e}"
+                    f"[SatDump][Install] Marker write error: {e}"
                 )
 
         def read_marker(self, path):
@@ -200,7 +203,7 @@ class SatDumpInstaller(BaseInstaller):
         )
 
         print(
-            f"[SatDump] Installer init | "
+            f"[SatDump][Install] Installer init | "
             f"Docker: {self.in_docker} | "
             f"Root: {self.is_root} | "
             f"sudo: {self.sudo_available} | "
@@ -248,10 +251,10 @@ class SatDumpInstaller(BaseInstaller):
         except FileNotFoundError as e:
             return (
                 False, '',
-                f"Command not found: {cmd[0]} — {e}"
+                f"[SatDump][Install] File not found: {cmd[0]} — {e}"
             )
         except subprocess.TimeoutExpired:
-            return False, '', f"Timed out after {timeout}s"
+            return False, '', f"[SatDump][Install] Timed out after {timeout}s"
         except Exception as e:
             return False, '', str(e)
 
@@ -276,7 +279,7 @@ class SatDumpInstaller(BaseInstaller):
         Returns:
             bool: True if required packages available
         """
-        print("[SatDump] Checking Python packages...")
+        print("[SatDump][Install] Checking Python packages...")
 
         available, failed = super().install_python_packages(
             self.REQUIRED_PACKAGES
@@ -288,7 +291,7 @@ class SatDumpInstaller(BaseInstaller):
 
         if failed and self.in_docker:
             print(
-                f"[SatDump] INFO: Add to requirements.txt: "
+                f"[SatDump][Install] INFO: Add to requirements.txt: "
                 f"{', '.join(failed)}"
             )
 
@@ -304,31 +307,31 @@ class SatDumpInstaller(BaseInstaller):
         Returns:
             bool: True if installation successful
         """
-        print("[SatDump] Installing via apt PPA...")
+        print("[SatDump][Install] Installing via apt PPA...")
 
         if not shutil.which('apt-get'):
-            print("[SatDump] apt-get not available")
+            print("[SatDump][Install] apt-get not available")
             return False
 
         if self.in_docker and not self.is_root:
             print(
-                "[SatDump] INFO: Cannot apt-get in Docker "
+                "[SatDump][Install] INFO: Cannot apt-get in Docker "
                 "as non-root. Add to Dockerfile:"
             )
             print(
-                "[SatDump] INFO:   RUN curl -fsSL "
+                "[SatDump][Install] INFO:   RUN curl -fsSL "
                 "https://downloads.satdump.org/key.gpg"
                 " | apt-key add - && \\"
             )
             print(
-                '[SatDump] INFO:       echo "deb '
+                '[SatDump][Install] INFO:       echo "deb '
                 'https://downloads.satdump.org/apt '
                 'stable main" '
                 '> /etc/apt/sources.list.d/satdump.list'
                 ' && \\'
             )
             print(
-                "[SatDump] INFO:       apt-get update && "
+                "[SatDump][Install] INFO:       apt-get update && "
                 "apt-get install -y satdump"
             )
             return False
@@ -343,13 +346,13 @@ class SatDumpInstaller(BaseInstaller):
         )
         if not ok:
             print(
-                f"[SatDump] Prerequisites failed: "
+                f"[SatDump][Install] Prerequisites failed: "
                 f"{stderr[:100]}"
             )
             return False
 
         # Add GPG key
-        print("[SatDump] Adding repository key...")
+        print("[SatDump][Install] Adding repository key...")
         key_ok, key_data, _ = self._run_system_command(
             [
                 'curl', '-fsSL',
@@ -372,7 +375,7 @@ class SatDumpInstaller(BaseInstaller):
                 )
             except Exception as e:
                 print(
-                    f"[SatDump] GPG key warning: {e}"
+                    f"[SatDump][Install] GPG key warning: {e}"
                 )
 
         # Detect distro
@@ -384,7 +387,7 @@ class SatDumpInstaller(BaseInstaller):
 
         # Add repository
         print(
-            f"[SatDump] Adding repository "
+            f"[SatDump][Install] Adding repository "
             f"for {distro_name}..."
         )
         repo_line = (
@@ -406,7 +409,7 @@ class SatDumpInstaller(BaseInstaller):
             )
         except Exception as e:
             print(
-                f"[SatDump] Repo add warning: {e}"
+                f"[SatDump][Install] Repo add warning: {e}"
             )
 
         # Update and install
@@ -416,7 +419,7 @@ class SatDumpInstaller(BaseInstaller):
         )
         if not ok:
             print(
-                f"[SatDump] Update failed: {stderr[:100]}"
+                f"[SatDump][Install] Update failed: {stderr[:100]}"
             )
             return False
 
@@ -428,11 +431,11 @@ class SatDumpInstaller(BaseInstaller):
         )
 
         if ok:
-            print("[SatDump] ✓ Installed via apt PPA")
+            print("[SatDump][Install] ✓ Installed via apt PPA")
             return True
 
         print(
-            f"[SatDump] apt install failed: {stderr[:200]}"
+            f"[SatDump][Install] apt install failed: {stderr[:200]}"
         )
         return False
 
@@ -443,10 +446,10 @@ class SatDumpInstaller(BaseInstaller):
         Returns:
             bool: True if installation successful
         """
-        print("[SatDump] Installing via Flatpak...")
+        print("[SatDump][Install] Installing via Flatpak...")
 
         if not shutil.which('flatpak'):
-            print("[SatDump] Flatpak not available")
+            print("[SatDump][Install] Flatpak not available")
             return self._build_from_source()
 
         # Add Flathub
@@ -469,7 +472,7 @@ class SatDumpInstaller(BaseInstaller):
 
         if not ok:
             print(
-                f"[SatDump] Flatpak failed: {stderr[:200]}"
+                f"[SatDump][Install] Flatpak failed: {stderr[:200]}"
             )
             return self._build_from_source()
 
@@ -488,10 +491,10 @@ class SatDumpInstaller(BaseInstaller):
             os.chmod(wrapper_path, 0o755)
         except Exception as e:
             print(
-                f"[SatDump] Wrapper warning: {e}"
+                f"[SatDump][Install] Wrapper warning: {e}"
             )
 
-        print("[SatDump] ✓ Installed via Flatpak")
+        print("[SatDump][Install] ✓ Installed via Flatpak")
         return True
 
     def _build_from_source(self):
@@ -505,7 +508,7 @@ class SatDumpInstaller(BaseInstaller):
         """
         if self.in_docker and not self.is_root:
             print(
-                "[SatDump] INFO: Cannot build from source "
+                "[SatDump][Install] INFO: Cannot build from source "
                 "in Docker as non-root."
             )
             return False
@@ -538,7 +541,7 @@ class SatDumpInstaller(BaseInstaller):
             )
             if not ok:
                 print(
-                    f"[SatDump] Clone failed: {stderr}"
+                    f"[SatDump][Install] Clone failed: {stderr}"
                 )
                 return False
 
@@ -557,7 +560,7 @@ class SatDumpInstaller(BaseInstaller):
             )
             if not ok:
                 print(
-                    f"[SatDump] cmake failed: {stderr[:200]}"
+                    f"[SatDump][Install] cmake failed: {stderr[:200]}"
                 )
                 return False
 
@@ -568,7 +571,7 @@ class SatDumpInstaller(BaseInstaller):
             )
             if not ok:
                 print(
-                    f"[SatDump] make failed: {stderr[:200]}"
+                    f"[SatDump][Install] make failed: {stderr[:200]}"
                 )
                 return False
 
@@ -578,7 +581,7 @@ class SatDumpInstaller(BaseInstaller):
             )
             if not ok:
                 print(
-                    f"[SatDump] install failed: "
+                    f"[SatDump][Install] install failed: "
                     f"{stderr[:200]}"
                 )
                 return False
@@ -588,11 +591,11 @@ class SatDumpInstaller(BaseInstaller):
                 timeout=30
             )
 
-            print("[SatDump] ✓ Built from source")
+            print("[SatDump][Install] ✓ Built from source")
             return True
 
         except Exception as e:
-            print(f"[SatDump] Source build error: {e}")
+            print(f"[SatDump][Install] Source build error: {e}")
             traceback.print_exc()
             return False
 
@@ -659,13 +662,13 @@ class SatDumpInstaller(BaseInstaller):
             bool: True if installed or already present
         """
         if self.is_installed():
-            print("[SatDump] ✓ Already installed")
+            print("[SatDump][Install]✓ Already installed")
             return True
 
         if shutil.which(self.SATDUMP_BINARY):
             version = self.get_version()
             self.write_install_marker('existing', version)
-            print("[SatDump] ✓ Found in PATH")
+            print("[SatDump][Install] ✓ Found in PATH")
             return True
 
         print("[SatDump] ==========================================")
@@ -675,62 +678,62 @@ class SatDumpInstaller(BaseInstaller):
         # Docker non-root: cannot install system packages
         if self.in_docker and not self.is_root:
             print(
-                "\n[SatDump] ======================================"
+                "\n[SatDump][Install] ======================================"
             )
-            print("[SatDump] DOCKER INSTALLATION REQUIRED")
+            print("[SatDump][Install] DOCKER INSTALLATION REQUIRED")
             print(
-                "[SatDump] ======================================"
+                "[SatDump][Install] ======================================"
             )
             print(
-                "[SatDump] Add to Dockerfile and rebuild:"
+                "[SatDump][Install] Add to Dockerfile and rebuild:"
             )
             print()
-            print("[SatDump]   # Add SatDump repository")
+            print("[SatDump][Install]   # Add SatDump repository")
             print(
-                "[SatDump]   RUN apt-get update && \\"
+                "[SatDump][Install]  RUN apt-get update && \\"
             )
             print(
-                "[SatDump]       apt-get install -y "
+                "[SatDump][Install]      apt-get install -y "
                 "curl gnupg && \\"
             )
             print(
-                "[SatDump]       curl -fsSL "
+                "[SatDump][Install]       curl -fsSL "
                 "https://downloads.satdump.org/key.gpg"
                 " | apt-key add - && \\"
             )
             print(
-                '[SatDump]       echo "deb '
+                '[SatDump][Install]       echo "deb '
                 'https://downloads.satdump.org/apt '
                 'stable main" '
                 '> /etc/apt/sources.list.d/satdump.list'
                 ' && \\'
             )
             print(
-                "[SatDump]       apt-get update && \\"
+                "[SatDump][Install]       apt-get update && \\"
             )
             print(
-                "[SatDump]       apt-get install -y "
+                "[SatDump][Install]      apt-get install -y "
                 "satdump && \\"
             )
             print(
-                "[SatDump]       rm -rf /var/lib/apt/lists/*"
+                "[SatDump][Install]      rm -rf /var/lib/apt/lists/*"
             )
             print()
             print(
-                "[SatDump]   docker compose build --no-cache"
+                "[SatDump][Install]   docker compose build --no-cache"
             )
             print(
-                "[SatDump] ======================================"
+                "[SatDump][Install] ======================================"
             )
             return False
 
         # Step 1: Python packages
-        print("\n[SatDump] Step 1: Python packages...")
+        print("\n[SatDump][Install] Step 1: Python packages...")
         self.install_python_packages()
 
         # Step 2: Install SatDump
         print(
-            f"\n[SatDump] Step 2: Installing SatDump "
+            f"\n[SatDump][Install] Step 2: Installing SatDump "
             f"(pkg mgr: "
             f"{self._package_manager or 'none'})..."
         )
@@ -755,7 +758,7 @@ class SatDumpInstaller(BaseInstaller):
             success = self._install_via_flatpak()
 
         if not success:
-            print("[SatDump] ERROR: Installation failed")
+            print("[SatDump][Install] ERROR: Installation failed")
             return False
 
         version = self.get_version()
@@ -765,13 +768,13 @@ class SatDumpInstaller(BaseInstaller):
         )
 
         print(
-            "\n[SatDump] =========================================="
+            "\n[SatDump][Install]=========================================="
         )
-        print("[SatDump] ✓ Installation complete!")
+        print("[SatDump][Install] ✓ Installation complete!")
         if version:
-            print(f"[SatDump]   Version: {version}")
+            print(f"[SatDump][Install]  Version: {version}")
         print(
-            "[SatDump] =========================================="
+            "[SatDump][Install] =========================================="
             "\n"
         )
 
