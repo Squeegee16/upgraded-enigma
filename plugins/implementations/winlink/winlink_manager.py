@@ -180,7 +180,7 @@ class WinlinkManager:
                     loaded = json.load(f)
                     defaults.update(loaded)
             except Exception as e:
-                print(f"[Winlink] Warning: Config load error: {e}")
+                print(f"[Winlink][init] Warning: Config load error: {e}")
 
         return defaults
 
@@ -207,11 +207,11 @@ class WinlinkManager:
             # Reinitialize message parser if callsign changed
             self._init_message_parser()
 
-            print("[Winlink] ✓ Configuration saved")
+            print("[Winlink][init] ✓ Configuration saved")
             return True
 
         except Exception as e:
-            print(f"[Winlink] ERROR: Config save failed: {e}")
+            print(f"[Winlink][init] ERROR: Config save failed: {e}")
             return False
 
     def generate_pat_config(self):
@@ -229,7 +229,7 @@ class WinlinkManager:
 
         callsign = self.config.get('callsign', '').upper()
         if not callsign:
-            print("[Winlink] WARNING: No callsign configured")
+            print("[Winlink][init] WARNING: No callsign configured")
             return False
 
         pat_config = {
@@ -263,10 +263,10 @@ class WinlinkManager:
         try:
             with open(config_path, 'w') as f:
                 json.dump(pat_config, f, indent=2)
-            print(f"[Winlink] ✓ Pat config generated: {config_path}")
+            print(f"[Winlink][init] ✓ Pat config generated: {config_path}")
             return True
         except Exception as e:
-            print(f"[Winlink] ERROR: Config generation failed: {e}")
+            print(f"[Winlink][init] ERROR: Config generation failed: {e}")
             return False
 
     def _add_log(self, message, level='info'):
@@ -328,18 +328,18 @@ class WinlinkManager:
         with self._process_lock:
             # Check already running
             if self._process and self._process.poll() is None:
-                return False, "Pat is already running"
+                return False, "[init] Pat is already running"
 
             # Validate binary
             if not self.is_binary_available():
                 return False, (
-                    f"Pat binary not found at {self.binary_path}. "
+                    f"[Winlink][init] Pat binary not found at {self.binary_path}. "
                     "Please install Pat: https://getpat.io/"
                 )
 
             # Validate callsign
             if not self.config.get('callsign'):
-                return False, "Callsign is required. Please configure settings."
+                return False, "[init] Callsign is required. Please configure settings."
 
             try:
                 # Generate Pat config file
@@ -356,9 +356,9 @@ class WinlinkManager:
                 ]
 
                 self._add_log(
-                    f"Starting Pat for {self.config.get('callsign')}..."
+                    f"[init] Starting Pat for {self.config.get('callsign')}..."
                 )
-                self._add_log(f"Command: {' '.join(cmd)}")
+                self._add_log(f"[init] Command: {' '.join(cmd)}")
 
                 # Start process
                 self._process = subprocess.Popen(
@@ -374,7 +374,7 @@ class WinlinkManager:
 
                 # Check if process started
                 if self._process.poll() is not None:
-                    return False, "Pat failed to start"
+                    return False, "[init] Pat failed to start"
 
                 # Update status
                 self._status['running'] = True
@@ -389,16 +389,16 @@ class WinlinkManager:
                 self._start_monitor()
 
                 self._add_log(
-                    f"✓ Pat started (PID: {self._process.pid})"
+                    f"[winlink][init] ✓ Pat started (PID: {self._process.pid})"
                 )
 
-                return True, f"Pat started (PID: {self._process.pid})"
+                return True, f"[winlink][init] Pat started (PID: {self._process.pid})"
 
             except Exception as e:
                 error = str(e)
                 self._status['error'] = error
                 self._add_log(f"ERROR: {error}", 'error')
-                return False, f"Failed to start Pat: {error}"
+                return False, f"[winlink][init] Failed to start Pat: {error}"
 
     def stop(self):
         """
@@ -437,8 +437,8 @@ class WinlinkManager:
 
             except Exception as e:
                 error = str(e)
-                self._add_log(f"ERROR stopping: {error}", 'error')
-                return False, f"Error stopping Pat: {error}"
+                self._add_log(f"[winlink] ERROR stopping: {error}", 'error')
+                return False, f"[winlink] Error stopping Pat: {error}"
 
     def _kill_pat_process(self):
         """
@@ -453,7 +453,7 @@ class WinlinkManager:
                 if proc.info['name'] == 'pat':
                     proc.terminate()
                     self._add_log(
-                        f"Terminated orphan Pat process: {proc.pid}",
+                        f"[winlink] Terminated orphan Pat process: {proc.pid}",
                         'warning'
                     )
         except Exception:
@@ -474,13 +474,13 @@ class WinlinkManager:
             tuple: (success, message)
         """
         if not self._status['running']:
-            return False, "Pat is not running. Start Pat first."
+            return False, "[winlink][init] Pat is not running. Start Pat first."
 
         if not self._status.get('api_available'):
-            return False, "Pat API not available yet"
+            return False, "[winlink][init] Pat API not available yet"
 
         if not REQUESTS_AVAILABLE:
-            return False, "requests package not available"
+            return False, "[winlink][init] requests package not available"
 
         try:
             # Use configured mode or override
@@ -502,7 +502,7 @@ class WinlinkManager:
                 gateway = target or 'W2CXM'
                 connect_url = f"ax25://{ax25_port}/{gateway}"
             else:
-                connect_url = f"telnet:///server.winlink.org:8772"
+                connect_url = f" [winlink][init] telnet:///server.winlink.org:8772"
 
             # Post to Pat connect API
             response = requests.post(
@@ -515,18 +515,18 @@ class WinlinkManager:
                 self._status['connected'] = True
                 self._status['mode'] = connect_mode
                 self._add_log(
-                    f"✓ Connected via {connect_mode}"
+                    f"[winlink][init] ✓ Connected via {connect_mode}"
                 )
-                return True, f"Connected via {connect_mode}"
+                return True, f"[winlink][init] Connected via {connect_mode}"
             else:
                 error = response.text
-                self._add_log(f"Connection failed: {error}", 'warning')
-                return False, f"Connection failed: {error}"
+                self._add_log(f"[winlink][init] Connection failed: {error}", 'warning')
+                return False, f"[winlink][init] Connection failed: {error}"
 
         except Exception as e:
             error = str(e)
-            self._add_log(f"Connection error: {error}", 'error')
-            return False, f"Connection error: {error}"
+            self._add_log(f"[winlink][init] Connection error: {error}", 'error')
+            return False, f"[winlink][init] Connection error: {error}"
 
     def disconnect(self):
         """
@@ -536,7 +536,7 @@ class WinlinkManager:
             tuple: (success, message)
         """
         if not REQUESTS_AVAILABLE:
-            return False, "requests not available"
+            return False, "[winlink][init] requests not available"
 
         try:
             response = requests.post(
@@ -546,12 +546,12 @@ class WinlinkManager:
 
             self._status['connected'] = False
             self._status['gateway'] = None
-            self._add_log("Disconnected from gateway")
+            self._add_log("[winlink] Disconnected from gateway")
             return True, "Disconnected"
 
         except Exception as e:
             self._status['connected'] = False
-            return False, f"Disconnect error: {str(e)}"
+            return False, f"[winlink] Disconnect error: {str(e)}"
 
     def get_status(self):
         """
@@ -571,7 +571,7 @@ class WinlinkManager:
                 self._status['connected'] = False
                 self._status['api_available'] = False
                 self._add_log(
-                    "Pat process terminated unexpectedly", 'warning'
+                    "[winlink][init] Pat process terminated unexpectedly", 'warning'
                 )
 
         # Query API if running
@@ -664,7 +664,7 @@ class WinlinkManager:
                             self._parse_status_from_log(line)
                 except Exception as e:
                     self._add_log(
-                        f"Monitor error: {e}", 'error'
+                        f"[winlink][init] Monitor error: {e}", 'error'
                     )
 
         thread = threading.Thread(
@@ -752,11 +752,11 @@ class WinlinkManager:
             tuple: (success, message or error)
         """
         if not self.message_parser:
-            return False, "Message parser not initialized"
+            return False, "[winlink][init] Message parser not initialized"
 
         callsign = self.config.get('callsign', '').upper()
         if not callsign:
-            return False, "Callsign not configured"
+            return False, "[winlink][init] Callsign not configured"
 
         # Get outbox directory
         outbox_dir = os.path.expanduser(
@@ -773,14 +773,14 @@ class WinlinkManager:
 
         if success:
             self._add_log(
-                f"Message queued for {to_address}: {subject}"
+                f"[winlink] Message queued for {to_address}: {subject}"
             )
-            return True, f"Message queued: {os.path.basename(result)}"
+            return True, f"[winlink] Message queued: {os.path.basename(result)}"
         else:
             self._add_log(
-                f"Failed to queue message: {result}", 'error'
+                f"[winlink] Failed to queue message: {result}", 'error'
             )
-            return False, f"Failed to queue: {result}"
+            return False, f"[winlink] Failed to queue: {result}"
 
     def get_message_counts(self):
         """
