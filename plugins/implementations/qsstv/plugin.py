@@ -60,7 +60,7 @@ class QSStvPlugin(BasePlugin):
     name = "QSSTV"
     description = "Slow Scan Television (SSTV) via QSSTV"
     version = "1.0.0"
-    author = "Ham Radio App Team"
+    author = "HRT - Ham Rad Team"
     url = "https://github.com/ON4QZ/QSSTV"
 
     def __init__(self, app=None, devices=None):
