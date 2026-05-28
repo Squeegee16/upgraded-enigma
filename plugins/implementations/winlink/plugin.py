@@ -58,7 +58,7 @@ class WinlinkPlugin(BasePlugin):
     name = "Winlink"
     description = "Radio email via Winlink network using Pat client"
     version = "1.0.0"
-    author = "Ham Radio App Team"
+    author = "HRT - Ham Rad Team"
     url = "https://winlink.org/WinlinkExpress"
 
     def __init__(self, app=None, devices=None):
