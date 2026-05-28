@@ -153,7 +153,7 @@ class SatDumpManager:
                         'output_dir', self.output_dir
                     )
             except Exception as e:
-                print(f"[SatDump] Config load error: {e}")
+                print(f"[SatDump][Manager] Config load error: {e}")
 
         return defaults
 
@@ -182,10 +182,10 @@ class SatDumpManager:
             with open(config_file, 'w') as f:
                 json.dump(self.config, f, indent=2)
 
-            print("[SatDump] ✓ Config saved")
+            print("[SatDump][init] ✓ Config saved")
             return True
         except Exception as e:
-            print(f"[SatDump] Config save error: {e}")
+            print(f"[SatDump][init] Config save error: {e}")
             return False
 
     def _add_log(self, message, level='info'):
@@ -232,16 +232,16 @@ class SatDumpManager:
                 self._status['monitoring'] = True
                 count = self._data_monitor.get_product_count()
                 self._add_log(
-                    f"Data monitoring started. "
+                    f"[SatDump][init] Data monitoring started. "
                     f"{count} existing products found."
                 )
-                return True, "Data monitoring started"
+                return True, "[SatDump][init] Data monitoring started"
             else:
-                return False, "Failed to start monitoring"
+                return False, "[SatDump][init] Failed to start monitoring"
 
         except Exception as e:
             error = str(e)
-            self._add_log(f"Monitor error: {error}", 'error')
+            self._add_log(f"[SatDump][init] Monitor error: {error}", 'error')
             return False, error
 
     def stop_monitoring(self):
@@ -252,14 +252,14 @@ class SatDumpManager:
             tuple: (success, message)
         """
         if not self._data_monitor:
-            return False, "Not monitoring"
+            return False, "[SatDump][init] Not monitoring"
 
         try:
             self._data_monitor.stop()
             self._data_monitor = None
             self._status['monitoring'] = False
             self._add_log("Data monitoring stopped")
-            return True, "Monitoring stopped"
+            return True, "[SatDump][init] Monitoring stopped"
         except Exception as e:
             return False, str(e)
 
@@ -276,7 +276,7 @@ class SatDumpManager:
         with self._process_lock:
             if self._ui_process and \
                     self._ui_process.poll() is None:
-                return False, "SatDump UI already running"
+                return False, "[SatDump][init] SatDump UI already running"
 
             ui_binary = self.ui_binary_path or \
                 shutil.which('satdump-ui') or \
@@ -284,7 +284,7 @@ class SatDumpManager:
 
             if not ui_binary:
                 return False, (
-                    "SatDump binary not found. "
+                    "[SatDump][init] SatDump binary not found. "
                     "Please install SatDump."
                 )
 
@@ -294,7 +294,7 @@ class SatDumpManager:
                     'display', ':0'
                 )
 
-                self._add_log("Launching SatDump UI...")
+                self._add_log("[SatDump][init] Launching SatDump UI...")
 
                 self._ui_process = subprocess.Popen(
                     [ui_binary],
@@ -322,7 +322,7 @@ class SatDumpManager:
                 error = str(e)
                 self._status['error'] = error
                 self._add_log(f"ERROR: {error}", 'error')
-                return False, f"Launch failed: {error}"
+                return False, f"[SatDump][init] Launch failed: {error}"
 
     def stop_ui(self):
         """
@@ -351,7 +351,7 @@ class SatDumpManager:
                 return True, "SatDump stopped"
 
             except Exception as e:
-                return False, f"Stop error: {str(e)}"
+                return False, f"[SatDump][init] Stop error: {str(e)}"
 
     def start_pipeline(self, pipeline_name,
                        frequency_override=None,
@@ -378,7 +378,7 @@ class SatDumpManager:
         if pipeline_name in self._pipeline_processes:
             proc = self._pipeline_processes[pipeline_name]
             if proc.poll() is None:
-                return False, f"Pipeline {pipeline_name} already running"
+                return False, f"[SatDump][init] Pipeline {pipeline_name} already running"
 
         # Build output directory
         timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
@@ -409,7 +409,7 @@ class SatDumpManager:
         )
 
         if not cmd:
-            return False, "Failed to build pipeline command"
+            return False, "[SatDump][init] Failed to build pipeline command"
 
         try:
             self._add_log(
@@ -441,7 +441,7 @@ class SatDumpManager:
         except Exception as e:
             error = str(e)
             self._add_log(
-                f"Pipeline start error: {error}", 'error'
+                f"[SatDump][init] Pipeline start error: {error}", 'error'
             )
             return False, error
 
@@ -475,11 +475,11 @@ class SatDumpManager:
                     pipeline_name
                 )
 
-            self._add_log(f"Pipeline stopped: {pipeline_name}")
-            return True, f"Pipeline {pipeline_name} stopped"
+            self._add_log(f"[SatDump][init] Pipeline stopped: {pipeline_name}")
+            return True, f"[SatDump][init] Pipeline {pipeline_name} stopped"
 
         except Exception as e:
-            return False, f"Stop error: {str(e)}"
+            return False, f"[SatDump][init] Stop error: {str(e)}"
 
     def stop_all_pipelines(self):
         """Stop all running pipelines."""
@@ -521,7 +521,7 @@ class SatDumpManager:
                 self._status['active_pipelines'].remove(name)
 
             self._add_log(
-                f"Pipeline completed: {name}", 'info'
+                f"[SatDump][init] Pipeline completed: {name}", 'info'
             )
 
             # Complete pass in monitor
