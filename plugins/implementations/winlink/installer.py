@@ -108,9 +108,7 @@ except ImportError:
                 with open(path, 'w') as f:
                     json.dump(data, f, indent=2)
             except Exception as e:
-                print(
-                    f"[Winlink] Marker write error: {e}"
-                )
+                print(f"[Winlink][INSTALL] Marker write error: {e}")                )
 
         def read_marker(self, path):
             if not os.path.exists(path):
@@ -119,6 +117,7 @@ except ImportError:
                 with open(path, 'r') as f:
                     return json.load(f)
             except Exception:
+                print(f"[Winlink][INSTALL] Marker read error: {e}")    
                 return {}
 
 
@@ -176,7 +175,7 @@ class WinlinkInstaller(BaseInstaller):
         )
 
         print(
-            f"[Winlink] Installer init | "
+            f"[Winlink][INSTALL] Installer init | "
             f"Docker: {self.in_docker} | "
             f"Root: {self.is_root} | "
             f"sudo: {self.sudo_available} | "
@@ -224,10 +223,10 @@ class WinlinkInstaller(BaseInstaller):
         except FileNotFoundError as e:
             return (
                 False, '',
-                f"Command not found: {cmd[0]} — {e}"
+                f"[Winlink][INSTALL] File not found: {cmd[0]} — {e}"
             )
         except subprocess.TimeoutExpired:
-            return False, '', f"Timed out after {timeout}s"
+            return False, '', f"[Winlink][INSTALL] Timed out after {timeout}s"
         except Exception as e:
             return False, '', str(e)
 
@@ -253,13 +252,13 @@ class WinlinkInstaller(BaseInstaller):
         Returns:
             bool: True if all packages available
         """
-        print("[Winlink] Checking Python packages...")
+        print("[Winlink][INSTALL] Checking Python packages...")
         available, failed = super().install_python_packages(
             self.REQUIRED_PACKAGES
         )
         if failed and self.in_docker:
             print(
-                f"[Winlink] INFO: Add to requirements.txt: "
+                f"[Winlink][INSTALL] INFO: Add to requirements.txt: "
                 f"{', '.join(failed)}"
             )
         return len(failed) == 0
@@ -276,10 +275,10 @@ class WinlinkInstaller(BaseInstaller):
         Returns:
             bool: True if installation successful
         """
-        print("[Winlink] Installing Pat via apt-get...")
+        print("[Winlink][INSTALL]  Installing Pat via apt-get...")
 
         if not shutil.which('apt-get'):
-            print("[Winlink] apt-get not available")
+            print("[Winlink][INSTALL] apt-get not available")
             return False
 
         if self.in_docker and not self.is_root:
@@ -300,7 +299,7 @@ class WinlinkInstaller(BaseInstaller):
         )
         if not ok:
             print(
-                f"[Winlink] apt-get update failed: "
+                f"[Winlink][INSTALL] apt-get update failed: "
                 f"{stderr[:150]}"
             )
             return False
@@ -314,11 +313,11 @@ class WinlinkInstaller(BaseInstaller):
         )
 
         if ok:
-            print("[Winlink] ✓ Pat installed via apt-get")
+            print("[Winlink][INSTALL] ✓ Pat installed via apt-get")
             return True
 
         print(
-            f"[Winlink] apt-get failed: {stderr[:200]}"
+            f"[Winlink][INSTALL] apt-get failed: {stderr[:200]}"
         )
         return False
 
@@ -337,7 +336,7 @@ class WinlinkInstaller(BaseInstaller):
             bool: True if installation successful
         """
         print(
-            "[Winlink] Downloading Pat from GitHub..."
+            "[Winlink][INSTALL] Downloading Pat from GitHub..."
         )
 
         try:
@@ -360,15 +359,15 @@ class WinlinkInstaller(BaseInstaller):
 
         except Exception as e:
             print(
-                f"[Winlink] GitHub API error: {e}"
+                f"[Winlink][INSTALL] GitHub API error: {e}"
             )
             return False
 
         tag = release_data.get('tag_name', 'unknown')
-        print(f"[Winlink] Latest release: {tag}")
+        print(f"[Winlink][INSTALL] Latest release: {tag}")
 
         assets = release_data.get('assets', [])
-        print(f"[Winlink] Available assets:")
+        print(f"[Winlink][INSTALL] Available assets:")
         for asset in assets:
             print(f"  {asset['name']}")
 
@@ -386,7 +385,7 @@ class WinlinkInstaller(BaseInstaller):
             arch_patterns = [arch_lower]
 
         print(
-            f"[Winlink] Platform: linux/{self._arch} "
+            f"[Winlink][INSTALL] Platform: linux/{self._arch} "
             f"(patterns: {arch_patterns})"
         )
 
@@ -405,7 +404,7 @@ class WinlinkInstaller(BaseInstaller):
                     )
                     asset_name = asset['name']
                     print(
-                        f"[Winlink] ✓ Matched: "
+                        f"[Winlink][INSTALL] ✓ url matched: "
                         f"{asset_name}"
                     )
                     break
@@ -414,7 +413,7 @@ class WinlinkInstaller(BaseInstaller):
 
         if not download_url:
             print(
-                "[Winlink] ERROR: No matching asset "
+                "[Winlink][INSTALL] ERROR: No matching url "
                 f"for linux/{self._arch}"
             )
             return False
@@ -433,7 +432,7 @@ class WinlinkInstaller(BaseInstaller):
             )
 
             print(
-                f"[Winlink] Downloading {asset_name}..."
+                f"[Winlink][INSTALL] Downloading {asset_name}..."
             )
             urllib.request.urlretrieve(
                 download_url, archive_path
@@ -441,7 +440,7 @@ class WinlinkInstaller(BaseInstaller):
 
             size_kb = os.path.getsize(archive_path) / 1024
             print(
-                f"[Winlink] ✓ Downloaded {size_kb:.0f} KB"
+                f"[Winlink][INSTALL] ✓ Downloaded {size_kb:.0f} KB"
             )
 
             # Ensure install directory exists
@@ -454,7 +453,7 @@ class WinlinkInstaller(BaseInstaller):
             with tarfile.open(archive_path, 'r:gz') as tar:
                 members = tar.getmembers()
                 print(
-                    f"[Winlink] Archive contents:"
+                    f"[Winlink][INSTALL] Archive contents:"
                 )
                 for m in members:
                     print(f"  {m.name}")
@@ -472,7 +471,7 @@ class WinlinkInstaller(BaseInstaller):
                             os.chmod(dest, 0o755)
                             size = os.path.getsize(dest)
                             print(
-                                f"[Winlink] ✓ Pat installed: "
+                                f"[Winlink][INSTALL] ✓ Pat installed: "
                                 f"{dest} "
                                 f"({size//1024} KB)"
                             )
@@ -481,7 +480,7 @@ class WinlinkInstaller(BaseInstaller):
 
             if not pat_installed:
                 print(
-                    "[Winlink] ERROR: 'pat' binary not "
+                    "[Winlink][INSTALL] ERROR: 'pat' binary not "
                     "found in archive"
                 )
                 return False
@@ -490,7 +489,7 @@ class WinlinkInstaller(BaseInstaller):
 
         except Exception as e:
             print(
-                f"[Winlink] Download/extract error: {e}"
+                f"[Winlink][INSTALL] Download/extract error: {e}"
             )
             traceback.print_exc()
             return False
@@ -511,7 +510,7 @@ class WinlinkInstaller(BaseInstaller):
         """
         if self.in_docker and not self.is_root:
             print(
-                "[Winlink] INFO: AX.25 tools require root. "
+                "[Winlink][INSTALL] INFO: AX.25 tools require root. "
                 "Add to Dockerfile if needed: "
                 "RUN apt-get install -y ax25-tools ax25-apps"
             )
@@ -520,7 +519,7 @@ class WinlinkInstaller(BaseInstaller):
         if not shutil.which('apt-get'):
             return False
 
-        print("[Winlink] Installing AX.25 tools...")
+        print("[Winlink][INSTALL] Installing AX.25 tools...")
         ok, _, stderr = self._run_system_command(
             self._sudo + [
                 'apt-get', 'install', '-y',
@@ -530,10 +529,10 @@ class WinlinkInstaller(BaseInstaller):
         )
 
         if ok:
-            print("[Winlink] ✓ AX.25 tools installed")
+            print("[Winlink][INSTALL] ✓ AX.25 tools installed")
         else:
             print(
-                "[Winlink] INFO: AX.25 tools not available "
+                "[Winlink][INSTALL] INFO: AX.25 tools not available "
                 "(optional, only needed for packet radio)"
             )
 
@@ -605,25 +604,25 @@ class WinlinkInstaller(BaseInstaller):
             bool: True if Pat is installed
         """
         if self.is_installed():
-            print("[Winlink] ✓ Already installed")
+            print("[Winlink][INSTALL] ✓ Already installed")
             return True
 
         if shutil.which(self.PAT_BINARY):
             version = self.get_version()
             self.write_install_marker('existing', version)
-            print("[Winlink] ✓ Pat found in PATH")
+            print("[Winlink][INSTALL] ✓ Pat found in PATH")
             return True
 
-        print("[Winlink] ==========================================")
-        print("[Winlink] Starting first-run installation")
-        print("[Winlink] ==========================================")
+        print("[Winlink][INSTALL] ==========================================")
+        print("[Winlink][INSTALL]  Starting installation")
+        print("[Winlink][INSTALL] ==========================================")
 
         # Step 1: Python packages
-        print("\n[Winlink] Step 1: Python packages...")
+        print("\n[Winlink][INSTALL] Step 1: Python packages...")
         self.install_python_packages()
 
         # Step 2: Install Pat
-        print("\n[Winlink] Step 2: Installing Pat Winlink...")
+        print("\n[Winlink][INSTALL] Step 2: Installing Pat Winlink...")
         success = False
 
         # Try apt-get first (will skip in Docker non-root)
@@ -634,24 +633,24 @@ class WinlinkInstaller(BaseInstaller):
         if not success:
             if self.in_docker and not self.is_root:
                 print(
-                    "[Winlink] INFO: Using GitHub release "
+                    "[Winlink][INSTALL] INFO: Using GitHub release "
                     "download (no root required in Docker)"
                 )
             success = self._download_pat_release()
 
         if not success:
             print(
-                "\n[Winlink] ERROR: Pat installation failed"
+                "\n[Winlink][INSTALL] ERROR: Pat installation failed"
             )
             print(
-                "[Winlink] Manual install: "
+                "[Winlink][INSTALL] Manual install: "
                 "https://getpat.io/"
             )
             return False
 
         # Step 3: AX.25 tools (optional, non-fatal)
         print(
-            "\n[Winlink] Step 3: AX.25 tools (optional)..."
+            "\n[Winlink][INSTALL] Step 3: AX.25 tools (optional)..."
         )
         self.install_ax25_tools()
 
@@ -665,16 +664,16 @@ class WinlinkInstaller(BaseInstaller):
         self.write_install_marker(method, version)
 
         print(
-            "\n[Winlink] =========================================="
+            "\n[Winlink][INSTALL] =========================================="
         )
-        print("[Winlink] ✓ Pat installation complete!")
+        print("[Winlink][INSTALL] ✓ Pat installation complete!")
         if version:
-            print(f"[Winlink]   Version: {version}")
+            print(f"[Winlink][INSTALL]   Version: {version}")
         print(
-            f"[Winlink]   Binary: {self.pat_binary_path}"
+            f"[Winlink][INSTALL]   Binary: {self.pat_binary_path}"
         )
         print(
-            "[Winlink] =========================================="
+            "[Winlink][INSTALL] =========================================="
             "\n"
         )
 
