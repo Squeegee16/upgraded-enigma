@@ -83,6 +83,7 @@ except ImportError:
                 )
                 return True
             except Exception:
+                
                 return False
 
         def install_python_packages(self, packages):
