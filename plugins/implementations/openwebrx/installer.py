@@ -73,7 +73,11 @@ except ImportError:
                     timeout=120
                 )
                 return True
-            except Exception:
+                
+            except Exception as e:
+                print(
+                    f"[OpenWebRX][INSTALL] PIP install error: {e}"
+                )
                 return False
 
         def install_python_packages(self, packages):
@@ -101,7 +105,7 @@ except ImportError:
                     json.dump(data, f, indent=2)
             except Exception as e:
                 print(
-                    f"[OpenWebRX] Marker error: {e}"
+                    f"[OpenWebRX][INSTALL] Marker write error: {e}"
                 )
 
         def read_marker(self, path):
@@ -110,9 +114,11 @@ except ImportError:
             try:
                 with open(path, 'r') as f:
                     return json.load(f)
-            except Exception:
+            except Exception as e:
+                print(
+                    f"[OpenWebRX][INSTALL] Marker read error: {e}"
+                )               
                 return {}
-
 
 class OpenWebRXInstaller(BaseInstaller):
     """
@@ -142,7 +148,7 @@ class OpenWebRXInstaller(BaseInstaller):
         """Initialise installer."""
         super().__init__()
         print(
-            f"[OpenWebRX] Installer init | "
+            f"[OpenWebRX][INSTALL] Installer init | "
             f"Docker: {self.in_docker} | "
             f"Root: {self.is_root}"
         )
@@ -167,12 +173,12 @@ class OpenWebRXInstaller(BaseInstaller):
             bool: True always — plugin loads regardless
         """
         if self.is_installed():
-            print("[OpenWebRX] ✓ Already installed")
+            print("[OpenWebRX][INSTALL] ✓ Already installed")
             return True
 
-        print("[OpenWebRX] ==========================================")
-        print("[OpenWebRX] Installing plugin dependencies")
-        print("[OpenWebRX] ==========================================")
+        print("[OpenWebRX][INSTALL] ==========================================")
+        print("[OpenWebRX][INSTALL] Installing dependencies")
+        print("[OpenWebRX][INSTALL] ==========================================")
 
         # Install Python packages
         available, failed = self.install_python_packages(
@@ -184,7 +190,7 @@ class OpenWebRXInstaller(BaseInstaller):
 
         if failed and self.in_docker:
             print(
-                f"[OpenWebRX] Add to requirements.txt: "
+                f"[OpenWebRX][INSTALL] Add to requirements.txt: "
                 f"{', '.join(failed)}"
             )
 
@@ -200,5 +206,5 @@ class OpenWebRXInstaller(BaseInstaller):
             }
         )
 
-        print("[OpenWebRX] ✓ Plugin dependencies installed")
+        print("[OpenWebRX][INSTALL] ✓ Plugin dependencies installed")
         return True
