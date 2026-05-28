@@ -103,7 +103,7 @@ class ImageEventHandler(FileSystemEventHandler):
         try:
             self.callback(filepath)
         except Exception as e:
-            print(f"[QSSTV-Monitor] Callback error: {e}")
+            print(f"[QSSTV][Monitor] Callback error: {e}")
 
     def on_modified(self, event):
         """
@@ -124,7 +124,7 @@ class ImageEventHandler(FileSystemEventHandler):
                         self.callback(filepath)
                     except Exception as e:
                         print(
-                            f"[QSSTV-Monitor] Modified callback: {e}"
+                            f"[QSSTV][Monitor] Modified callback: {e}"
                         )
 
     @staticmethod
@@ -202,7 +202,7 @@ class QSStvImageMonitor:
             try:
                 cb(image_data)
             except Exception as e:
-                print(f"[QSSTV-Monitor] Callback error: {e}")
+                print(f"[QSSTV][Monitor] Callback error: {e}")
 
     def start(self):
         """
@@ -232,15 +232,15 @@ class QSStvImageMonitor:
                 self._observer.start()
                 self._running = True
                 print(
-                    f"[QSSTV-Monitor] Watchdog monitoring: "
+                    f"[QSSTV][Monitor] Watchdog monitoring: "
                     f"{self.rx_dir}"
                 )
                 return True
             except Exception as e:
-                print(f"[QSSTV-Monitor] Watchdog failed: {e}")
+                print(f"[QSSTV][Monitor] Watchdog failed: {e}")
                 return self._start_polling()
         else:
-            print("[QSSTV-Monitor] Using polling (install watchdog)")
+            print("[QSSTV][Monitor] Using polling (install watchdog)")
             return self._start_polling()
 
     def _start_polling(self):
@@ -275,7 +275,7 @@ class QSStvImageMonitor:
                     known_files = current_files
 
                 except Exception as e:
-                    print(f"[QSSTV-Monitor] Poll error: {e}")
+                    print(f"[QSSTV][Monitor] Poll error: {e}")
 
                 time.sleep(2)
 
@@ -285,7 +285,7 @@ class QSStvImageMonitor:
             name='qsstv-image-poll'
         )
         thread.start()
-        print("[QSSTV-Monitor] Polling started")
+        print("[QSSTV][Monitor] Polling started")
         return True
 
     def stop(self):
@@ -300,7 +300,7 @@ class QSStvImageMonitor:
                 pass
             self._observer = None
 
-        print("[QSSTV-Monitor] Monitoring stopped")
+        print("[QSSTV][Monitor] Monitoring stopped")
 
     def _on_new_image(self, filepath):
         """
@@ -315,7 +315,7 @@ class QSStvImageMonitor:
         if not os.path.exists(filepath):
             return
 
-        print(f"[QSSTV-Monitor] New image: {filepath}")
+        print(f"[QSSTV][Monitor] New image: {filepath}")
 
         # Build image metadata
         image_data = self._extract_metadata(filepath)
@@ -339,7 +339,7 @@ class QSStvImageMonitor:
                 shutil.copy2(filepath, gallery_path)
                 image_data['gallery_path'] = gallery_path
             except Exception as e:
-                print(f"[QSSTV-Monitor] Copy error: {e}")
+                print(f"[QSSTV][Monitor] Copy error: {e}")
                 image_data['gallery_path'] = filepath
         else:
             image_data['gallery_path'] = gallery_path
@@ -361,7 +361,7 @@ class QSStvImageMonitor:
         self._trigger_callbacks(image_data)
 
         print(
-            f"[QSSTV-Monitor] ✓ Image added to gallery: "
+            f"[QSSTV][Monitor] ✓ Image added to gallery: "
             f"{image_data['filename']}"
         )
 
@@ -420,7 +420,7 @@ class QSStvImageMonitor:
             }
 
         except Exception as e:
-            print(f"[QSSTV-Monitor] Metadata error: {e}")
+            print(f"[QSSTV][Monitor] Metadata error: {e}")
             return None
 
     def _parse_mode_from_filename(self, filename):
@@ -516,7 +516,7 @@ class QSStvImageMonitor:
             return thumb_path
 
         except Exception as e:
-            print(f"[QSSTV-Monitor] Thumbnail error: {e}")
+            print(f"[QSSTV][Monitor] Thumbnail error: {e}")
             return None
 
     def _scan_existing_images(self):
@@ -536,7 +536,7 @@ class QSStvImageMonitor:
             ]
 
             print(
-                f"[QSSTV-Monitor] Found {len(image_files)} "
+                f"[QSSTV][Monitor] Found {len(image_files)} "
                 f"existing images"
             )
 
@@ -572,7 +572,7 @@ class QSStvImageMonitor:
             self._save_index()
 
         except Exception as e:
-            print(f"[QSSTV-Monitor] Scan error: {e}")
+            print(f"[QSSTV][Monitor] Scan error: {e}")
 
     def _load_index(self):
         """Load image index from JSON file."""
@@ -581,11 +581,11 @@ class QSStvImageMonitor:
                 with open(self.index_file, 'r') as f:
                     self._images = json.load(f)
                 print(
-                    f"[QSSTV-Monitor] Loaded {len(self._images)} "
+                    f"[QSSTV][Monitor] Loaded {len(self._images)} "
                     f"images from index"
                 )
             except Exception as e:
-                print(f"[QSSTV-Monitor] Index load error: {e}")
+                print(f"[QSSTV][Monitor] Index load error: {e}")
                 self._images = []
 
     def _save_index(self):
@@ -598,7 +598,7 @@ class QSStvImageMonitor:
                 json.dump(index_data, f, indent=2, default=str)
 
         except Exception as e:
-            print(f"[QSSTV-Monitor] Index save error: {e}")
+            print(f"[QSSTV][Monitor] Index save error: {e}")
 
     def get_images(self, limit=50, offset=0):
         """
