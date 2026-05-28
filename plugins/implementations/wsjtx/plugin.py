@@ -95,7 +95,7 @@ class WSJTXPlugin(BasePlugin):
         Returns:
             bool: True if initialization successful
         """
-        print(f"\n[{self.name}] Initializing plugin...")
+        print(f"\n[{self.name}][PLUGIN] Initializing plugin...")
 
         try:
             # Installation check
@@ -108,7 +108,7 @@ class WSJTXPlugin(BasePlugin):
                     "https://physics.princeton.edu/pulsar/k1jt/wsjtx.html"
                 )
                 print(
-                    f"[{self.name}] WARNING: {self.install_error}"
+                    f"[{self.name}][PLUGIN] WARNING: {self.install_error}"
                 )
 
             self.install_complete = install_success
@@ -134,23 +134,23 @@ class WSJTXPlugin(BasePlugin):
             if self.manager.config.get('auto_listen', True):
                 success, msg = self.manager.start_listener()
                 if success:
-                    print(f"[{self.name}] ✓ {msg}")
+                    print(f"[{self.name}][PLUGIN] ✓ {msg}")
                 else:
-                    print(f"[{self.name}] Listener: {msg}")
+                    print(f"[{self.name}][PLUGIN] Listener: {msg}")
 
             # Auto-launch WSJT-X if configured
             if (self.manager.config.get('auto_start') and
                     self.install_complete):
                 success, msg = self.manager.start_wsjtx()
                 if success:
-                    print(f"[{self.name}] ✓ {msg}")
+                    print(f"[{self.name}][PLUGIN] ✓ {msg}")
 
-            print(f"[{self.name}] ✓ Plugin initialized")
+            print(f"[{self.name}][PLUGIN] ✓ Plugin initialized")
             return True
 
         except Exception as e:
             self.install_error = str(e)
-            print(f"[{self.name}] ERROR: {e}")
+            print(f"[{self.name}][PLUGIN] ERROR: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -169,7 +169,7 @@ class WSJTXPlugin(BasePlugin):
             if self.manager._status.get('process_running'):
                 self.manager.stop_wsjtx()
 
-        print(f"[{self.name}] ✓ Shutdown complete")
+        print(f"[{self.name}][PLUGIN] ✓ Shutdown complete")
 
     def _update_gps_grid(self):
         """
@@ -185,11 +185,11 @@ class WSJTXPlugin(BasePlugin):
                             {'grid': pos['grid']}
                         )
                         print(
-                            f"[{self.name}] ✓ Grid: "
+                            f"[{self.name}][PLUGIN] ✓ Grid: "
                             f"{pos['grid']}"
                         )
         except Exception as e:
-            print(f"[{self.name}] GPS warning: {e}")
+            print(f"[{self.name}][PLUGIN] GPS warning: {e}")
 
     def get_blueprint(self):
         """
@@ -587,7 +587,7 @@ class WSJTXPlugin(BasePlugin):
                     'success': success,
                     'message': (
                         'Contact logged!' if success
-                        else 'Logging failed'
+                        else '[PLUGIN] Logging failed'
                     )
                 })
 
@@ -617,7 +617,7 @@ class WSJTXPlugin(BasePlugin):
             return jsonify({
                 'success': success,
                 'message': (
-                    'Halt TX sent' if success else 'Failed'
+                    '[PLUGIN] Halt TX sent' if success else 'Failed'
                 )
             })
 
@@ -782,14 +782,14 @@ class WSJTXPlugin(BasePlugin):
 
             if success:
                 print(
-                    f"[{self.name}] ✓ Logged: "
+                    f"[{self.name}][PLUGIN] ✓ Logged: "
                     f"{callsign} {mode}"
                 )
 
             return success
 
         except Exception as e:
-            print(f"[{self.name}] Log error: {e}")
+            print(f"[{self.name}][PLUGIN] Log error: {e}")
             return False
 
     @staticmethod
