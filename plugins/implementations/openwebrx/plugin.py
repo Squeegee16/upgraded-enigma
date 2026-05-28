@@ -89,7 +89,7 @@ class OpenWebRXPlugin(BasePlugin):
         Returns:
             bool: True if initialization successful
         """
-        print(f"\n[{self.name}] Initializing plugin...")
+        print(f"\n[{self.name}][PLUGIN] Initializing plugin...")
 
         try:
             # Install Python dependencies
@@ -120,7 +120,7 @@ class OpenWebRXPlugin(BasePlugin):
             # Check OpenWebRX availability
             if self.manager.is_available():
                 print(
-                    f"[{self.name}] ✓ OpenWebRX "
+                    f"[{self.name}][PLUGIN] ✓ OpenWebRX "
                     f"accessible at "
                     f"{self.manager.base_url}"
                 )
@@ -136,17 +136,17 @@ class OpenWebRXPlugin(BasePlugin):
                     self.manager.start_polling()
             else:
                 print(
-                    f"[{self.name}] INFO: OpenWebRX "
+                    f"[{self.name}][PLUGIN] INFO: OpenWebRX "
                     f"not reachable at "
                     f"{self.manager.base_url}"
                 )
                 print(
-                    f"[{self.name}] INFO: Ensure the "
+                    f"[{self.name}][PLUGIN] INFO: Ensure the "
                     f"openwebrx Docker service is running:"
                     f" docker compose up -d openwebrx"
                 )
 
-            print(f"[{self.name}] ✓ Plugin initialized")
+            print(f"[{self.name}][PLUGIN] ✓ Plugin initialized")
             return True
 
         except Exception as e:
@@ -157,10 +157,10 @@ class OpenWebRXPlugin(BasePlugin):
 
     def shutdown(self):
         """Clean shutdown."""
-        print(f"[{self.name}] Shutting down...")
+        print(f"[{self.name}][PLUGIN] Shutting down...")
         if self.manager:
             self.manager.stop_polling()
-        print(f"[{self.name}] ✓ Shutdown complete")
+        print(f"[{self.name}][PLUGIN] ✓ Shutdown complete")
 
     def _update_gps_locator(self):
         """Update grid locator from GPS device."""
@@ -176,11 +176,11 @@ class OpenWebRXPlugin(BasePlugin):
                             {'locator': pos['grid']}
                         )
                         print(
-                            f"[{self.name}] ✓ Grid: "
+                            f"[{self.name}][PLUGIN] ✓ Grid: "
                             f"{pos['grid']}"
                         )
         except Exception as e:
-            print(f"[{self.name}] GPS warning: {e}")
+            print(f"[{self.name}][PLUGIN] GPS warning: {e}")
 
     def get_blueprint(self):
         """Create Flask Blueprint."""
@@ -437,11 +437,11 @@ class OpenWebRXPlugin(BasePlugin):
                             self.manager.start_polling()
 
                         flash(
-                            'Settings saved!', 'success'
+                            '[PLUGIN] Settings saved!', 'success'
                         )
                     else:
                         flash(
-                            'Error saving settings',
+                            '[PLUGIN] Error saving settings',
                             'danger'
                         )
 
@@ -469,7 +469,7 @@ class OpenWebRXPlugin(BasePlugin):
 
             except Exception as e:
                 print(
-                    f"[{self.name}] Settings error: {e}"
+                    f"[{self.name}][PLUGIN] Settings error: {e}"
                 )
                 traceback.print_exc()
                 return render_template(
@@ -775,7 +775,7 @@ class OpenWebRXPlugin(BasePlugin):
             return success
 
         except Exception as e:
-            print(f"[{self.name}] Log error: {e}")
+            print(f"[{self.name}][PLUGIN] Log error: {e}")
             return False
 
     @staticmethod
