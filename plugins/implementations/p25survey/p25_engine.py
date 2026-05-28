@@ -379,7 +379,7 @@ class P25SurveyEngine:
                 self._decoder_name = 'op25'
                 self._decoder_path = path
                 self._add_log(
-                    f"OP25 decoder found: {path}"
+                    f"[P25][ENGINE] OP25 decoder found: {path}"
                 )
                 return
 
@@ -389,12 +389,12 @@ class P25SurveyEngine:
             self._decoder_name = 'dsd'
             self._decoder_path = dsd
             self._add_log(
-                f"DSD decoder found: {dsd}"
+                f"[P25][ENGINE] DSD decoder found: {dsd}"
             )
             return
 
         self._add_log(
-            "No P25 decoder found — demo mode. "
+            "[P25][ENGINE] No P25 decoder found — demo mode. "
             "Install OP25: github.com/boatbod/op25",
             'warning'
         )
@@ -558,20 +558,20 @@ class P25SurveyEngine:
 
                 self._start_output_parser()
                 self._add_log(
-                    f"✓ SDR pipeline started: "
+                    f"[P25][ENGINE] ✓ SDR pipeline started: "
                     f"{self._channel['frequency']:.4f} MHz"
                 )
                 return True, (
-                    f"Receiving on "
+                    f"[P25][ENGINE] Receiving on "
                     f"{self._channel['frequency']:.4f} MHz"
                 )
 
             except Exception as e:
                 self._add_log(
-                    f"SDR start error: {e}", 'error'
+                    f"[P25][ENGINE] SDR start error: {e}", 'error'
                 )
                 self._start_mock_receive()
-                return True, f"Error — demo mode"
+                return True, f"[P25][ENGINE] Error — demo mode"
 
     def _start_radio_receive(self):
         """
@@ -580,11 +580,11 @@ class P25SurveyEngine:
         Returns:
             tuple: (success: bool, message: str)
         """
-        self._add_log("Starting radio audio receive...")
+        self._add_log("[P25][ENGINE] Starting radio audio receive...")
 
         if not self._decoder_name:
             self._start_mock_receive()
-            return True, "Radio receive — demo mode"
+            return True, "[P25][ENGINE] Radio receive — demo mode"
 
         try:
             audio_dev = self.config.get(
@@ -624,18 +624,18 @@ class P25SurveyEngine:
                 )
 
                 self._start_output_parser()
-                return True, "Radio audio receive started"
+                return True, "[P25][ENGINE] Radio audio receive started"
 
             else:
                 self._start_mock_receive()
-                return True, "Radio receive — demo mode"
+                return True, "[P25][ENGINE] Radio receive — demo mode"
 
         except Exception as e:
             self._add_log(
-                f"Radio receive error: {e}", 'error'
+                f"[P25][ENGINE] Radio receive error: {e}", 'error'
             )
             self._start_mock_receive()
-            return True, "Error — demo mode"
+            return True, "[P25][ENGINE] Error — demo mode"
 
     def _start_mock_receive(self):
         """
@@ -645,7 +645,7 @@ class P25SurveyEngine:
         all plugin features without real hardware.
         """
         self._add_log(
-            "Demo mode: generating synthetic P25 frames"
+            "[P25][ENGINE] Demo mode: generating synthetic P25 frames"
         )
 
         def mock_loop():
@@ -983,7 +983,7 @@ class P25SurveyEngine:
         """Start the frequency survey scanner thread."""
         if not self._survey_freqs:
             self._add_log(
-                "No survey frequencies configured",
+                "[P25][ENGINE] No survey frequencies configured",
                 'warning'
             )
             return
@@ -1048,7 +1048,7 @@ class P25SurveyEngine:
         with self._active_call_lock:
             self._active_call = None
 
-        self._add_log("P25 receive stopped")
+        self._add_log("[P25][ENGINE] P25 receive stopped")
 
     # ----------------------------------------------------------
     # Channel control
@@ -1128,7 +1128,7 @@ class P25SurveyEngine:
         with self._systems_lock:
             self._systems.clear()
         self._stats['systems_found'] = 0
-        self._add_log("Systems list cleared")
+        self._add_log("[P25][ENGINE] Systems list cleared")
 
     # ----------------------------------------------------------
     # Status and data retrieval
