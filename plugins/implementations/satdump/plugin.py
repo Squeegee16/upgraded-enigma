@@ -51,7 +51,6 @@ from plugins.implementations.satdump.forms import (
     SatDumpLogProductForm
 )
 
-
 class SatDumpPlugin(BasePlugin):
     """
     SatDump Satellite Data Processing Plugin.
@@ -106,7 +105,7 @@ class SatDumpPlugin(BasePlugin):
         Returns:
             bool: True if initialization successful
         """
-        print(f"\n[{self.name}] Initializing plugin...")
+        print(f"\n[{self.name}][Plugin] Initializing plugin...")
 
         try:
             # Check installation
@@ -119,7 +118,7 @@ class SatDumpPlugin(BasePlugin):
                     "https://docs.satdump.org/building.html"
                 )
                 print(
-                    f"[{self.name}] WARNING: {self.install_error}"
+                    f"[{self.name}][Plugin] WARNING: {self.install_error}"
                 )
 
             self.install_complete = install_success
@@ -147,23 +146,23 @@ class SatDumpPlugin(BasePlugin):
             if self.manager.config.get('auto_listen', True):
                 success, msg = self.manager.start_monitoring()
                 if success:
-                    print(f"[{self.name}] ✓ {msg}")
+                    print(f"[{self.name}][Plugin] ✓ {msg}")
                 else:
-                    print(f"[{self.name}] Monitor: {msg}")
+                    print(f"[{self.name}][Plugin] Monitor: {msg}")
 
             # Auto-launch UI if configured
             if (self.manager.config.get('auto_start') and
                     self.install_complete):
                 success, msg = self.manager.launch_ui()
                 if success:
-                    print(f"[{self.name}] ✓ {msg}")
+                    print(f"[{self.name}][Plugin] ✓ {msg}")
 
-            print(f"[{self.name}] ✓ Plugin initialized")
+            print(f"[{self.name}][Plugin] ✓ Plugin initialized")
             return True
 
         except Exception as e:
             self.install_error = str(e)
-            print(f"[{self.name}] ERROR: {e}")
+            print(f"[{self.name}][Plugin] ERROR: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -174,7 +173,7 @@ class SatDumpPlugin(BasePlugin):
 
         Stops all pipelines, monitoring, and UI process.
         """
-        print(f"[{self.name}] Shutting down...")
+        print(f"[{self.name}][Plugin] Shutting down...")
 
         if self.manager:
             self.manager.stop_all_pipelines()
@@ -183,7 +182,7 @@ class SatDumpPlugin(BasePlugin):
             if self.manager._status.get('ui_running'):
                 self.manager.stop_ui()
 
-        print(f"[{self.name}] ✓ Shutdown complete")
+        print(f"[{self.name}][Plugin] ✓ Shutdown complete")
 
     def _update_gps_position(self):
         """
@@ -206,10 +205,10 @@ class SatDumpPlugin(BasePlugin):
                     if updates:
                         self.manager.save_config(updates)
                         print(
-                            f"[{self.name}] ✓ GPS position updated"
+                            f"[{self.name}][Plugin] ✓ GPS position updated"
                         )
         except Exception as e:
-            print(f"[{self.name}] GPS warning: {e}")
+            print(f"[{self.name}][Plugin] GPS warning: {e}")
 
     def get_blueprint(self):
         """
@@ -536,9 +535,9 @@ class SatDumpPlugin(BasePlugin):
 
                 if self.manager and \
                         self.manager.save_config(config_data):
-                    flash('Settings saved!', 'success')
+                    flash('[Plugin] Settings saved!', 'success')
                 else:
-                    flash('Error saving settings', 'danger')
+                    flash('[Plugin] Error saving settings', 'danger')
 
                 return redirect(
                     url_for(f'{self.name}.settings')
@@ -777,8 +776,8 @@ class SatDumpPlugin(BasePlugin):
                 return jsonify({
                     'success': success,
                     'message': (
-                        'SatDump installed!' if success
-                        else 'Installation failed'
+                        '[Plugin] SatDump installed!' if success
+                        else '[Plugin] Installation failed'
                     )
                 })
 
@@ -847,13 +846,13 @@ class SatDumpPlugin(BasePlugin):
 
             if success:
                 print(
-                    f"[{self.name}] ✓ Pass logged: {satellite}"
+                    f"[{self.name}][Plugin] ✓ Pass logged: {satellite}"
                 )
 
             return success
 
         except Exception as e:
-            print(f"[{self.name}] Log error: {e}")
+            print(f"[{self.name}][Plugin] Log error: {e}")
             return False
 
     @staticmethod
