@@ -66,7 +66,7 @@ class SatDumpPlugin(BasePlugin):
         "METEOR, and more"
     )
     version = "1.0.0"
-    author = "Ham Radio App Team"
+    author = "HRT - Ham Rad Team"
     url = "https://github.com/SatDump/SatDump"
 
     def __init__(self, app=None, devices=None):
