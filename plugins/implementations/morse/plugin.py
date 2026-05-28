@@ -100,7 +100,7 @@ class MorsePlugin(BasePlugin):
                     loaded = json.load(f)
                     defaults.update(loaded)
             except Exception as e:
-                print(f"[Morse] Config load error: {e}")
+                print(f"[Morse][PLUGIN] Config load error: {e}")
         return defaults
 
     def _save_config(self, config_data):
@@ -119,7 +119,7 @@ class MorsePlugin(BasePlugin):
 
     def initialize(self):
         """Initialize the Morse plugin."""
-        print(f"\n[{self.name}] Initializing plugin...")
+        print(f"\n[{self.name}][PLUGIN] Initializing plugin...")
 
         try:
             install_success = self.installer.run()
@@ -166,25 +166,25 @@ class MorsePlugin(BasePlugin):
             if self.config.get('default_source') == 'sdr':
                 success, msg = self.receiver.start()
                 if success:
-                    print(f"[{self.name}] ✓ {msg}")
+                    print(f"[{self.name}][PLUGIN] ✓ {msg}")
                 else:
-                    print(f"[{self.name}] Receiver: {msg}")
+                    print(f"[{self.name}][PLUGIN] Receiver: {msg}")
 
-            print(f"[{self.name}] ✓ Plugin initialized")
+            print(f"[{self.name}][PLUGIN] ✓ Plugin initialized")
             return True
 
         except Exception as e:
             self.install_error = str(e)
-            print(f"[{self.name}] ERROR: {e}")
+            print(f"[{self.name}][PLUGIN] ERROR: {e}")
             traceback.print_exc()
             return False
 
     def shutdown(self):
         """Clean shutdown."""
-        print(f"[{self.name}] Shutting down...")
+        print(f"[{self.name}][PLUGIN] Shutting down...")
         if self.receiver:
             self.receiver.stop()
-        print(f"[{self.name}] ✓ Shutdown complete")
+        print(f"[{self.name}][PLUGIN] ✓ Shutdown complete")
 
     def get_blueprint(self):
         """Create Flask Blueprint."""
@@ -261,7 +261,7 @@ class MorsePlugin(BasePlugin):
                 )
 
             except Exception as e:
-                print(f"[{self.name}] Index error: {e}")
+                print(f"[{self.name}][PLUGIN] Index error: {e}")
                 traceback.print_exc()
                 return render_template(
                     'errors/500.html', error=str(e)
@@ -400,7 +400,7 @@ class MorsePlugin(BasePlugin):
 
             except Exception as e:
                 print(
-                    f"[{self.name}] Settings error: {e}"
+                    f"[{self.name}][PLUGIN] Settings error: {e}"
                 )
                 traceback.print_exc()
                 return render_template(
@@ -719,13 +719,13 @@ class MorsePlugin(BasePlugin):
             success = self.log_contact(contact_data)
             if success:
                 print(
-                    f"[{self.name}] ✓ Logged: "
+                    f"[{self.name}][PLUGIN] ✓ Logged: "
                     f"{callsign} CW"
                 )
             return success
 
         except Exception as e:
-            print(f"[{self.name}] Log error: {e}")
+            print(f"[{self.name}][PLUGIN] Log error: {e}")
             return False
 
     @staticmethod
