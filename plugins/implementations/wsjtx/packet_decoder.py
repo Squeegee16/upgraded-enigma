@@ -156,7 +156,7 @@ class WSJTXPacketDecoder:
             return packet
 
         except Exception as e:
-            print(f"[WSJTX-Decoder] Decode error: {e}")
+            print(f"[WSJTX][Decoder] Decode error: {e}")
             return None
 
     def _read_uint32(self):
@@ -321,7 +321,10 @@ class WSJTXPacketDecoder:
                 'version': version,
                 'revision': revision
             }
-        except Exception:
+        except Exception as e:
+            print(
+                f"[WSJTX][decoder] msg format error: {e}"
+            )
             return {}
 
     def _decode_status(self):
@@ -374,7 +377,7 @@ class WSJTXPacketDecoder:
                 'special_op_mode': special_op_mode
             }
         except Exception as e:
-            print(f"[WSJTX-Decoder] Status decode error: {e}")
+            print(f"[WSJTX][Decoder] Status decode error: {e}")
             return {}
 
     def _decode_decode(self):
@@ -419,7 +422,7 @@ class WSJTXPacketDecoder:
                 'dx_call': parsed.get('dx_call', ''),
             }
         except Exception as e:
-            print(f"[WSJTX-Decoder] Decode error: {e}")
+            print(f"[WSJTX][Decoder] Decode error: {e}")
             return {}
 
     def _decode_qso_logged(self):
@@ -470,7 +473,7 @@ class WSJTXPacketDecoder:
                 'exchange_rcvd': exchange_rcvd
             }
         except Exception as e:
-            print(f"[WSJTX-Decoder] QSO logged error: {e}")
+            print(f"[WSJTX][Decoder] QSO logged error: {e}")
             return {}
 
     def _decode_wspr_decode(self):
@@ -510,7 +513,7 @@ class WSJTXPacketDecoder:
                 'is_wspr': True
             }
         except Exception as e:
-            print(f"[WSJTX-Decoder] WSPR error: {e}")
+            print(f"[WSJTX][Decoder] WSPR error: {e}")
             return {}
 
     def _decode_logged_adif(self):
@@ -659,7 +662,7 @@ class WSJTXPacketDecoder:
             return bytes(buf)
 
         except Exception as e:
-            print(f"[WSJTX-Decoder] Reply encode error: {e}")
+            print(f"[WSJTX][Decoder] Reply encode error: {e}")
             return None
 
     def encode_halt_tx(self, client_id, auto_tx_only=False):
