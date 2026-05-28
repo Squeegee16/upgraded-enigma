@@ -48,7 +48,7 @@ class DMRPlugin(BasePlugin):
         "on-screen PTT, and call logging"
     )
     version = "1.0.0"
-    author = "Ham Radio App Team"
+    author = "HRT - Ham Rad Team"
     url = (
         "https://qradiolink.org/"
         "open-source-DMR-transceiver-implementation.html"
