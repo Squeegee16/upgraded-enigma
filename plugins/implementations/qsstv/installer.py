@@ -100,7 +100,7 @@ except ImportError:
                 with open(path, 'w') as f:
                     json.dump(data, f, indent=2)
             except Exception as e:
-                print(f"[QSSTV] Marker write error: {e}")
+                print(f"[QSSTV][Installer] Marker write error: {e}")
 
         def read_marker(self, path):
             if not os.path.exists(path):
@@ -221,10 +221,10 @@ class QSStvInstaller(BaseInstaller):
         except FileNotFoundError as e:
             return (
                 False, '',
-                f"Command not found: {cmd[0]} — {e}"
+                f"[QSSTV][Installer] Command not found: {cmd[0]} — {e}"
             )
         except subprocess.TimeoutExpired:
-            return False, '', f"Timed out after {timeout}s"
+            return False, '', f"[QSSTV][Installer] Timed out after {timeout}s"
         except Exception as e:
             return False, '', str(e)
 
@@ -246,13 +246,13 @@ class QSStvInstaller(BaseInstaller):
         Returns:
             bool: True if all packages available
         """
-        print("[QSSTV] Checking Python packages...")
+        print("[QSSTV][Installer] Checking Python packages...")
         available, failed = super().install_python_packages(
             self.REQUIRED_PACKAGES
         )
         if failed and self.in_docker:
             print(
-                f"[QSSTV] INFO: Add to requirements.txt: "
+                f"[QSSTV][Installer]  INFO: Add to requirements.txt: "
                 f"{', '.join(failed)}"
             )
         return len(failed) == 0
@@ -267,19 +267,19 @@ class QSStvInstaller(BaseInstaller):
         Returns:
             bool: True if installation successful
         """
-        print("[QSSTV] Installing via apt-get...")
+        print("[QSSTV][Installer] Installing via apt-get...")
 
         if not shutil.which('apt-get'):
-            print("[QSSTV] apt-get not available")
+            print("[QSSTV][Installer]  apt-get not available")
             return False
 
         if self.in_docker and not self.is_root:
             print(
-                "[QSSTV] INFO: Cannot apt-get in Docker "
+                "[QSSTV][Installer] INFO: Cannot apt-get in Docker "
                 "as non-root. Add to Dockerfile:"
             )
             print(
-                "[QSSTV] INFO:   RUN apt-get update && "
+                "[QSSTV][Installer] INFO:   RUN apt-get update && "
                 "apt-get install -y qsstv"
             )
             return False
@@ -291,7 +291,7 @@ class QSStvInstaller(BaseInstaller):
         )
         if not ok:
             print(
-                f"[QSSTV] apt-get update failed: "
+                f"[QSSTV][Installer]  apt-get update failed: "
                 f"{stderr[:150]}"
             )
             return False
@@ -305,10 +305,10 @@ class QSStvInstaller(BaseInstaller):
         )
 
         if ok:
-            print("[QSSTV] ✓ Installed via apt-get")
+            print("[QSSTV][Installer] ✓ Installed via apt-get")
             return True
 
-        print(f"[QSSTV] apt-get failed: {stderr[:200]}")
+        print(f"[QSSTV][Installer] apt-get failed: {stderr[:200]}")
         return False
 
     def _install_via_dnf(self):
@@ -318,14 +318,14 @@ class QSStvInstaller(BaseInstaller):
         Returns:
             bool: True if installation successful
         """
-        print("[QSSTV] Installing via dnf...")
+        print("[QSSTV][Installer] Installing via dnf...")
 
         if not shutil.which('dnf'):
             return False
 
         if self.in_docker and not self.is_root:
             print(
-                "[QSSTV] INFO: Add to Dockerfile: "
+                "[QSSTV][Installer] INFO: Add to Dockerfile: "
                 "RUN dnf install -y qsstv"
             )
             return False
@@ -336,10 +336,10 @@ class QSStvInstaller(BaseInstaller):
         )
 
         if ok:
-            print("[QSSTV] ✓ Installed via dnf")
+            print("[QSSTV][Installer] ✓ Installed via dnf")
             return True
 
-        print(f"[QSSTV] dnf failed: {stderr[:200]}")
+        print(f"[QSSTV][Installer] dnf failed: {stderr[:200]}")
         return False
 
     def _install_via_pacman(self):
@@ -351,14 +351,14 @@ class QSStvInstaller(BaseInstaller):
         Returns:
             bool: True if installation successful
         """
-        print("[QSSTV] Installing via pacman...")
+        print("[QSSTV][Installer] Installing via pacman...")
 
         if not shutil.which('pacman'):
             return False
 
         if self.in_docker and not self.is_root:
             print(
-                "[QSSTV] INFO: Add to Dockerfile: "
+                "[QSSTV][Installer] INFO: Add to Dockerfile: "
                 "RUN pacman -S --noconfirm qsstv"
             )
             return False
@@ -371,7 +371,7 @@ class QSStvInstaller(BaseInstaller):
         )
 
         if ok:
-            print("[QSSTV] ✓ Installed via pacman")
+            print("[QSSTV][Installer] ✓ Installed via pacman")
             return True
 
         if shutil.which('yay'):
@@ -380,10 +380,10 @@ class QSStvInstaller(BaseInstaller):
                 timeout=300
             )
             if ok:
-                print("[QSSTV] ✓ Installed via yay (AUR)")
+                print("[QSSTV][Installer] ✓ Installed via yay (AUR)")
                 return True
 
-        print(f"[QSSTV] pacman failed: {stderr[:200]}")
+        print(f"[QSSTV][Installer] pacman failed: {stderr[:200]}")
         return False
 
     def build_from_source(self):
@@ -398,16 +398,16 @@ class QSStvInstaller(BaseInstaller):
         """
         if self.in_docker and not self.is_root:
             print(
-                "[QSSTV] INFO: Cannot build from source "
+                "[QSSTV][Installer] INFO: Cannot build from source "
                 "in Docker as non-root."
             )
             print(
-                "[QSSTV] INFO: Add to Dockerfile: "
+                "[QSSTV][Installer] INFO: Add to Dockerfile: "
                 "RUN apt-get install -y qsstv"
             )
             return False
 
-        print("[QSSTV] Building from source...")
+        print("[QSSTV][Installer] Building from source...")
         build_dir = os.path.join(
             os.path.expanduser('~'), '_qsstv_build'
         )
@@ -434,7 +434,7 @@ class QSStvInstaller(BaseInstaller):
             )
             if not ok:
                 print(
-                    f"[QSSTV] Clone failed: {stderr}"
+                    f"[QSSTV][Installer]  Clone failed: {stderr}"
                 )
                 return False
 
@@ -450,7 +450,7 @@ class QSStvInstaller(BaseInstaller):
             )
             if not ok:
                 print(
-                    f"[QSSTV] cmake failed: {stderr[:200]}"
+                    f"[QSSTV][Installer] cmake failed: {stderr[:200]}"
                 )
                 return False
 
@@ -461,7 +461,7 @@ class QSStvInstaller(BaseInstaller):
             )
             if not ok:
                 print(
-                    f"[QSSTV] make failed: {stderr[:200]}"
+                    f"[QSSTV][Installer] make failed: {stderr[:200]}"
                 )
                 return False
 
@@ -471,16 +471,16 @@ class QSStvInstaller(BaseInstaller):
             )
             if not ok:
                 print(
-                    f"[QSSTV] install failed: "
+                    f"[QSSTV][Installer] install failed: "
                     f"{stderr[:200]}"
                 )
                 return False
 
-            print("[QSSTV] ✓ Built from source")
+            print("[QSSTV][Installer] ✓ Built from source")
             return True
 
         except Exception as e:
-            print(f"[QSSTV] Source build error: {e}")
+            print(f"[QSSTV][Installer] Source build error: {e}")
             traceback.print_exc()
             return False
 
@@ -542,57 +542,57 @@ class QSStvInstaller(BaseInstaller):
             bool: True if installed or already present
         """
         if self.is_installed():
-            print("[QSSTV] ✓ Already installed")
+            print("[QSSTV][Installer] ✓ Already installed")
             return True
 
         if shutil.which(self.QSSTV_BINARY):
             version = self.get_version()
             self.write_install_marker('existing', version)
-            print("[QSSTV] ✓ Found in PATH")
+            print("[QSSTV][Installer] ✓ Found in PATH")
             return True
 
-        print("[QSSTV] ==========================================")
-        print("[QSSTV] Starting first-run installation")
-        print("[QSSTV] ==========================================")
+        print("[QSSTV][Installer] ==========================================")
+        print("[QSSTV][Installer]  Starting installation")
+        print("[QSSTV][Installer] =========================================")
 
         # Docker non-root: cannot install system packages
         if self.in_docker and not self.is_root:
             print(
-                "\n[QSSTV] ======================================"
+                "\n[QSSTV][Installer]  ======================================"
             )
-            print("[QSSTV] DOCKER INSTALLATION REQUIRED")
+            print("[QSSTV][Installer] DOCKER INSTALLATION REQUIRED")
             print(
-                "[QSSTV] ======================================"
-            )
-            print(
-                "[QSSTV] Add to Dockerfile and rebuild:"
-            )
-            print()
-            print(
-                "[QSSTV]   RUN apt-get update && \\"
+                "[QSSTV][Installer]  ======================================"
             )
             print(
-                "[QSSTV]       apt-get install -y qsstv && \\"
-            )
-            print(
-                "[QSSTV]       rm -rf /var/lib/apt/lists/*"
+                "[QSSTV][Installer] Add to Dockerfile and rebuild:"
             )
             print()
             print(
-                "[QSSTV]   docker compose build --no-cache"
+                "[QSSTV][Installer]   RUN apt-get update && \\"
             )
             print(
-                "[QSSTV] ======================================"
+                "[QSSTV][Installer]        apt-get install -y qsstv && \\"
+            )
+            print(
+                "[QSSTV][Installer]       rm -rf /var/lib/apt/lists/*"
+            )
+            print()
+            print(
+                "[QSSTV][Installer]    docker compose build --no-cache"
+            )
+            print(
+                "[QSSTV][Installer]  ======================================"
             )
             return False
 
         # Step 1: Python packages
-        print("\n[QSSTV] Step 1: Python packages...")
+        print("\n[QSSTV][Installer] Step 1: Python packages...")
         self.install_python_packages()
 
         # Step 2: Install QSSTV
         print(
-            f"\n[QSSTV] Step 2: Installing QSSTV "
+            f"\n[QSSTV][Installer] Step 2: Installing QSSTV "
             f"(pkg mgr: "
             f"{self._package_manager or 'none'})..."
         )
@@ -607,13 +607,13 @@ class QSStvInstaller(BaseInstaller):
 
         if not success:
             print(
-                "[QSSTV] Package manager failed, "
+                "[QSSTV][Installer] Package manager failed, "
                 "trying source build..."
             )
             success = self.build_from_source()
 
         if not success:
-            print("[QSSTV] ERROR: Installation failed")
+            print("[QSSTV][Installer] ERROR: Installation failed")
             return False
 
         version = self.get_version()
@@ -622,10 +622,10 @@ class QSStvInstaller(BaseInstaller):
             version
         )
 
-        print("\n[QSSTV] ==========================================")
-        print("[QSSTV] ✓ Installation complete!")
+        print("\n[QSSTV][Installer] ==========================================")
+        print("[QSSTV][Installer] ✓ Installation complete!")
         if version:
-            print(f"[QSSTV]   Version: {version}")
-        print("[QSSTV] ==========================================\n")
+            print(f"[QSSTV][Installer]   Version: {version}")
+        print("[QSSTV][Installer] ==========================================\n")
 
         return True
