@@ -98,19 +98,19 @@ class WinlinkPlugin(BasePlugin):
         Returns:
             bool: True if initialization successful
         """
-        print(f"\n[{self.name}] Initializing plugin...")
+        print(f"\n[{self.name}][PLUGIN] Initializing plugin...")
 
         try:
             # Run installation check
-            print(f"[{self.name}] Checking installation...")
+            print(f"[{self.name}][PLUGIN] Checking installation...")
             install_success = self.installer.run()
 
             if not install_success:
                 self.install_error = (
-                    "Pat Winlink installation failed. "
+                    "[PLUGIN] Pat Winlink installation failed. "
                     "Please install manually: https://getpat.io/"
                 )
-                print(f"[{self.name}] WARNING: {self.install_error}")
+                print(f"[{self.name}][PLUGIN] WARNING: {self.install_error}")
 
             self.install_complete = install_success
 
@@ -132,7 +132,7 @@ class WinlinkPlugin(BasePlugin):
             # Auto-start if configured
             if (self.manager.config.get('auto_start') and
                     self.install_complete):
-                print(f"[{self.name}] Auto-starting Pat...")
+                print(f"[{self.name}][PLUGIN] Auto-starting Pat...")
                 success, message = self.manager.start()
 
                 if success and self.manager.config.get('auto_connect'):
@@ -140,12 +140,12 @@ class WinlinkPlugin(BasePlugin):
                     time.sleep(3)  # Wait for Pat to initialize
                     self.manager.connect()
 
-            print(f"[{self.name}] ✓ Plugin initialized")
+            print(f"[{self.name}][PLUGIN] ✓ Plugin initialized")
             return True
 
         except Exception as e:
             self.install_error = str(e)
-            print(f"[{self.name}] ERROR: {e}")
+            print(f"[{self.name}][PLUGIN] ERROR: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -155,15 +155,15 @@ class WinlinkPlugin(BasePlugin):
         Clean plugin shutdown.
         Stops Pat if running.
         """
-        print(f"[{self.name}] Shutting down...")
+        print(f"[{self.name}][PLUGIN] Shutting down...")
 
         if self.manager:
             status = self.manager.get_status()
             if status.get('running'):
                 success, msg = self.manager.stop()
-                print(f"[{self.name}] {msg}")
+                print(f"[{self.name}][PLUGIN] {msg}")
 
-        print(f"[{self.name}] ✓ Shutdown complete")
+        print(f"[{self.name}][PLUGIN] ✓ Shutdown complete")
 
     def _update_gps_grid(self):
         """
@@ -182,11 +182,11 @@ class WinlinkPlugin(BasePlugin):
                             'locator': pos['grid']
                         })
                         print(
-                            f"[{self.name}] ✓ Grid from GPS: "
+                            f"[{self.name}][PLUGIN] ✓ Grid from GPS: "
                             f"{pos['grid']}"
                         )
         except Exception as e:
-            print(f"[{self.name}] GPS grid warning: {e}")
+            print(f"[{self.name}][PLUGIN] GPS grid warning: {e}")
 
     def get_blueprint(self):
         """
@@ -313,7 +313,7 @@ class WinlinkPlugin(BasePlugin):
 
             if form.validate_on_submit():
                 if not self.manager:
-                    flash('Winlink manager not available', 'danger')
+                    flash('[ROUTE] Winlink manager not available', 'danger')
                     return redirect(url_for(f'{self.name}.compose'))
 
                 # Queue message
@@ -324,7 +324,7 @@ class WinlinkPlugin(BasePlugin):
                 )
 
                 if success:
-                    flash(f'Message queued: {message}', 'success')
+                    flash(f'[ROUTE] Message queued: {message}', 'success')
 
                     # Log to central logbook
                     if form.log_as_contact.data:
@@ -334,7 +334,7 @@ class WinlinkPlugin(BasePlugin):
                             direction='sent'
                         )
                 else:
-                    flash(f'Failed: {message}', 'danger')
+                    flash(f'[ROUTE] Failed: {message}', 'danger')
 
                 return redirect(url_for(f'{self.name}.outbox'))
 
@@ -408,9 +408,9 @@ class WinlinkPlugin(BasePlugin):
                 if self.manager and self.manager.save_config(config_data):
                     # Regenerate Pat config
                     self.manager.generate_pat_config()
-                    flash('Settings saved!', 'success')
+                    flash('[ROUTE] Settings saved!', 'success')
                 else:
-                    flash('Error saving settings', 'danger')
+                    flash('[ROUTE] Error saving settings', 'danger')
 
                 return redirect(url_for(f'{self.name}.settings'))
 
@@ -631,7 +631,7 @@ class WinlinkPlugin(BasePlugin):
                 'rst_sent': None,
                 'rst_rcvd': None,
                 'notes': (
-                    f"Winlink {direction}: {subject}"
+                    f"[ROUTE] Winlink {direction}: {subject}"
                 )
             }
 
@@ -639,8 +639,8 @@ class WinlinkPlugin(BasePlugin):
 
             if success:
                 print(
-                    f"[{self.name}] ✓ Logged: {callsign} ({mode})"
+                    f"[{self.name}][ROUTE] ✓ Logged: {callsign} ({mode})"
                 )
 
         except Exception as e:
-            print(f"[{self.name}] Log error: {e}")
+            print(f"[{self.name}][ROUTE] Log error: {e}")
