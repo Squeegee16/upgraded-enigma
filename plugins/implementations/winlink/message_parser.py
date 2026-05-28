@@ -152,7 +152,7 @@ class WinlinkMessageParser:
             return msg_data
 
         except Exception as e:
-            print(f"[WinlinkParser] Error parsing {filepath}: {e}")
+            print(f"[Winlink][Parser] Error parsing {filepath}: {e}")
             return None
 
     def _parse_email_format(self, content, filepath):
@@ -203,7 +203,10 @@ class WinlinkMessageParser:
                 'format': 'email'
             }
 
-        except Exception:
+        except Exception as e:
+            print(
+                f"[Winlink][Parser] msg format error: {e}"
+            )
             return None
 
     def _parse_simple_format(self, content, filepath):
