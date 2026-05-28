@@ -55,7 +55,7 @@ except ImportError:
     RTLSDR_AVAILABLE = False
     _rtlsdr_module = None
     print(
-        "[Morse-SDR] pyrtlsdr not installed. "
+        "[Morse][SDR] pyrtlsdr not installed. "
         "RTL-SDR receive unavailable. "
         "Install: pip install pyrtlsdr"
     )
@@ -68,7 +68,7 @@ except ImportError:
     NUMPY_AVAILABLE = False
     np = None
     print(
-        "[Morse-SDR] numpy not installed. "
+        "[Morse][SDR] numpy not installed. "
         "Install: pip install numpy"
     )
 
@@ -168,7 +168,7 @@ class SDRMorseReceiver:
 
         if not RTLSDR_AVAILABLE:
             print(
-                "[Morse-SDR] To enable RTL-SDR receive:\n"
+                "[Morse][SDR] To enable RTL-SDR receive:\n"
                 "  1. Install library: "
                 "apt-get install librtlsdr-dev\n"
                 "  2. Install Python: pip install pyrtlsdr\n"
@@ -195,12 +195,12 @@ class SDRMorseReceiver:
                     int(self._center_freq)
                 )
                 print(
-                    f"[Morse-SDR] Frequency updated: "
+                    f"[Morse][SDR] Frequency updated: "
                     f"{freq_mhz:.4f} MHz"
                 )
             except Exception as e:
                 print(
-                    f"[Morse-SDR] Frequency update error: "
+                    f"[Morse][SDR] Frequency update error: "
                     f"{e}"
                 )
 
@@ -269,12 +269,12 @@ class SDRMorseReceiver:
                 )
                 self._status['fallback_reason'] = fallback_msg
                 self._status['error'] = (
-                    f"RTL-SDR unavailable ({fallback_msg}). "
+                    f"[MORSE][SDR] RTL-SDR unavailable ({fallback_msg}). "
                     f"Running in demo mode. "
                     f"Install: pip install pyrtlsdr numpy"
                 )
                 target = self._mock_receive_loop
-                method = 'Mock (RTL-SDR unavailable)'
+                method = '[PLUGIN] Mock (RTL-SDR unavailable)'
 
         elif self._source == 'radio':
             if SOUNDDEVICE_AVAILABLE:
@@ -282,7 +282,7 @@ class SDRMorseReceiver:
                 method = 'Radio audio'
             else:
                 print(
-                    "[Morse-SDR] sounddevice not available,"
+                    "[Morse][SDR] sounddevice not available,"
                     " falling back to mock"
                 )
                 self._status['fallback_reason'] = (
@@ -305,7 +305,7 @@ class SDRMorseReceiver:
         )
         self._thread.start()
 
-        return True, f"Receiver started ({method})"
+        return True, f"[MORSE][PLUGIN] Receiver started ({method})"
 
     def stop(self):
         """Stop the receive thread."""
@@ -325,7 +325,7 @@ class SDRMorseReceiver:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=3)
 
-        print("[Morse-SDR] Receiver stopped")
+        print("[Morse][SDR] Receiver stopped")
 
     def get_status(self):
         """
@@ -365,7 +365,7 @@ class SDRMorseReceiver:
         # (may have been imported but device may fail)
         if not RTLSDR_AVAILABLE:
             print(
-                "[Morse-SDR] pyrtlsdr not available, "
+                "[Morse][SDR] pyrtlsdr not available, "
                 "using mock mode"
             )
             self._mock_receive_loop()
@@ -373,7 +373,7 @@ class SDRMorseReceiver:
 
         if not NUMPY_AVAILABLE:
             print(
-                "[Morse-SDR] numpy not available, "
+                "[Morse][SDR] numpy not available, "
                 "using mock mode"
             )
             self._mock_receive_loop()
@@ -386,7 +386,7 @@ class SDRMorseReceiver:
             )
 
             print(
-                f"[Morse-SDR] Opening RTL-SDR device "
+                f"[Morse][SDR] Opening RTL-SDR device "
                 f"{device_index}..."
             )
 
@@ -397,7 +397,7 @@ class SDRMorseReceiver:
             except Exception as e:
                 error_msg = str(e)
                 print(
-                    f"[Morse-SDR] RTL-SDR open failed: "
+                    f"[Morse][SDR] RTL-SDR open failed: "
                     f"{error_msg}"
                 )
 
@@ -429,7 +429,7 @@ class SDRMorseReceiver:
                     )
 
                 print(
-                    "[Morse-SDR] Falling back to mock mode"
+                    "[Morse][SDR] Falling back to mock mode"
                 )
                 self._mock_receive_loop()
                 return
@@ -443,13 +443,13 @@ class SDRMorseReceiver:
                 )
                 self._sdr_device = sdr
                 print(
-                    f"[Morse-SDR] RTL-SDR configured: "
+                    f"[Morse][SDR] RTL-SDR configured: "
                     f"{self._center_freq/1e6:.4f} MHz, "
                     f"{self._sample_rate/1e3:.0f} kHz"
                 )
             except Exception as e:
                 print(
-                    f"[Morse-SDR] SDR config error: {e}"
+                    f"[Morse][SDR] SDR config error: {e}"
                 )
                 try:
                     sdr.close()
@@ -469,7 +469,7 @@ class SDRMorseReceiver:
                 'tone_detection_threshold', 0.01
             )
 
-            print("[Morse-SDR] RTL-SDR receive loop started")
+            print("[Morse][SDR] RTL-SDR receive loop started")
 
             while self._running:
                 try:
@@ -531,13 +531,13 @@ class SDRMorseReceiver:
 
                 except Exception as e:
                     print(
-                        f"[Morse-SDR] Receive error: {e}"
+                        f"[Morse][SDR] Receive error: {e}"
                     )
                     time.sleep(0.1)
 
         except Exception as e:
             print(
-                f"[Morse-SDR] SDR loop fatal error: {e}"
+                f"[Morse][SDR] SDR loop fatal error: {e}"
             )
             self._status['error'] = str(e)
 
@@ -550,7 +550,7 @@ class SDRMorseReceiver:
                     pass
                 self._sdr_device = None
 
-            print("[Morse-SDR] RTL-SDR loop ended")
+            print("[Morse][SDR] RTL-SDR loop ended")
 
     # ----------------------------------------------------------
     # Audio receive loop (radio mode)
@@ -567,7 +567,7 @@ class SDRMorseReceiver:
         """
         if not SOUNDDEVICE_AVAILABLE:
             print(
-                "[Morse-SDR] sounddevice not available, "
+                "[Morse][SDR] sounddevice not available, "
                 "using mock mode"
             )
             self._mock_receive_loop()
@@ -585,7 +585,7 @@ class SDRMorseReceiver:
         silence_start = None
 
         print(
-            f"[Morse-SDR] Starting audio capture "
+            f"[Morse][SDR] Starting audio capture "
             f"(device: "
             f"{self._audio_device or 'default'})"
         )
@@ -654,13 +654,13 @@ class SDRMorseReceiver:
         except Exception as e:
             error_msg = str(e)
             print(
-                f"[Morse-SDR] Audio error: {error_msg}"
+                f"[Morse][SDR] Audio error: {error_msg}"
             )
             self._status['error'] = (
                 f"Audio input error: {error_msg[:100]}"
             )
             print(
-                "[Morse-SDR] Falling back to mock mode"
+                "[Morse][SDR] Falling back to mock mode"
             )
             self._mock_receive_loop()
 
@@ -692,7 +692,7 @@ class SDRMorseReceiver:
         ]
 
         print(
-            "[Morse-SDR] Mock CW receive started "
+            "[Morse][SDR] Mock CW receive started "
             "(no real hardware)"
         )
 
@@ -749,4 +749,4 @@ class SDRMorseReceiver:
             if self._running:
                 time.sleep(random.uniform(3.0, 6.0))
 
-        print("[Morse-SDR] Mock receive loop ended")
+        print("[Morse][SDR] Mock receive loop ended")
