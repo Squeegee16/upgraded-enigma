@@ -188,7 +188,7 @@ class GrayWolfInstaller:
             # Copy binary to install directory
             built_binary = os.path.join(build_dir, self.GRAYWOLF_BINARY)
             shutil.copy2(built_binary, self.graywolf_binary_path)
-            os.chmod(self.graywolf_binary_path, 0o755)
+            os.chmod(self.graywolf_binary_path, 0755)
 
             print(f"[GrayWolf] ✓ Binary installed to {self.graywolf_binary_path}")
 
