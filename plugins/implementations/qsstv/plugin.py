@@ -100,7 +100,7 @@ class QSStvPlugin(BasePlugin):
         Returns:
             bool: True if initialization successful
         """
-        print(f"\n[{self.name}] Initializing plugin...")
+        print(f"\n[{self.name}][Plugin] Initializing plugin...")
 
         try:
             # Run installation check
@@ -108,12 +108,12 @@ class QSStvPlugin(BasePlugin):
 
             if not install_success:
                 self.install_error = (
-                    "QSSTV installation failed. "
+                    "[Plugin] QSSTV installation failed. "
                     "Install manually: "
                     "https://github.com/ON4QZ/QSSTV"
                 )
                 print(
-                    f"[{self.name}] WARNING: {self.install_error}"
+                    f"[{self.name}][Plugin] WARNING: {self.install_error}"
                 )
 
             self.install_complete = install_success
@@ -146,23 +146,23 @@ class QSStvPlugin(BasePlugin):
             if self.manager.config.get('auto_monitor', True):
                 success, msg = self.manager.start_monitoring()
                 if success:
-                    print(f"[{self.name}] ✓ {msg}")
+                    print(f"[{self.name}][Plugin] ✓ {msg}")
                 else:
-                    print(f"[{self.name}] Monitor: {msg}")
+                    print(f"[{self.name}][Plugin] Monitor: {msg}")
 
             # Auto-launch QSSTV if configured
             if (self.manager.config.get('auto_start') and
                     self.install_complete):
                 success, msg = self.manager.start_qsstv()
                 if success:
-                    print(f"[{self.name}] ✓ {msg}")
+                    print(f"[{self.name}][Plugin] ✓ {msg}")
 
-            print(f"[{self.name}] ✓ Plugin initialized")
+            print(f"[{self.name}][Plugin] ✓ Plugin initialized")
             return True
 
         except Exception as e:
             self.install_error = str(e)
-            print(f"[{self.name}] ERROR: {e}")
+            print(f"[{self.name}][Plugin] ERROR: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -173,7 +173,7 @@ class QSStvPlugin(BasePlugin):
 
         Stops monitoring and QSSTV process if running.
         """
-        print(f"[{self.name}] Shutting down...")
+        print(f"[{self.name}][Plugin] Shutting down...")
 
         if self.manager:
             self.manager.stop_monitoring()
@@ -181,7 +181,7 @@ class QSStvPlugin(BasePlugin):
             if self.manager._status.get('process_running'):
                 self.manager.stop_qsstv()
 
-        print(f"[{self.name}] ✓ Shutdown complete")
+        print(f"[{self.name}][Plugin] ✓ Shutdown complete")
 
     def _update_gps_locator(self):
         """
@@ -197,10 +197,10 @@ class QSStvPlugin(BasePlugin):
                             {'locator': pos['grid']}
                         )
                         print(
-                            f"[{self.name}] ✓ Grid: {pos['grid']}"
+                            f"[{self.name}][Plugin] ✓ Grid: {pos['grid']}"
                         )
         except Exception as e:
-            print(f"[{self.name}] GPS warning: {e}")
+            print(f"[{self.name}][Plugin] GPS warning: {e}")
 
     def _on_new_sstv_image(self, image_data):
         """
@@ -420,13 +420,13 @@ class QSStvPlugin(BasePlugin):
 
                     if success:
                         flash(
-                            f'Image prepared for TX: {message}. '
+                            f'[Plugin] Image prepared for TX: {message}. '
                             f'Load it in QSSTV to transmit.',
                             'success'
                         )
                     else:
                         flash(
-                            f'TX preparation failed: {message}',
+                            f'[Plugin] TX preparation failed: {message}',
                             'danger'
                         )
 
@@ -511,9 +511,9 @@ class QSStvPlugin(BasePlugin):
 
                 if self.manager and \
                         self.manager.save_config(config_data):
-                    flash('Settings saved!', 'success')
+                    flash('[QSSTV][Plugin] Settings saved!', 'success')
                 else:
-                    flash('Error saving settings', 'danger')
+                    flash('[QSSTV][Plugin] Error saving settings', 'danger')
 
                 return redirect(
                     url_for(f'{self.name}.settings')
@@ -842,7 +842,7 @@ class QSStvPlugin(BasePlugin):
                 'rst_rcvd': rst_rcvd or '59',
                 'notes': (
                     f"QSSTV SSTV: {notes}" if notes
-                    else "Logged via QSSTV"
+                    else "[Plugin] Logged via QSSTV"
                 )
             }
 
@@ -850,14 +850,14 @@ class QSStvPlugin(BasePlugin):
 
             if success:
                 print(
-                    f"[{self.name}] ✓ Logged: "
+                    f"[{self.name}][Plugin] ✓ Logged: "
                     f"{callsign} SSTV"
                 )
 
             return success
 
         except Exception as e:
-            print(f"[{self.name}] Log error: {e}")
+            print(f"[{self.name}][Plugin] Log error: {e}")
             return False
 
     @staticmethod
