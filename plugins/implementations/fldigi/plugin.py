@@ -69,7 +69,7 @@ class FldigiPlugin(BasePlugin):
         3. Connect via XML-RPC
         4. Fall back to connect-only mode if start fails
         """
-        print(f"\n[{self.name}] Initializing plugin...")
+        print(f"\n[{self.name}] [PLUGIN] Initializing plugin...")
 
         try:
             install_success = self.installer.run()
@@ -77,11 +77,11 @@ class FldigiPlugin(BasePlugin):
 
             if not install_success:
                 self.install_error = (
-                    "FLdigi not installed. "
+                    "[PLUGIN] FLdigi not installed. "
                     "Add to Dockerfile and rebuild."
                 )
                 print(
-                    f"[{self.name}] WARNING: "
+                    f"[{self.name}] [PLUGIN] WARNING: "
                     f"{self.install_error}"
                 )
 
@@ -116,14 +116,14 @@ class FldigiPlugin(BasePlugin):
                     self.manager.connect_to_existing()
                 )
                 if success:
-                    print(f"[{self.name}] ✓ {msg}")
+                    print(f"[{self.name}] [PLUGIN] ✓ {msg}")
                     print(
-                        f"[{self.name}] ✓ Plugin initialized"
+                        f"[{self.name}] [PLUGIN] ✓ Plugin initialized"
                     )
                     return True
                 else:
                     print(
-                        f"[{self.name}] INFO: "
+                        f"[{self.name}] [PLUGIN] INFO: "
                         f"FLdigi not running yet. "
                         f"Will auto-start if configured."
                     )
@@ -132,7 +132,7 @@ class FldigiPlugin(BasePlugin):
             if (self.manager.config.get('auto_start') and
                     self.install_complete):
                 print(
-                    f"[{self.name}] Auto-starting FLdigi..."
+                    f"[{self.name}] [PLUGIN] Auto-starting FLdigi..."
                 )
                 success, msg = (
                     self.manager.start_fldigi()
@@ -141,11 +141,11 @@ class FldigiPlugin(BasePlugin):
                     print(f"[{self.name}] ✓ {msg}")
                 else:
                     print(
-                        f"[{self.name}] WARNING: "
-                        f"FLdigi auto-start failed: {msg}"
+                        f"[{self.name}] [PLUGIN] WARNING: "
+                        f"[PLUGIN] FLdigi auto-start failed: {msg}"
                     )
                     self.manager._add_log(
-                        "FLdigi not started. Use the "
+                        "[PLUGIN] FLdigi not started. Use the "
                         "Start FLdigi button on the "
                         "plugin page.",
                         'info'
@@ -154,7 +154,7 @@ class FldigiPlugin(BasePlugin):
                 # Not auto-starting — log info message
                 if self.install_complete:
                     self.manager._add_log(
-                        "FLdigi ready. Click "
+                        "[PLUGIN] FLdigi ready. Click "
                         "'Start FLdigi' or "
                         "'Connect to FLdigi' on the "
                         "plugin page to begin.",
@@ -172,12 +172,12 @@ class FldigiPlugin(BasePlugin):
 
     def shutdown(self):
         """Clean shutdown of the plugin."""
-        print(f"[{self.name}] Shutting down...")
+        print(f"[{self.name}] [PLUGIN] Shutting down...")
         if self.manager:
             self.manager._rx_monitor_active = False
             if self.manager._status.get('process_running'):
                 self.manager.stop_fldigi()
-        print(f"[{self.name}] ✓ Shutdown complete")
+        print(f"[{self.name}] [PLUGIN] ✓ Shutdown complete")
 
     def _update_gps_locator(self):
         """Update grid locator from GPS device."""
@@ -212,10 +212,10 @@ class FldigiPlugin(BasePlugin):
         )
 
         print(
-            f"[{self.name}] Template folder: {template_dir}"
+            f"[{self.name}] [PLUGIN][ROUTE] Template folder: {template_dir}"
         )
         print(
-            f"[{self.name}] Template exists: "
+            f"[{self.name}] [PLUGIN][ROUTE] Template exists: "
             f"{os.path.exists(template_dir)}"
         )
 
@@ -289,7 +289,7 @@ class FldigiPlugin(BasePlugin):
 
             except Exception as e:
                 print(
-                    f"[{self.name}] ERROR in index route: "
+                    f"[{self.name}] [PLUGIN][ROUTE] ERROR in index route: "
                     f"{e}"
                 )
                 traceback.print_exc()
@@ -335,7 +335,7 @@ class FldigiPlugin(BasePlugin):
 
             except Exception as e:
                 print(
-                    f"[{self.name}] ERROR in modem route: "
+                    f"[{self.name}] [PLUGIN][ROUTE] ERROR in modem route: "
                     f"{e}"
                 )
                 traceback.print_exc()
@@ -383,7 +383,7 @@ class FldigiPlugin(BasePlugin):
 
             except Exception as e:
                 print(
-                    f"[{self.name}] ERROR in logbook: {e}"
+                    f"[{self.name}] [PLUGIN][ROUTE] ERROR in logbook: {e}"
                 )
                 traceback.print_exc()
                 return render_template(
@@ -510,7 +510,7 @@ class FldigiPlugin(BasePlugin):
 
             except Exception as e:
                 print(
-                    f"[{self.name}] ERROR in settings: {e}"
+                    f"[{self.name}][PLUGIN][ROUTE] ERROR in settings: {e}"
                 )
                 import traceback
                 traceback.print_exc()
