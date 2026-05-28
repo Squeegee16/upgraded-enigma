@@ -137,7 +137,7 @@ class OpenWebRXManager:
                     defaults.update(loaded)
             except Exception as e:
                 print(
-                    f"[OpenWebRX] Config load error: {e}"
+                    f"[OpenWebRX][init] Config load error: {e}"
                 )
 
         return defaults
@@ -165,10 +165,10 @@ class OpenWebRXManager:
             with open(config_file, 'w') as f:
                 json.dump(self.config, f, indent=2)
 
-            print("[OpenWebRX] ✓ Configuration saved")
+            print("[OpenWebRX][init] ✓ Configuration saved")
             return True
         except Exception as e:
-            print(f"[OpenWebRX] Config save error: {e}")
+            print(f"[OpenWebRX][init] Config save error: {e}")
             return False
 
     # ----------------------------------------------------------
@@ -224,7 +224,10 @@ class OpenWebRXManager:
                         'raw': response.text[:200]
                     }
             return None
-        except Exception:
+        except Exception as e:
+            print(
+                f"[OpenWebRX][init] get msg format error: {e}"
+            )
             return None
 
     def _post(self, endpoint, data=None, timeout=8):
@@ -255,7 +258,10 @@ class OpenWebRXManager:
                 except Exception:
                     return {'success': True}
             return None
-        except Exception:
+        except Exception as e:
+            print(
+                f"[OpenWebRX][init] post msg format error: {e}"
+            )
             return None
 
     # ----------------------------------------------------------
@@ -308,7 +314,7 @@ class OpenWebRXManager:
         data = self._get(self.API_STATUS)
         if data:
             self._add_log(
-                "Status retrieved successfully"
+                "[OpenWebRX] Status retrieved successfully"
             )
         return data or {}
 
@@ -409,7 +415,7 @@ class OpenWebRXManager:
                 status['error'] = str(e)
         else:
             status['error'] = (
-                f'OpenWebRX not reachable at '
+                f'[OpenWebRX][init] OpenWebRX not reachable at '
                 f'{self.base_url}'
             )
 
@@ -460,7 +466,7 @@ class OpenWebRXManager:
         )
         self._poll_thread.start()
         self._add_log(
-            "Signal spot polling started"
+            "[OpenWebRX][init] Signal spot polling started"
         )
         return True
 
@@ -553,7 +559,10 @@ class OpenWebRXManager:
                 'grid': client_data.get('grid', ''),
                 'source': 'openwebrx_api',
             }
-        except Exception:
+        except Exception as e:
+            print(
+                f"[OpenWebRX][init] spot extract error: {e}"
+            )
             return None
 
     def get_spots(self, limit=100, mode_filter=None):
