@@ -135,7 +135,7 @@ class MorseInstaller(BaseInstaller):
 
     def install_python_packages_all(self):
         """Install required and optional packages."""
-        print("[Morse] Installing Python packages...")
+        print("[Morse][INSTALL] Installing Python packages...")
 
         available, failed = super().install_python_packages(
             self.REQUIRED_PACKAGES
@@ -164,12 +164,12 @@ class MorseInstaller(BaseInstaller):
                   minimal deps (numpy/scipy in image)
         """
         if self.is_installed():
-            print("[Morse] ✓ Already installed")
+            print("[Morse][INSTALL] ✓ Already installed")
             return True
 
-        print("[Morse] ==========================================")
-        print("[Morse] Starting first-run installation")
-        print("[Morse] ==========================================")
+        print("[Morse][INSTALL] ==========================================")
+        print("[Morse][INSTALL] Starting installation")
+        print("[Morse][INSTALL] ==========================================")
 
         self.install_python_packages_all()
 
@@ -181,5 +181,5 @@ class MorseInstaller(BaseInstaller):
             }
         )
 
-        print("[Morse] ✓ Installation complete")
+        print("[Morse][INSTALL] ✓ Installation complete")
         return True
