@@ -40,7 +40,7 @@ class FldigiPlugin(BasePlugin):
     name = "FLdigi"
     description = "Digital modes via FLdigi (PSK31, RTTY, CW, WSPR and more)"
     version = "1.0.0"
-    author = "Ham Radio App Team"
+    author = "HRT - Ham Rad Team"
     url = "https://github.com/w1hkj/fldigi/"
 
     def __init__(self, app=None, devices=None):
