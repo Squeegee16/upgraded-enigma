@@ -49,7 +49,7 @@ class P25SurveyPlugin(BasePlugin):
         "and talkgroup monitor"
     )
     version = "1.0.0"
-    author = "Ham Radio App Team"
+    author = "HRT - Ham Rad Team"
     url = "https://github.com/blantonl/p25-survey"
 
     def __init__(self, app=None, devices=None):
