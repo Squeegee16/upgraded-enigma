@@ -104,7 +104,7 @@ except ImportError:
                 with open(path, 'w') as f:
                     json.dump(data, f, indent=2)
             except Exception as e:
-                print(f"[FLdigi] Marker write error: {e}")
+                print(f"[FLdigi] [Installer] Marker write error: {e}")
 
         def read_marker(self, path):
             if not os.path.exists(path):
@@ -254,19 +254,19 @@ class FldigiInstaller(BaseInstaller):
         Returns:
             bool: True if all packages available
         """
-        print("[FLdigi] Checking Python packages...")
+        print("[FLdigi] [Installer] Checking Python packages...")
         available, failed = super().install_python_packages(
             self.REQUIRED_PACKAGES
         )
 
         if failed and self.in_docker:
             print(
-                f"[FLdigi] INFO: Add to requirements.txt: "
+                f"[FLdigi] [Installer] Add to requirements.txt: "
                 f"{', '.join(failed)}"
             )
         elif failed:
             print(
-                f"[FLdigi] WARNING: Failed: {failed}"
+                f"[FLdigi] [Installer] WARNING: Failed: {failed}"
             )
 
         return len(failed) == 0
@@ -288,28 +288,28 @@ class FldigiInstaller(BaseInstaller):
         Returns:
             bool: True if installation successful
         """
-        print("[FLdigi] Installing via apt-get...")
+        print("[FLdigi] [Installer] Installing via apt-get...")
 
         if not shutil.which('apt-get'):
-            print("[FLdigi] apt-get not available")
+            print("[FLdigi] [Installer] apt-get not available")
             return False
 
         # In Docker as non-root, we cannot run apt-get
         if self.in_docker and not self.is_root:
             print(
-                "[FLdigi] INFO: Cannot apt-get in Docker "
+                "[FLdigi] [Installer] Cannot apt-get in Docker "
                 "as non-root user."
             )
             print(
-                "[FLdigi] INFO: Add fldigi to the "
+                "[FLdigi] [Installer] Add fldigi to the "
                 "Dockerfile and rebuild:"
             )
             print(
-                "[FLdigi] INFO:   RUN apt-get update && "
+                "[FLdigi] [Installer] 1: RUN apt-get update && "
                 "apt-get install -y fldigi"
             )
             print(
-                "[FLdigi] INFO:   docker compose build "
+                "[FLdigi] [Installer] 2: docker compose build "
                 "--no-cache"
             )
             return False
@@ -318,20 +318,20 @@ class FldigiInstaller(BaseInstaller):
         # attempt installation with correct prefix
 
         # Step 1: Update package list
-        print("[FLdigi] Updating package list...")
+        print("[FLdigi] [Installer] Updating package list...")
         ok, _, stderr = self._run_system_command(
             self._sudo + ['apt-get', 'update', '-q'],
             timeout=120
         )
         if not ok:
             print(
-                f"[FLdigi] apt-get update failed: "
+                f"[FLdigi] [Installer] apt-get update failed: "
                 f"{stderr[:150]}"
             )
             return False
 
         # Step 2: Install fldigi
-        print("[FLdigi] Installing fldigi package...")
+        print("[FLdigi] [Installer] Installing fldigi package...")
         ok, _, stderr = self._run_system_command(
             self._sudo + [
                 'apt-get', 'install', '-y', 'fldigi'
@@ -340,11 +340,11 @@ class FldigiInstaller(BaseInstaller):
         )
 
         if ok:
-            print("[FLdigi] ✓ Installed via apt-get")
+            print("[FLdigi] [Installer] ✓ Installed via apt-get")
             return True
 
         print(
-            f"[FLdigi] apt-get install failed: "
+            f"[FLdigi] [Installer] apt-get install failed: "
             f"{stderr[:200]}"
         )
         return False
@@ -356,15 +356,15 @@ class FldigiInstaller(BaseInstaller):
         Returns:
             bool: True if installation successful
         """
-        print("[FLdigi] Installing via dnf...")
+        print("[FLdigi] [Installer] Installing via dnf...")
 
         if not shutil.which('dnf'):
             return False
 
         if self.in_docker and not self.is_root:
             print(
-                "[FLdigi] INFO: Add to Dockerfile: "
-                "RUN dnf install -y fldigi"
+                "[FLdigi] [Installer] 1: Add to Dockerfile: "
+                "                     2: RUN dnf install -y fldigi"
             )
             return False
 
@@ -374,10 +374,10 @@ class FldigiInstaller(BaseInstaller):
         )
 
         if ok:
-            print("[FLdigi] ✓ Installed via dnf")
+            print("[FLdigi] [Installer] ✓ Installed via dnf")
             return True
 
-        print(f"[FLdigi] dnf failed: {stderr[:200]}")
+        print(f"[FLdigi] [Installer] dnf failed: {stderr[:200]}")
         return False
 
     def install_via_pacman(self):
@@ -387,15 +387,15 @@ class FldigiInstaller(BaseInstaller):
         Returns:
             bool: True if installation successful
         """
-        print("[FLdigi] Installing via pacman...")
+        print("[FLdigi] [Installer] Installing via pacman...")
 
         if not shutil.which('pacman'):
             return False
 
         if self.in_docker and not self.is_root:
             print(
-                "[FLdigi] INFO: Add to Dockerfile: "
-                "RUN pacman -S --noconfirm fldigi"
+                "[FLdigi] [Installer] 1: Add to Dockerfile: "
+                "                     2: RUN pacman -S --noconfirm fldigi"
             )
             return False
 
@@ -407,11 +407,11 @@ class FldigiInstaller(BaseInstaller):
         )
 
         if ok:
-            print("[FLdigi] ✓ Installed via pacman")
+            print("[FLdigi] [Installer] ✓ Installed via pacman")
             return True
 
         print(
-            f"[FLdigi] pacman failed: {stderr[:200]}"
+            f"[FLdigi] [Installer] pacman failed: {stderr[:200]}"
         )
         return False
 
@@ -428,17 +428,17 @@ class FldigiInstaller(BaseInstaller):
         """
         if self.in_docker and not self.is_root:
             print(
-                "[FLdigi] INFO: Cannot build from source "
+                "[FLdigi] [Installer] Cannot build from source "
                 "in Docker as non-root."
             )
             print(
-                "[FLdigi] INFO: Add to Dockerfile:"
+                "[FLdigi] [Installer] Add to Dockerfile:"
             )
             print(
-                "[FLdigi] INFO:   # Install FLdigi build deps"
+                "[FLdigi] [Installer] # Install FLdigi build deps"
             )
             print(
-                "[FLdigi] INFO:   RUN apt-get install -y "
+                "[FLdigi] [Installer] RUN apt-get install -y "
                 "fldigi"
             )
             return False
@@ -464,7 +464,7 @@ class FldigiInstaller(BaseInstaller):
             if os.path.exists(build_dir):
                 shutil.rmtree(build_dir)
 
-            print("[FLdigi] Cloning repository...")
+            print("[FLdigi] [Installer] Cloning repository...")
             ok, _, stderr = self._run_system_command(
                 [
                     'git', 'clone', '--depth', '1',
@@ -475,11 +475,11 @@ class FldigiInstaller(BaseInstaller):
 
             if not ok:
                 print(
-                    f"[FLdigi] Clone failed: {stderr}"
+                    f"[FLdigi] [Installer] Clone failed: {stderr}"
                 )
                 return False
 
-            print("[FLdigi] Running bootstrap...")
+            print("[FLdigi] [Installer] Running bootstrap...")
             ok, _, stderr = self._run_system_command(
                 ['./bootstrap'],
                 timeout=60
@@ -490,21 +490,21 @@ class FldigiInstaller(BaseInstaller):
                     timeout=60
                 )
 
-            print("[FLdigi] Configuring...")
+            print("[FLdigi] [Installer] Configuring...")
             ok, _, stderr = self._run_system_command(
                 ['./configure', '--prefix=/usr/local'],
                 timeout=120
             )
             if not ok:
                 print(
-                    f"[FLdigi] Configure failed: "
+                    f"[FLdigi] [Installer] Configure failed: "
                     f"{stderr[:200]}"
                 )
                 return False
 
             cpu_count = os.cpu_count() or 2
             print(
-                f"[FLdigi] Building ({cpu_count} cores)..."
+                f"[FLdigi] [Installer] Building ({cpu_count} cores)..."
             )
             ok, _, stderr = self._run_system_command(
                 ['make', f'-j{cpu_count}'],
@@ -512,7 +512,7 @@ class FldigiInstaller(BaseInstaller):
             )
             if not ok:
                 print(
-                    f"[FLdigi] make failed: {stderr[:200]}"
+                    f"[FLdigi] [Installer] make failed: {stderr[:200]}"
                 )
                 return False
 
@@ -523,16 +523,16 @@ class FldigiInstaller(BaseInstaller):
             )
             if not ok:
                 print(
-                    f"[FLdigi] make install failed: "
+                    f"[FLdigi] [Installer] make install failed: "
                     f"{stderr[:200]}"
                 )
                 return False
 
-            print("[FLdigi] ✓ Built from source")
+            print("[FLdigi] [Installer] ✓ Built from source")
             return True
 
         except Exception as e:
-            print(f"[FLdigi] Source build error: {e}")
+            print(f"[FLdigi] [Installer] Source build error: {e}")
             traceback.print_exc()
             return False
 
@@ -618,77 +618,75 @@ class FldigiInstaller(BaseInstaller):
             version = self.get_version()
             self.write_install_marker('existing', version)
             print(
-                f"[FLdigi] ✓ Found in PATH: "
+                f"[FLdigi] [Installer] ✓ Binary found in PATH: "
                 f"{shutil.which(self.FLDIGI_BINARY)}"
             )
             return True
 
         print("[FLdigi] ==========================================")
-        print("[FLdigi] Starting first-run installation")
+        print("[FLdigi] [Installer] Starting installation")
         print("[FLdigi] ==========================================")
 
         if self.in_docker and not self.is_root:
             print(
-                "\n[FLdigi] ======================================"
+                "\n[FLdigi] [Installer] ======================================"
             )
-            print("[FLdigi] DOCKER INSTALLATION REQUIRED")
+            print("[FLdigi] [Installer] DOCKER INSTALLATION REQUIRED")
             print(
-                "[FLdigi] ======================================"
+                "[FLdigi] [Installer]  ======================================"
             )
             print(
-                "[FLdigi] FLdigi cannot be installed at "
+                "[FLdigi] [Installer] FLdigi cannot be installed at "
                 "runtime in Docker."
             )
             print(
-                "[FLdigi] Add the following to your "
+                "[FLdigi] [Installer] Add the following to your "
                 "Dockerfile and rebuild:"
             )
-            print()
-            print("[FLdigi]   # Install FLdigi")
+            print("\n[FLdigi] [Installer]   # Install FLdigi")
             print(
-                "[FLdigi]   RUN apt-get update && \\"
+                "[FLdigi] [Installer] 1: RUN apt-get update && \\"
             )
             print(
-                "[FLdigi]       apt-get install -y \\"
+                "[FLdigi] [Installer] 2: apt-get install -y \\"
             )
             print(
-                "[FLdigi]       fldigi \\"
+                "[FLdigi] [Installer] fldigi \\"
             )
             print(
-                "[FLdigi]       flmsg \\"
+                "[FLdigi] [Installer] flmsg \\"
             )
             print(
-                "[FLdigi]       && rm -rf "
-                "/var/lib/apt/lists/*"
+                "[FLdigi] [Installer] && rm -rf /var/lib/apt/lists/*"
             )
             print()
             print(
-                "[FLdigi]   # flarq (optional ARQ transfers)"
+                "[FLdigi] [Installer]    # flarq (optional ARQ transfers)"
             )
             print(
-                "[FLdigi]   # Not packaged for Debian "
+                "[FLdigi] [Installer]    # Not packaged for Debian "
                 "Bookworm — build from source if needed:"
             )
             print(
-                "[FLdigi]   # https://sourceforge.net"
+                "[FLdigi] [Installer]    # https://sourceforge.net"
                 "/p/fldigi/fldigi"
             )
             print()
             print(
-                "[FLdigi]   docker compose build --no-cache"
+                "[FLdigi] [Installer]   docker compose build --no-cache"
             )
             print(
-                "[FLdigi] ======================================"
+                "[FLdigi] [Installer] ======================================"
             )
             return False
 
         # Step 1: Python packages
-        print("\n[FLdigi] Step 1: Python packages...")
+        print("\n[FLdigi] [Installer] Step 1: Python packages...")
         self.install_python_packages()
 
         # Step 2: Install FLdigi
         print(
-            f"\n[FLdigi] Step 2: Installing FLdigi "
+            f"\n[FLdigi] [Installer] Step 2: Installing FLdigi "
             f"(pkg mgr: "
             f"{self._package_manager or 'none'})..."
         )
@@ -703,14 +701,14 @@ class FldigiInstaller(BaseInstaller):
 
         if not success:
             print(
-                "[FLdigi] Package manager failed, "
+                "[FLdigi] [Installer] Package manager failed, "
                 "trying source build..."
             )
             success = self.build_from_source()
 
         if not success:
             print(
-                "\n[FLdigi] ERROR: All installation methods "
+                "\n[FLdigi] [Installer] ERROR: All installation methods "
                 "failed"
             )
             return False
@@ -721,23 +719,23 @@ class FldigiInstaller(BaseInstaller):
             version
         )
 
-        print("\n[FLdigi] ==========================================")
-        print("[FLdigi] ✓ Installation complete!")
+        print("\n[FLdigi] [Installer]==========================================")
+        print("[FLdigi] [Installer] ✓ Installation complete!")
         if version:
-            print(f"[FLdigi]   Version: {version}")
+            print(f"[FLdigi] [Installer]   Version: {version}")
 
         # Check for optional companions
         if shutil.which('flmsg'):
-            print("[FLdigi]   flmsg: ✓ available")
+            print("[FLdigi] [Installer]   flmsg: ✓ available")
         if shutil.which('flarq'):
-            print("[FLdigi]   flarq: ✓ available")
+            print("[FLdigi] [Installer]   flarq: ✓ available")
         else:
             print(
-                "[FLdigi]   flarq: not installed "
+                "[FLdigi] [Installer]   flarq: not installed "
                 "(optional — ARQ file transfers only)"
             )
 
-        print("[FLdigi] ==========================================\n")
+        print("[FLdigi] [Installer] ==========================================\n")
 
         return True
 
@@ -752,7 +750,7 @@ class FldigiInstaller(BaseInstaller):
         Returns:
             bool: True if fldigi installed successfully
         """
-        print("[FLdigi] Installing via apt-get...")
+        print("[FLdigi] [Installer] Installing via apt-get...")
 
         if not shutil.which('apt-get'):
             print("[FLdigi] apt-get not available")
@@ -760,30 +758,30 @@ class FldigiInstaller(BaseInstaller):
 
         if self.in_docker and not self.is_root:
             print(
-                "[FLdigi] INFO: Cannot apt-get in Docker "
+                "[FLdigi] [Installer] INFO: Cannot apt-get in Docker "
                 "as non-root. Add to Dockerfile:"
             )
             print(
-                "[FLdigi] INFO:   RUN apt-get update && "
+                "[FLdigi] [Installer] INFO:   RUN apt-get update && "
                 "apt-get install -y fldigi flmsg"
             )
             return False
 
         # Update package list
-        print("[FLdigi] Updating package list...")
+        print("[FLdigi] [Installer] Updating package list...")
         ok, _, stderr = self._run_system_command(
             self._sudo + ['apt-get', 'update', '-q'],
             timeout=120
         )
         if not ok:
             print(
-                f"[FLdigi] apt-get update failed: "
+                f"[FLdigi] [Installer] apt-get update failed: "
                 f"{stderr[:150]}"
             )
             return False
 
         # Install fldigi (required)
-        print("[FLdigi] Installing fldigi...")
+        print("[FLdigi] [Installer] Installing fldigi...")
         ok, _, stderr = self._run_system_command(
             self._sudo + [
                 'apt-get', 'install', '-y', 'fldigi'
@@ -793,12 +791,12 @@ class FldigiInstaller(BaseInstaller):
 
         if not ok:
             print(
-                f"[FLdigi] fldigi install failed: "
+                f"[FLdigi] [Installer] install failed: "
                 f"{stderr[:200]}"
             )
             return False
 
-        print("[FLdigi] ✓ fldigi installed")
+        print("[FLdigi] [Installer] ✓ fldigi installed")
 
         # Install flmsg (optional companion)
         ok, _, stderr = self._run_system_command(
@@ -808,21 +806,21 @@ class FldigiInstaller(BaseInstaller):
             timeout=120
         )
         if ok:
-            print("[FLdigi] ✓ flmsg installed")
+            print("[FLdigi] [Installer] ✓ flmsg installed")
         else:
             print(
-                "[FLdigi] INFO: flmsg not available "
+                "[FLdigi] [Installer] INFO: flmsg not available "
                 "(optional)"
             )
 
         # flarq is not in Debian Bookworm repositories
         # Log a note but do not fail
         print(
-            "[FLdigi] INFO: flarq is not packaged for "
+            "[FLdigi] [Installer] INFO: flarq is not packaged for "
             "Debian Bookworm."
         )
         print(
-            "[FLdigi] INFO: Build from source if needed: "
+            "[FLdigi] [Installer] INFO: Build from source if needed: "
             "https://sourceforge.net/p/fldigi/fldigi"
         )
 
@@ -835,10 +833,10 @@ class FldigiInstaller(BaseInstaller):
             version
         )
 
-        print("\n[FLdigi] ==========================================")
-        print("[FLdigi] ✓ Installation complete!")
+        print("\n[FLdigi] [Installer]==========================================")
+        print("[FLdigi] [Installer] ✓ Installation complete!")
         if version:
-            print(f"[FLdigi]   Version: {version}")
-        print("[FLdigi] ==========================================\n")
+            print(f"[FLdigi] [Installer]   Version: {version}")
+        print("[FLdigi] [Installer] ==========================================\n")
 
         return True
