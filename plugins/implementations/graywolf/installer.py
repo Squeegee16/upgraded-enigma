@@ -240,7 +240,8 @@ class GrayWolfInstaller:
             return True
 
         print("[GrayWolf] ================================")
-        print("[GrayWolf] Starting first-run installation")
+        print("[GrayWolf] No existing installation found  ")
+        print("[GrayWolf] Starting first-run installation ")
         print("[GrayWolf] ================================")
 
         # Step 1: Install Python packages
