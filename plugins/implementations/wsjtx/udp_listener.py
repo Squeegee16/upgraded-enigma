@@ -113,7 +113,7 @@ class WSJTXUDPListener:
             try:
                 callback(data)
             except Exception as e:
-                print(f"[WSJTX-UDP] Callback error: {e}")
+                print(f"[WSJTX][UDP] Callback error: {e}")
 
     def start(self):
         """
@@ -175,17 +175,17 @@ class WSJTXUDPListener:
             self._thread.start()
 
             print(
-                f"[WSJTX-UDP] Listening on "
+                f"[WSJTX][UDP] Listening on "
                 f"{self.host}:{self.port}"
             )
             return True
 
         except OSError as e:
-            print(f"[WSJTX-UDP] Socket error: {e}")
+            print(f"[WSJTX][UDP] Socket error: {e}")
             self._running = False
             return False
         except Exception as e:
-            print(f"[WSJTX-UDP] Start error: {e}")
+            print(f"[WSJTX][UDP] Start error: {e}")
             self._running = False
             return False
 
@@ -208,7 +208,7 @@ class WSJTXUDPListener:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=3)
 
-        print("[WSJTX-UDP] Listener stopped")
+        print("[WSJTX][UDP] Listener stopped")
 
     def _listen_loop(self):
         """
@@ -248,10 +248,10 @@ class WSJTXUDPListener:
                 # Socket closed - exit loop
                 break
             except Exception as e:
-                print(f"[WSJTX-UDP] Receive error: {e}")
+                print(f"[WSJTX][UDP] Receive error: {e}")
                 time.sleep(0.1)
 
-        print("[WSJTX-UDP] Listener thread stopped")
+        print("[WSJTX][UDP] Listener thread stopped")
 
     def _handle_packet(self, packet):
         """
@@ -298,7 +298,7 @@ class WSJTXUDPListener:
             elif msg_type == WSJTXPacketDecoder.MSG_CLOSE:
                 # WSJT-X is closing
                 self._status['closed'] = True
-                print("[WSJTX-UDP] WSJT-X closed")
+                print("[WSJTX][UDP] WSJT-X closed")
 
     def get_decodes(self, limit=50):
         """
@@ -408,7 +408,7 @@ class WSJTXUDPListener:
             sock.close()
             return True
         except Exception as e:
-            print(f"[WSJTX-UDP] Send error: {e}")
+            print(f"[WSJTX][UDP] Send error: {e}")
             return False
 
     def clear_spots(self):
