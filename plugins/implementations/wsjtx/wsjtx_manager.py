@@ -130,7 +130,7 @@ class WSJTXManager:
                     loaded = json.load(f)
                     defaults.update(loaded)
             except Exception as e:
-                print(f"[WSJTX] Config load error: {e}")
+                print(f"[WSJTX][init] Config load error: {e}")
 
         return defaults
 
@@ -152,10 +152,10 @@ class WSJTXManager:
             self.config.update(config_data)
             with open(config_file, 'w') as f:
                 json.dump(self.config, f, indent=2)
-            print("[WSJTX] ✓ Config saved")
+            print("[WSJTX][init] ✓ Config saved")
             return True
         except Exception as e:
-            print(f"[WSJTX] Config save error: {e}")
+            print(f"[WSJTX][init] Config save error: {e}")
             return False
 
     def _add_log(self, message, level='info'):
@@ -221,16 +221,16 @@ class WSJTXManager:
             if self._listener.start():
                 self._status['udp_listening'] = True
                 self._add_log(
-                    f"UDP listener started on port "
+                    f"[WSJTX][init] UDP listener started on port "
                     f"{self.config.get('udp_port', 2237)}"
                 )
-                return True, "UDP listener started"
+                return True, "[WSJTX][init] UDP listener started"
             else:
-                return False, "Failed to start UDP listener"
+                return False, "[WSJTX][init] Failed to start UDP listener"
 
         except Exception as e:
             error = str(e)
-            self._add_log(f"Listener error: {error}", 'error')
+            self._add_log(f"[WSJTX][init] Listener error: {error}", 'error')
             return False, error
 
     def stop_listener(self):
@@ -241,7 +241,7 @@ class WSJTXManager:
             tuple: (success, message)
         """
         if not self._listener:
-            return False, "Listener not running"
+            return False, "[WSJTX][init] Listener not running"
 
         try:
             self._listener.stop()
@@ -314,11 +314,11 @@ class WSJTXManager:
         """
         with self._process_lock:
             if self._process and self._process.poll() is None:
-                return False, "WSJT-X already running"
+                return False, "[WSJTX][init] WSJT-X already running"
 
             if not shutil.which('wsjtx'):
                 return False, (
-                    "WSJT-X binary not found. "
+                    "[WSJTX][init] WSJT-X binary not found. "
                     "Please install WSJT-X."
                 )
 
@@ -333,7 +333,7 @@ class WSJTXManager:
                 env = os.environ.copy()
                 env['DISPLAY'] = self.config.get('display', ':0')
 
-                self._add_log("Launching WSJT-X...")
+                self._add_log("[WSJTX][init] Launching WSJT-X...")
 
                 self._process = subprocess.Popen(
                     cmd,
@@ -347,21 +347,21 @@ class WSJTXManager:
                 self._status['pid'] = self._process.pid
 
                 self._add_log(
-                    f"✓ WSJT-X started (PID: {self._process.pid})"
+                    f"[WSJTX][init] ✓ WSJT-X started (PID: {self._process.pid})"
                 )
 
                 # Start process monitor
                 self._start_process_monitor()
 
                 return True, (
-                    f"WSJT-X started (PID: {self._process.pid})"
+                    f"[WSJTX][init] WSJT-X started (PID: {self._process.pid})"
                 )
 
             except Exception as e:
                 error = str(e)
                 self._status['error'] = error
-                self._add_log(f"ERROR: {error}", 'error')
-                return False, f"Failed to start: {error}"
+                self._add_log(f"[WSJTX][init] ERROR: {error}", 'error')
+                return False, f"[WSJTX][init] Failed to start: {error}"
 
     def stop_wsjtx(self):
         """
@@ -390,7 +390,7 @@ class WSJTXManager:
                 return True, "WSJT-X stopped"
 
             except Exception as e:
-                return False, f"Stop error: {str(e)}"
+                return False, f"[WSJTX] Stop error: {str(e)}"
 
     def _start_process_monitor(self):
         """
