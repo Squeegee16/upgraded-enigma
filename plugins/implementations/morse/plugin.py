@@ -56,7 +56,7 @@ class MorsePlugin(BasePlugin):
     name = "Morse"
     description = "CW decoder, on-screen key, and morse reference"
     version = "1.0.0"
-    author = "Ham Radio App Team"
+    author = "HRT - Ham Rad Team"
     url = "https://en.wikipedia.org/wiki/Morse_code"
 
     def __init__(self, app=None, devices=None):
