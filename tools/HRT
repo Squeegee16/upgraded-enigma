@@ -1,0 +1,171 @@
+HAMRAD 
+Plugins--
+[GRYWLF] - Graywolf https://github.com/chrissnell/graywolf
+
+Manager:
+config dir : '~/.local/bin/graywolf' (will make if not present)
+config file: graywolf_config.json
+
+-Start method- args Call sign, gateway, password. > set by config or user.
+
+Installer:
+install dir '~/.local/bin'
+dependencies:
+GO[line 85] - [go env | grep -E '^(GOPATH|GOROOT|GOTOOLCHAIN)='] confirm?
+- RUST - for modem
+
+--SQLite config db: /var/lib/graywolf/graywolf.db
+-- postinstall make graywolf system user, member of audio, dialout
+
+set / change usre: auth set-password --user NAME
+** set call sign before start.
+-- Remote --
+requires special setup
+** have radio add live map** or connect via Web UI
+-- can DL off line maps
+
+
+FLDIGI - (no gui) https://github.com/w1hkj/fldigi/
+Manager:
+-Config dir: '/usr/bin/fldigi'
+-Config file 'fldigi_config.json',
+-_load_config Method: display, callsign, locator, default = blank, xvfb_display = 99
+--- xmlrpc_host- lines 502
+
+
+Installer:
+dependencies: FLTK 1.3.4 (http://www.w1hkj.com/doku/doku.php?id=howtos)   
+
+
+XMLRPC:
+(commonly broken)
+ xmlrpc_host='localhost'
+ xmlrpc_port=7362)
+
+------------------------------------------
+QSSTV 'https://github.com/ON4QZ/QSSTV.git', web https://www.qsl.net/o/on4qz/qsstv/faq.html
+Install-
+apt install pkg-config g++ libfftw3-dev qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools libqt5svg5-dev libhamlib++-dev libasound2-dev libpulse-dev libopenjp2-7 libopenjp2-7-dev libv4l-dev build-essential
+-- needs pluse audio for sound.
+
+sudo apt-get install doxygen libqwt-qt5-dev
+
+
+Manger:
+gallery_dir:~/.config/qsstv/rx/ 
+rx_dir: ??
+--dependancy watchdog?, pillow
+
+Installer:
+install path:
+
+----------------------------------------------
+SatDump - 'https://github.com/SatDump/SatDump.git'
+    https://docs.satdump.org/pipelines.html
+    https://github.com/SatDump/SatDump/tree/master/pipelines
+Manager:
+config_dir
+output_dir
+gallery_dir
+--
+binary_path '/usr/local/bin/satdump'
+ui_binary_path '/usr/local/bin/satdump-ui'
+
+-load_config satdump_config.json
+defaults: 'spyserver_host': 'localhost',
+          'spyserver_port': 5555,
+          'display': ':0',
+          'callsign': '',
+          'locator': '',        
+
+Pipeline Manger:[PIPE] 
+pipeline_dirs 
+~/.config/satdump/pipelines'
+'/usr/share/satdump/pipelines'
+'/usr/local/share/satdump/pipelines'
+'/opt/satdump/pipelines'
+
+Installer:
+dependancies - flatpak
+  'ephem',
+  'pyorbital',
+  'requests',
+  'psutil',
+  'Pillow',
+  'watchdog',
+---------------
+  'build-essential',
+  'cmake',
+  'git',
+  'pkgconf',
+  'libfftw3-dev',
+  'libnng-dev',
+  'libjpeg-dev',
+  'libpng-dev',
+  'libtiff-dev',
+  'libglfw3-dev',
+  'libvolk-dev',
+  'libcurl4-openssl-dev',
+  'libhdf5-dev',
+  'libzstd-dev',
+  'librtlsdr-dev',
+  'libairspy-dev',
+  'libhackrf-dev',
+
+----------------------------------
+Winlink:
+    https://github.com/la5nta/pat/wiki/HTTP-API
+    https://getpat.io/
+
+winlink_manager:
+config_dir   ~/.config/pat/config.json 
+config_file   winlink_config.json
+binary_path   '~/.local/bin/pat'
+mailbox_dir   ~/.local/share/pat/mailbox/<callsign>
+defaults:
+'callsign': '',
+'password': '',
+'locator': '',
+'telnet_port': 8772,
+'ax25_port': 'wl2k',
+'vara_port': 8300,
+'pat_api_port': 8080,  'pat_http_addr': '0.0.0.0:8080',
+
+installer:
+install_dir = '~/.local/bin'
+
+plugin:
+
+message_parse
+
+----------------------------------------------
+wsjtx 
+- https://github.com/WSJTX/wsjtx
+- https://physics.princeton.edu/pulsar/k1jt/wsjtx.html
+Manager:
+config_dir  Plugin data directory
+binary_path '/usr/bin/wsjtx'
+config_file 'wsjtx_config.json'
+
+installer:
+dependancies - flatpack
+
+------------------------------------------------
+OpenWeb RX
+Manager:
+config_dir  'openwebrx_config.json'
+
+------------------------------------------------
+p25 survey
+
+
+--------------------------------
+Enviroment Variables by plugin:
+--------------------------------
+
+
+
+
+
+
+
