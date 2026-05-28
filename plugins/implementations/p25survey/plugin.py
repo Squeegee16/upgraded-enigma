@@ -107,7 +107,7 @@ class P25SurveyPlugin(BasePlugin):
                     loaded = json.load(f)
                     defaults.update(loaded)
             except Exception as e:
-                print(f"[P25Survey] Config error: {e}")
+                print(f"[P25][PLUGIN] Config error: {e}")
 
         return defaults
 
@@ -122,12 +122,12 @@ class P25SurveyPlugin(BasePlugin):
                 json.dump(self.config, f, indent=2)
             return True
         except Exception as e:
-            print(f"[P25Survey] Save error: {e}")
+            print(f"[P25][PLUGIN] Save error: {e}")
             return False
 
     def initialize(self):
         """Initialize the P25 Survey plugin."""
-        print(f"\n[{self.name}] Initializing...")
+        print(f"\n[{self.name}][PLUGIN] Initializing...")
 
         try:
             install_success = self.installer.run()
@@ -150,16 +150,16 @@ class P25SurveyPlugin(BasePlugin):
             # Auto-start receive
             success, msg = self.engine.start_receive()
             if success:
-                print(f"[{self.name}] ✓ {msg}")
+                print(f"[{self.name}][PLUGIN] ✓ {msg}")
             else:
-                print(f"[{self.name}] RX: {msg}")
+                print(f"[{self.name}][PLUGIN] RX: {msg}")
 
-            print(f"[{self.name}] ✓ Initialized")
+            print(f"[{self.name}][PLUGIN] ✓ Initialized")
             return True
 
         except Exception as e:
             self.install_error = str(e)
-            print(f"[{self.name}] ERROR: {e}")
+            print(f"[{self.name}][PLUGIN] ERROR: {e}")
             traceback.print_exc()
             return False
 
@@ -168,7 +168,7 @@ class P25SurveyPlugin(BasePlugin):
         print(f"[{self.name}] Shutting down...")
         if self.engine:
             self.engine.stop_receive()
-        print(f"[{self.name}] ✓ Shutdown")
+        print(f"[{self.name}][PLUGIN] ✓ Shutdown")
 
     def get_blueprint(self):
         """Create Flask Blueprint."""
@@ -268,7 +268,7 @@ class P25SurveyPlugin(BasePlugin):
 
             except Exception as e:
                 print(
-                    f"[{self.name}] Index error: {e}"
+                    f"[{self.name}][PLUGIN] Index error: {e}"
                 )
                 traceback.print_exc()
                 return render_template(
@@ -432,7 +432,7 @@ class P25SurveyPlugin(BasePlugin):
                                     survey_freqs
                                 )
 
-                    flash('Settings saved!', 'success')
+                    flash('[PLUGIN] Settings saved!', 'success')
                     return redirect(
                         url_for(f'{self.name}.settings')
                     )
@@ -463,7 +463,7 @@ class P25SurveyPlugin(BasePlugin):
 
             except Exception as e:
                 print(
-                    f"[{self.name}] Settings error: {e}"
+                    f"[{self.name}][PLUGIN] Settings error: {e}"
                 )
                 traceback.print_exc()
                 return render_template(
@@ -732,7 +732,7 @@ class P25SurveyPlugin(BasePlugin):
                     'success': success,
                     'message': (
                         f'{callsign} logged!'
-                        if success else 'Logging failed'
+                        if success else '[P25][PLUGIN] Logging failed'
                     )
                 })
             except Exception as e:
@@ -834,7 +834,7 @@ class P25SurveyPlugin(BasePlugin):
             return success
 
         except Exception as e:
-            print(f"[{self.name}] Log error: {e}")
+            print(f"[{self.name}][PLUGIN] Log error: {e}")
             return False
 
     @staticmethod
