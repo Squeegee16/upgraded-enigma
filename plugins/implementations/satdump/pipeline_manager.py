@@ -286,13 +286,13 @@ class PipelineManager:
                             loaded_count += count
                     if loaded_count > 0:
                         print(
-                            f"[SatDump] Loaded {loaded_count} "
+                            f"[SatDump][PIPE] Loaded {loaded_count} "
                             f"pipelines from {pipeline_dir}"
                         )
                         break
                 except Exception as e:
                     print(
-                        f"[SatDump] Pipeline load error: {e}"
+                        f"[SatDump][PIPE] Pipeline load error: {e}"
                     )
 
     def _parse_pipeline_file(self, filepath):
@@ -344,7 +344,7 @@ class PipelineManager:
                     loaded += 1
 
         except Exception as e:
-            print(f"[SatDump] Pipeline parse error: {e}")
+            print(f"[SatDump][PIPE] Pipeline parse error: {e}")
 
         return loaded
 
@@ -411,11 +411,11 @@ class PipelineManager:
         """
         pipeline = self.get_pipeline(pipeline_name)
         if not pipeline:
-            print(f"[SatDump] Pipeline not found: {pipeline_name}")
+            print(f"[SatDump][PIPE] Pipeline not found: {pipeline_name}")
             return None
 
         if not self.satdump_binary:
-            print("[SatDump] satdump binary not found")
+            print("[SatDump][PIPE] satdump binary not found")
             return None
 
         # Get source configuration
