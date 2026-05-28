@@ -142,7 +142,7 @@ class FldigiManager:
                     loaded = json.load(f)
                     defaults.update(loaded)
             except Exception as e:
-                print(f"[FLdigi] Config load error: {e}")
+                print(f"[FLdigi] [init] Config load error: {e}")
 
         return defaults
 
@@ -165,7 +165,7 @@ class FldigiManager:
                 json.dump(self.config, f, indent=2)
             return True
         except Exception as e:
-            print(f"[FLdigi] Config save error: {e}")
+            print(f"[FLdigi] [init]  Config save error: {e}")
             return False
 
     # ----------------------------------------------------------
@@ -232,7 +232,7 @@ class FldigiManager:
         env_display = os.environ.get('DISPLAY', '').strip()
         if env_display:
             self._add_log(
-                f"Using DISPLAY env: {env_display}"
+                f" [FLDIGI] [init] Using DISPLAY env: {env_display}"
             )
             return env_display
 
@@ -242,7 +242,7 @@ class FldigiManager:
         )
         if self._is_xvfb_running(xvfb_display):
             self._add_log(
-                f"Using existing Xvfb: {xvfb_display}"
+                f"[FLDIGI] [init] Using existing Xvfb: {xvfb_display}"
             )
             return xvfb_display
 
@@ -253,7 +253,7 @@ class FldigiManager:
 
         # 5. Last resort
         self._add_log(
-            "No display found, trying :0", 'warning'
+            "[FLDIGI] [init] No display found, trying :0", 'warning'
         )
         return ':0'
 
@@ -326,14 +326,14 @@ class FldigiManager:
             os.chmod('/tmp/.X11-unix', 0o1777)
         except Exception as e:
             self._add_log(
-                f"Cannot create /tmp/.X11-unix: {e}. "
+                f" [FLDIGI] [init] Cannot create /tmp/.X11-unix: {e}. "
                 "This directory must be created as root "
                 "in the Dockerfile.",
                 'warning'
             )
 
         self._add_log(
-            f"Starting Xvfb on {display}..."
+            f"[FLDIGI] [init] Starting Xvfb on {display}..."
         )
 
         try:
@@ -369,20 +369,20 @@ class FldigiManager:
 
                 if self._is_xvfb_running(display):
                     self._add_log(
-                        f"✓ Xvfb running on {display} "
+                        f"[FLDIGI] [init] ✓ Xvfb running on {display} "
                         f"(PID: {self._xvfb_process.pid})"
                     )
                     os.environ['DISPLAY'] = display
                     return True
 
             self._add_log(
-                "Xvfb did not start in time", 'warning'
+                "[FLDIGI] [init] Xvfb did not start in time", 'warning'
             )
             return False
 
         except Exception as e:
             self._add_log(
-                f"Xvfb start error: {e}", 'error'
+                f"[FLDIGI] [init] Xvfb start error: {e}", 'error'
             )
             return False
 
@@ -416,7 +416,7 @@ class FldigiManager:
 
         if not shutil.which('pactl'):
             self._add_log(
-                "pactl not available — audio may fail. "
+                "[FLDIGI] [init] pactl not available — audio may fail. "
                 "Add pulseaudio to Dockerfile.",
                 'warning'
             )
@@ -472,11 +472,11 @@ class FldigiManager:
                     )
             except Exception as e:
                 self._add_log(
-                    f"ALSA config warning: {e}", 'warning'
+                    f"[FLDIGI] [init] ALSA config warning: {e}", 'warning'
                 )
 
         env['PULSE_LATENCY_MSEC'] = '30'
-        self._add_log("✓ Audio environment configured")
+        self._add_log("[FLDIGI] [init] ✓ Audio environment configured")
         return env
 
     # ----------------------------------------------------------
@@ -526,12 +526,12 @@ class FldigiManager:
         with self._process_lock:
             if self._process and \
                     self._process.poll() is None:
-                return False, "FLdigi already running"
+                return False, "[FLdigi] [init] already running"
 
             binary = shutil.which('fldigi')
             if not binary:
                 return False, (
-                    "FLdigi binary not found. "
+                    "[FLdigi] [init] binary not found. "
                     "Add fldigi to Dockerfile and rebuild."
                 )
 
@@ -550,7 +550,7 @@ class FldigiManager:
                     binary, display
                 )
                 self._add_log(
-                    f"Launching: {' '.join(cmd)}"
+                    f"[FLdigi] [init] Launching: {' '.join(cmd)}"
                 )
 
                 self._process = subprocess.Popen(
@@ -565,7 +565,7 @@ class FldigiManager:
                 self._status['process_running'] = True
                 self._status['pid'] = self._process.pid
                 self._add_log(
-                    f"✓ FLdigi started "
+                    f"[FLdigi] [init] ✓ started "
                     f"(PID: {self._process.pid})"
                 )
 
@@ -577,7 +577,7 @@ class FldigiManager:
                     'connect_timeout', 30
                 )
                 self._add_log(
-                    f"Waiting for XML-RPC "
+                    f"[FLdigi] [init] Waiting for XML-RPC "
                     f"(up to {timeout}s)..."
                 )
 
@@ -588,7 +588,7 @@ class FldigiManager:
                     if self._process.poll() is not None:
                         code = self._process.poll()
                         return False, (
-                            f"FLdigi exited (code {code}). "
+                            f"[FLdigi] [init] exited (code {code}). "
                             "Check audio and display config."
                         )
 
@@ -600,33 +600,33 @@ class FldigiManager:
                             'xmlrpc_connected'
                         ] = True
                         self._add_log(
-                            f"✓ XML-RPC connected: "
+                            f"[FLdigi] [init] ✓ XML-RPC connected: "
                             f"FLdigi {version}"
                         )
                         self._start_monitor()
                         break
 
                     self._add_log(
-                        f"  Attempt {attempt + 1}: "
+                        f"  [FLdigi] [init] Attempt {attempt + 1}: "
                         "waiting for XML-RPC..."
                     )
 
                 if not connected:
                     return (
                         True,
-                        "FLdigi started but XML-RPC not "
+                        "[FLdigi] [init] started but XML-RPC not "
                         "responding. Check FLdigi settings: "
                         "Configure → XML-RPC → port 7362."
                     )
 
                 return (
                     True,
-                    f"FLdigi started and connected "
+                    f"[FLdigi] [init] started and connected "
                     f"(PID: {self._process.pid})"
                 )
 
             except Exception as e:
-                msg = f"Failed to start FLdigi: {e}"
+                msg = f"[FLdigi] [init] Failed to start: {e}"
                 self._add_log(msg, 'error')
                 import traceback
                 traceback.print_exc()
@@ -646,7 +646,7 @@ class FldigiManager:
             tuple: (success: bool, message: str)
         """
         self._add_log(
-            f"Connecting to FLdigi XML-RPC at "
+            f"[FLdigi] [init] Connecting to XML-RPC at "
             f"{self.xmlrpc_host}:{self.xmlrpc_port}..."
         )
 
@@ -657,12 +657,12 @@ class FldigiManager:
             self._update_status_from_rpc()
             self._start_monitor()
             self._add_log(
-                f"✓ Connected to FLdigi {version}"
+                f"[FLdigi] [init] ✓ RPC Connected to FLdigi {version}"
             )
-            return True, f"Connected to FLdigi {version}"
+            return True, f"[FLdigi] [init] RPC Connected to FLdigi {version}"
 
         msg = (
-            f"Cannot connect to FLdigi XML-RPC "
+            f"[FLdigi] [init] FLdigi cannot connect to XML-RPC "
             f"({self.xmlrpc_host}:{self.xmlrpc_port}). "
             "Start FLdigi and enable XML-RPC: "
             "Configure → XML-RPC → port 7362."
@@ -719,8 +719,8 @@ class FldigiManager:
             # Stop Xvfb if we started it
             self._stop_xvfb()
 
-            self._add_log("✓ FLdigi stopped")
-            return True, "FLdigi stopped"
+            self._add_log("[FLdigi] ✓ FLdigi stopped")
+            return True, "[FLdigi] stopped"
 
     # ----------------------------------------------------------
     # Process monitoring
@@ -749,7 +749,7 @@ class FldigiManager:
                         self._add_log(stripped)
             except Exception as e:
                 self._add_log(
-                    f"Output monitor error: {e}", 'warning'
+                    f"[FLdigi] [init] Output monitor error: {e}", 'warning'
                 )
             finally:
                 code = (
@@ -761,13 +761,13 @@ class FldigiManager:
 
                 if code is not None and code != 0:
                     self._add_log(
-                        f"FLdigi terminated "
+                        f"[FLdigi] [init] o/p monitor terminated "
                         f"(exit code: {code})",
                         'warning'
                     )
                 else:
                     self._add_log(
-                        "FLdigi process terminated"
+                        "[FLdigi] [init] o/p monitor terminated"
                     )
 
         thread = threading.Thread(
@@ -797,7 +797,7 @@ class FldigiManager:
                         self._update_status_from_rpc()
                 except Exception as e:
                     self._add_log(
-                        f"Monitor error: {e}", 'error'
+                        f"[FLdigi] [init] Monitor error: {e}", 'error'
                     )
                 time.sleep(interval)
 
@@ -1038,4 +1038,4 @@ class FldigiManager:
             self._add_log("TX aborted")
             return True, "TX aborted"
         except Exception as e:
-            return False, f"Abort error: {e}"
+            return False, f"TX Abort error: {e}"
