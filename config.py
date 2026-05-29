@@ -138,12 +138,12 @@ class Config:
 class DevelopmentConfig(Config):
     """Development-specific configuration."""
     DEBUG = True
-    USE_MOCK_DEVICES = True
+    USE_MOCK_DEVICES = False
     SESSION_COOKIE_SECURE = False
 
 class ProductionConfig(Config):
     """Production-specific configuration."""
-    DEBUG = False
+    DEBUG = True
     USE_MOCK_DEVICES = False
     SESSION_COOKIE_SECURE = True
 
