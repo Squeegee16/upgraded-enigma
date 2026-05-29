@@ -27,7 +27,7 @@
 FROM python:3.11-slim-bookworm AS builder
 
 LABEL stage="builder"
-LABEL description="[BUILDER] Ham Radio App - Python Dependency Builder"
+LABEL description="[BUILDER] Ham Rad App - Python Dependency Builder"
 
 # Python build environment
 ENV PYTHONUNBUFFERED=1 \
@@ -65,7 +65,7 @@ RUN python -m venv /opt/venv && \
 # ============================================================
 FROM python:3.11-slim-bookworm
 
-LABEL maintainer="Ham Radio App Team"
+LABEL maintainer="Ham Rad App Team"
 LABEL description="[BUILDER] Ham Radio Operator Web Application"
 LABEL version="0.2.0"
 
