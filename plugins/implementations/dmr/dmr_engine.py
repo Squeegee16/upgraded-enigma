@@ -46,7 +46,6 @@ from plugins.implementations.dmr.dmr_constants import (
     FLCO,
 )
 
-
 class DMRFrame:
     """
     Represents a decoded DMR frame/burst.
@@ -293,26 +292,26 @@ class DMREngine:
             rtl_fm = shutil.which('rtl_fm')
             if not rtl_fm:
                 self._add_log(
-                    "rtl_fm not found. "
+                    "[DMR] rtl_fm not found. "
                     "Install rtl-sdr package.",
                     'warning'
                 )
                 # Start mock receive for UI demo
                 self._start_mock_receive()
                 return True, (
-                    "RTL-SDR not available — "
+                    "[DMR] RTL-SDR not available — "
                     "running in demo mode"
                 )
 
             if not self._decoder_name:
                 # No decoder — just monitor with rtl_fm
                 self._add_log(
-                    "No decoder — monitoring SDR only",
+                    "[DMR] No decoder — monitoring SDR only",
                     'warning'
                 )
                 self._start_mock_receive()
                 return True, (
-                    "No decoder available — "
+                    "[DMR] No decoder available — "
                     "SDR monitor mode only"
                 )
 
@@ -362,22 +361,22 @@ class DMREngine:
                 )
 
                 self._add_log(
-                    f"✓ SDR pipeline started: "
+                    f"[DMR] ✓ SDR pipeline started: "
                     f"{freq_hz/1e6:.4f} MHz "
                     f"(gain: {gain}dB)"
                 )
                 return True, (
-                    f"Receiving on "
+                    f"[DMR] Receiving on "
                     f"{self._channel['frequency']:.4f} MHz"
                 )
 
             except Exception as e:
                 self._add_log(
-                    f"SDR pipeline error: {e}", 'error'
+                    f"[DMR] SDR pipeline error: {e}", 'error'
                 )
                 self._start_mock_receive()
                 return True, (
-                    f"SDR error ({e}) — demo mode"
+                    f"[DMR] SDR error ({e}) — demo mode"
                 )
 
     def _start_radio_receive(self):
@@ -391,12 +390,12 @@ class DMREngine:
             tuple: (success: bool, message: str)
         """
         self._add_log(
-            "Starting radio audio receive mode..."
+            "[DMR] Starting radio audio receive mode..."
         )
 
         if not self._decoder_name:
             self._start_mock_receive()
-            return True, "Radio receive — demo mode"
+            return True, "[DMR] Radio receive — demo mode"
 
         try:
             audio_device = self.config.get(
@@ -441,17 +440,17 @@ class DMREngine:
             else:
                 # Use sounddevice for audio capture
                 self._start_audio_receive()
-                return True, "Radio audio receive started"
+                return True, "[DMR] Radio audio receive started"
 
-            self._add_log("✓ Radio receive started")
+            self._add_log("[DMR] ✓ Radio receive started")
             return True, "Receiving via radio audio"
 
         except Exception as e:
             self._add_log(
-                f"Radio receive error: {e}", 'error'
+                f"[DMR] Radio receive error: {e}", 'error'
             )
             self._start_mock_receive()
-            return True, f"Radio error — demo mode"
+            return True, f"[DMR] Radio error — demo mode"
 
     def _start_mock_receive(self):
         """
@@ -461,7 +460,7 @@ class DMREngine:
         the UI when real hardware is not available.
         """
         self._add_log(
-            "Starting demo mode — generating "
+            "[DMR] Starting demo mode — generating "
             "synthetic DMR frames"
         )
 
@@ -594,7 +593,7 @@ class DMREngine:
                         self._parse_dsd_output(line)
             except Exception as e:
                 self._add_log(
-                    f"Parser error: {e}", 'error'
+                    f"[DMR-DSD] Parser error: {e}", 'error'
                 )
 
         thread = threading.Thread(
@@ -683,7 +682,7 @@ class DMREngine:
             self._process_frame(frame)
         else:
             # Log raw output for debugging
-            self._add_log(f"DSD: {line}")
+            self._add_log(f"[DMR] DSD: {line}")
 
     def _process_frame(self, frame):
         """
@@ -789,11 +788,11 @@ class DMREngine:
 
         except ImportError:
             self._add_log(
-                "sounddevice not available", 'warning'
+                "[DMR] sounddevice not available", 'warning'
             )
         except Exception as e:
             self._add_log(
-                f"Audio receive error: {e}", 'error'
+                f"[DMR] Audio receive error: {e}", 'error'
             )
 
     def stop_receive(self):
@@ -834,7 +833,7 @@ class DMREngine:
         with self._active_call_lock:
             self._active_call = None
 
-        self._add_log("Receive stopped")
+        self._add_log("[DMR] Receive stopped")
 
     # ----------------------------------------------------------
     # Transmit (PTT)
@@ -855,7 +854,7 @@ class DMREngine:
             tuple: (success: bool, message: str)
         """
         if self._transmitting:
-            return False, "Already transmitting"
+            return False, "[DMR] Already transmitting"
 
         if self._source == 'sdr':
             return self._start_sdr_transmit(audio_data)
@@ -880,7 +879,7 @@ class DMREngine:
 
         if not tx_capable:
             return False, (
-                "SDR transmit requires HackRF or "
+                "[DMR] SDR transmit requires HackRF or "
                 "PlutoSDR. RTL-SDR is receive-only. "
                 "Switch to Radio mode for TX."
             )
@@ -888,9 +887,9 @@ class DMREngine:
         self._transmitting = True
         self._channel['mode'] = 'TX'
         self._add_log(
-            "SDR TX started (requires HackRF/PlutoSDR)"
+            "[DMR] SDR TX started (requires HackRF/PlutoSDR)"
         )
-        return True, "SDR transmitting"
+        return True, "[DMR] SDR transmitting"
 
     def _start_radio_transmit(self, audio_data=None):
         """
@@ -915,7 +914,7 @@ class DMREngine:
             f"TG: {self._channel['talkgroup']} | "
             f"TS: {self._channel['timeslot']}"
         )
-        return True, "Radio transmitting"
+        return True, "[DMR] Radio transmitting"
 
     def stop_transmit(self):
         """
@@ -925,7 +924,7 @@ class DMREngine:
             tuple: (success: bool, message: str)
         """
         if not self._transmitting:
-            return False, "Not transmitting"
+            return False, "[DMR] Not transmitting"
 
         self._transmitting = False
         self._channel['mode'] = 'RX'
@@ -935,8 +934,8 @@ class DMREngine:
         if ptt_port:
             self._key_radio(ptt_port, False)
 
-        self._add_log("TX stopped")
-        return True, "TX stopped"
+        self._add_log("[DMR] TX stopped")
+        return True, "[DMR] TX stopped"
 
     def _key_radio(self, port, key_on):
         """
@@ -954,7 +953,7 @@ class DMREngine:
                 ser.setRTS(key_on)
         except Exception as e:
             self._add_log(
-                f"PTT error on {port}: {e}", 'warning'
+                f"[DMR] PTT error on {port}: {e}", 'warning'
             )
 
     # ----------------------------------------------------------
