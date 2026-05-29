@@ -77,6 +77,7 @@ class FldigiXMLRPC:
 
         except ConnectionRefusedError:
             self._connected = False
+            print("[FLdigi][XMLRPC] Connection Refused")
             return False
         except Exception as e:
             self._connected = False
@@ -87,6 +88,7 @@ class FldigiXMLRPC:
         """Close XML-RPC connection."""
         self._server = None
         self._connected = False
+        print("[FLdigi][XMLRPC] Disconnected")
 
     def is_connected(self):
         """
@@ -137,6 +139,7 @@ class FldigiXMLRPC:
             return default
         except ConnectionRefusedError:
             self._connected = False
+            print("[FLdigi][XMLRPC] Connection Refused")
             return default
         except Exception as e:
             print(f"[FLdigi][XMLRPC] Error in {method_path}: {e}")
