@@ -29,7 +29,7 @@ Usage:
             )
             ...
 
-Author: Ham Radio App Team
+Author: Ham Rad App Team
 Version: 1.0.0
 """
 
