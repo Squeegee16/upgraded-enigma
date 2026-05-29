@@ -52,9 +52,9 @@ def create_app(config_name='default'):
     try:
         from config import config
         app.config.from_object(config[config_name])
-        print(f"✓ Config loaded: {config_name}")
+        print(f"[APP] ✓ Config loaded: {config_name}")
     except Exception as e:
-        print(f"✗ Config load error: {e}")
+        print(f"[APP] ✗ Config load error: {e}")
         traceback.print_exc()
         raise
 
@@ -64,9 +64,9 @@ def create_app(config_name='default'):
     try:
         from models import db
         db.init_app(app)
-        print("✓ SQLAlchemy initialised")
+        print("[APP] ✓ SQLAlchemy initialised")
     except Exception as e:
-        print(f"✗ SQLAlchemy init error: {e}")
+        print(f"[APP] ✗ SQLAlchemy init error: {e}")
         traceback.print_exc()
         raise
 
@@ -105,9 +105,9 @@ def create_app(config_name='default'):
             except Exception:
                 return None
 
-        print("✓ Flask-Login initialised")
+        print("[APP] ✓ Flask-Login initialised")
     except Exception as e:
-        print(f"✗ Flask-Login init error: {e}")
+        print(f"[APP] ✗ Flask-Login init error: {e}")
         traceback.print_exc()
         raise
 
@@ -118,9 +118,9 @@ def create_app(config_name='default'):
         try:
             from models import db as _db
             _db.create_all()
-            print("✓ Main database tables created")
+            print("[APP] ✓ Main database tables created")
         except Exception as e:
-            print(f"✗ Main DB table error: {e}")
+            print(f"[APP] ✗ Main DB table error: {e}")
             traceback.print_exc()
             raise
 
@@ -130,9 +130,9 @@ def create_app(config_name='default'):
                 CanadianOperator, DatabaseMeta
             )
             _db.create_all()
-            print("✓ Callsign database tables created")
+            print("[APP] ✓ Callsign database tables created")
         except Exception as e:
-            print(f"✗ Callsign DB table error: {e}")
+            print(f"[APP] ✗ Callsign DB table error: {e}")
             traceback.print_exc()
             # Non-fatal — app can run without callsign DB
 
@@ -142,9 +142,9 @@ def create_app(config_name='default'):
     try:
         from callsign_db.database import CallsignDatabase
         callsign_db_instance = CallsignDatabase(app)
-        print("✓ Callsign database initialised")
+        print("[APP] ✓ Callsign database initialised")
     except Exception as e:
-        print(f"✗ Callsign DB init error: {e}")
+        print(f"[APP] ✗ Callsign DB init error: {e}")
         traceback.print_exc()
         # Non-fatal
 
@@ -199,9 +199,9 @@ def create_app(config_name='default'):
     try:
         from auth.routes import auth_bp
         app.register_blueprint(auth_bp)
-        print("✓ auth blueprint registered")
+        print("[APP] ✓ auth blueprint registered")
     except Exception as e:
-        print(f"✗ auth blueprint FAILED: {e}")
+        print(f"[APP] ✗ auth blueprint FAILED: {e}")
         traceback.print_exc()
         raise  # Auth is required — fatal
 
@@ -209,9 +209,9 @@ def create_app(config_name='default'):
     try:
         from dashboard.routes import dashboard_bp
         app.register_blueprint(dashboard_bp)
-        print("✓ dashboard blueprint registered")
+        print("[APP] ✓ dashboard blueprint registered")
     except Exception as e:
-        print(f"✗ dashboard blueprint FAILED: {e}")
+        print(f"[APP] ✗ dashboard blueprint FAILED: {e}")
         traceback.print_exc()
         raise  # Dashboard is required — fatal
 
@@ -219,9 +219,9 @@ def create_app(config_name='default'):
     try:
         from logbook.routes import logbook_bp
         app.register_blueprint(logbook_bp)
-        print("✓ logbook blueprint registered")
+        print("[APP] ✓ logbook blueprint registered")
     except Exception as e:
-        print(f"✗ logbook blueprint FAILED: {e}")
+        print(f"[APP] ✗ logbook blueprint FAILED: {e}")
         traceback.print_exc()
         raise  # Logbook is required — fatal
 
@@ -229,18 +229,18 @@ def create_app(config_name='default'):
     try:
         from plugins.routes import plugins_bp
         app.register_blueprint(plugins_bp)
-        print("✓ plugins blueprint registered")
+        print("[APP] ✓ plugins blueprint registered")
     except Exception as e:
-        print(f"✗ plugins blueprint FAILED: {e}")
+        print(f"[APP] ✗ plugins blueprint FAILED: {e}")
         traceback.print_exc()
         # Non-fatal — plugin management page optional
 
-    print("✓ Core blueprints registered\n")
+    print("[APP] ✓ Core blueprints registered\n")
 
     # ------------------------------------------------------------------
     # Initialise Hardware Devices
     # ------------------------------------------------------------------
-    print("Initializing devices...")
+    print("[APP] Initializing devices...")
 
     devices = {}
 
@@ -249,13 +249,13 @@ def create_app(config_name='default'):
         from devices.gps import get_gps_device
         gps_device = get_gps_device(app.config)
         if gps_device.connect():
-            print("✓ GPS device initialised")
+            print("[APP] ✓ GPS device initialised")
         else:
-            print("✗ GPS device not available (using mock)")
+            print("[APP]  ✗ GPS device not available (using mock)")
         app.extensions['gps_device'] = gps_device
         devices['gps'] = gps_device
     except Exception as e:
-        print(f"✗ GPS device error: {e}")
+        print(f"[APP] ✗ GPS device error: {e}")
         traceback.print_exc()
         app.extensions['gps_device'] = None
         devices['gps'] = None
@@ -265,13 +265,13 @@ def create_app(config_name='default'):
         from devices.radio import get_radio_device
         radio_device = get_radio_device(app.config)
         if radio_device.connect():
-            print("✓ Radio device initialised")
+            print("[APP] ✓ Radio device initialised")
         else:
-            print("✗ Radio device not available (using mock)")
+            print("[APP] ✗ Radio device not available (using mock)")
         app.extensions['radio_device'] = radio_device
         devices['radio'] = radio_device
     except Exception as e:
-        print(f"✗ Radio device error: {e}")
+        print(f"[APP] ✗ Radio device error: {e}")
         traceback.print_exc()
         app.extensions['radio_device'] = None
         devices['radio'] = None
@@ -281,13 +281,13 @@ def create_app(config_name='default'):
         from devices.sdr import get_sdr_device
         sdr_device = get_sdr_device(app.config)
         if sdr_device.connect():
-            print("✓ SDR device initialised")
+            print("[APP] ✓ SDR device initialised")
         else:
-            print("✗ SDR device not available (using mock)")
+            print("[APP] ✗ SDR device not available (using mock)")
         app.extensions['sdr_device'] = sdr_device
         devices['sdr'] = sdr_device
     except Exception as e:
-        print(f"✗ SDR device error: {e}")
+        print(f"[APP] ✗ SDR device error: {e}")
         traceback.print_exc()
         app.extensions['sdr_device'] = None
         devices['sdr'] = None
@@ -297,7 +297,7 @@ def create_app(config_name='default'):
     # ------------------------------------------------------------------
     # Initialise Plugin System
     # ------------------------------------------------------------------
-    print("Initializing plugin system...")
+    print("[APP] Initializing plugin system...")
 
     try:
         from plugins.loader import PluginLoader
@@ -313,7 +313,7 @@ def create_app(config_name='default'):
         app.extensions['plugin_loader'] = plugin_loader
 
     except Exception as e:
-        print(f"✗ Plugin system error: {e}")
+        print(f"[APP] ✗ Plugin system error: {e}")
         traceback.print_exc()
 
         # Create empty loader so app still works
@@ -331,7 +331,7 @@ def create_app(config_name='default'):
     from devices.device_manager import DeviceManager
     device_manager = DeviceManager()
     app.extensions['device_manager'] = device_manager
-    print("✓ Device manager registered")
+    print("[APP] ✓ Device manager registered")
     
     # ------------------------------------------------------------------
     # Template Context Processor
@@ -387,7 +387,7 @@ def create_app(config_name='default'):
             # Hard fallback — return minimal HTML
             return (
                 '<html><body>'
-                '<h1>Ham Radio App</h1>'
+                '<h1>Ham Rad App</h1>'
                 '<p><a href="/auth/login">Login</a></p>'
                 '<p><a href="/auth/register">Register</a></p>'
                 '</body></html>'
@@ -532,9 +532,9 @@ def create_app(config_name='default'):
         except Exception:
             pass
 
-    print("\n" + "=" * 50)
-    print("Ham Radio App initialized successfully!")
-    print("=" * 50 + "\n")
+    print("\n[APP]" + "=" * 50)
+    print("[APP] Ham Rad App initialized successfully!")
+    print("=[APP]" * 50 + "\n")
 
     return app
 
@@ -551,7 +551,7 @@ def create_ssl_context(cert_path, key_path):
         tuple or None: (cert_path, key_path) or None
     """
     if os.path.exists(cert_path) and os.path.exists(key_path):
-        print("✓ SSL certificates found")
+        print("[APP] ✓ SSL certificates found")
         return (cert_path, key_path)
 
     print("Generating self-signed SSL certificate...")
@@ -609,15 +609,15 @@ def create_ssl_context(cert_path, key_path):
                 f'O=HamRadio/CN=localhost" 2>/dev/null'
             )
             if os.path.exists(cert_path):
-                print("✓ SSL certificate generated via openssl")
+                print("[APP] ✓ SSL certificate generated via openssl")
                 return (cert_path, key_path)
         except Exception as e:
-            print(f"✗ openssl fallback failed: {e}")
+            print(f"[APP] ✗ openssl fallback failed: {e}")
 
     except Exception as e:
-        print(f"✗ SSL certificate error: {e}")
+        print(f"[APP] ✗ SSL certificate error: {e}")
 
-    print("✗ SSL disabled — running over HTTP")
+    print("[APP] ✗ SSL disabled — running over HTTP")
     return None
 
 
@@ -632,33 +632,33 @@ def main():
     # Determine environment
     config_name = os.environ.get('FLASK_ENV', 'production')
 
-    print("\n" + "=" * 50)
-    print("HAM RADIO OPERATOR WEB APPLICATION")
+    print("\n[APP] " + "=" * 50)
+    print("HAM OPERATOR WEB APPLICATION")
     print("=" * 50)
     print(f"Environment: {config_name}")
     print(f"Python version: {sys.version.split(chr(10))[0]}")
     print("=" * 50 + "\n")
 
     # Initialise secret key before app creation
-    print("Initializing security...")
+    print("[APP] Initializing security...")
     try:
         from secret_key_manager import get_secret_key
         secret_key = get_secret_key()
         if not os.environ.get('SECRET_KEY'):
             os.environ['SECRET_KEY'] = secret_key
-        print("✓ Secret key initialized\n")
+        print("[APP] ✓ Secret key initialized\n")
     except Exception as e:
-        print(f"✗ Secret key error: {e}")
+        print(f"[APP] ✗ Secret key error: {e}")
         # Generate a temporary key
         import secrets
         os.environ['SECRET_KEY'] = secrets.token_hex(32)
-        print("✓ Temporary secret key generated\n")
+        print("[APP] ✓ Temporary secret key generated\n")
 
     # Create application
     try:
         app = create_app(config_name)
     except Exception as e:
-        print(f"\n✗ FATAL: Application creation failed: {e}")
+        print(f"\n[APP] ✗ FATAL: Application creation failed: {e}")
         traceback.print_exc()
         sys.exit(1)
 
@@ -684,7 +684,7 @@ def main():
 
     if missing:
         print(
-            f"\n✗ FATAL: Missing critical endpoints: {missing}"
+            f"\n[APP] ✗ FATAL: Missing critical endpoints: {missing}"
         )
         print("Registered endpoints:")
         for ep in sorted(registered_endpoints):
@@ -692,7 +692,7 @@ def main():
         sys.exit(1)
     else:
         print(
-            f"✓ All critical endpoints registered "
+            f"[APP] ✓ All critical endpoints registered "
             f"({len(registered_endpoints)} total)"
         )
 
@@ -715,9 +715,9 @@ def main():
     host = app.config.get('HOST', '0.0.0.0')
     port = app.config.get('PORT', 5000)
 
-    print("\n" + "=" * 50)
-    print("SERVER INFORMATION")
-    print("=" * 50)
+    print("\n[APP] " + "=" * 50)
+    print("[APP] SERVER INFORMATION")
+    print("[APP] =" * 50)
     print(f"Server URL: {protocol}://{host}:{port}")
     print(f"Access from WiFi hotspot clients using server IP")
     print(f"Debug mode: {app.config.get('DEBUG', False)}")
@@ -726,8 +726,8 @@ def main():
         f"{app.config.get('USE_MOCK_DEVICES', True)}"
     )
     print("=" * 50 + "\n")
-    print("Starting server...")
-    print("Press CTRL+C to stop\n")
+    print("[APP] Starting server...")
+    print("[APP] Press CTRL+C to stop\n")
 
     # ------------------------------------------------------------------
     # Start Flask server
@@ -742,12 +742,12 @@ def main():
             use_reloader=False
         )
     except KeyboardInterrupt:
-        print("\n\nShutting down gracefully...")
+        print("\n\n[APP] Shutting down gracefully...")
         _shutdown(app)
-        print("\n73! (Best regards)")
+        print("\n 73!")
         sys.exit(0)
     except Exception as e:
-        print(f"\n✗ Server error: {e}")
+        print(f"\n[APP] ✗ Server error: {e}")
         traceback.print_exc()
         sys.exit(1)
 
@@ -769,9 +769,9 @@ def _shutdown(app):
                 plugin_loader, 'shutdown_all'
             ):
                 plugin_loader.shutdown_all()
-                print("✓ Plugins shutdown")
+                print("[APP] ✓ Plugins shutdown")
         except Exception as e:
-            print(f"Plugin shutdown error: {e}")
+            print(f"[APP] Plugin shutdown error: {e}")
 
         # Disconnect devices
         for device_name in [
@@ -781,9 +781,9 @@ def _shutdown(app):
                 device = app.extensions.get(device_name)
                 if device and hasattr(device, 'disconnect'):
                     device.disconnect()
-                    print(f"✓ {device_name} disconnected")
+                    print(f"[APP] ✓ {device_name} disconnected")
             except Exception as e:
-                print(f"Device disconnect error ({device_name}): {e}")
+                print(f"[APP] Device disconnect error ({device_name}): {e}")
 
 
 if __name__ == '__main__':
