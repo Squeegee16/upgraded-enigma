@@ -156,27 +156,27 @@ class DMRPlugin(BasePlugin):
             # Auto-start receiver
             success, msg = self.engine.start_receive()
             if success:
-                print(f"[{self.name}] ✓ {msg}")
+                print(f"[{self.name}][DMR] ✓ {msg}")
             else:
-                print(f"[{self.name}] Receive: {msg}")
+                print(f"[{self.name}][DMR] Receive: {msg}")
 
-            print(f"[{self.name}] ✓ Plugin initialized")
+            print(f"[{self.name}][DMR] ✓ Plugin initialized")
             return True
 
         except Exception as e:
             self.install_error = str(e)
-            print(f"[{self.name}] ERROR: {e}")
+            print(f"[{self.name}][DMR] ERROR: {e}")
             traceback.print_exc()
             return False
 
     def shutdown(self):
         """Clean shutdown."""
-        print(f"[{self.name}] Shutting down...")
+        print(f"[{self.name}][DMR] Shutting down...")
         if self.engine:
             self.engine.stop_receive()
             if self.engine._transmitting:
                 self.engine.stop_transmit()
-        print(f"[{self.name}] ✓ Shutdown complete")
+        print(f"[{self.name}][DMR] ✓ Shutdown complete")
 
     def _on_call_event(self, event_type, call_data):
         """
@@ -306,7 +306,7 @@ class DMRPlugin(BasePlugin):
                 )
 
             except Exception as e:
-                print(f"[{self.name}] Index error: {e}")
+                print(f"[{self.name}][DMR] Index error: {e}")
                 traceback.print_exc()
                 return render_template(
                     'errors/500.html', error=str(e)
@@ -470,7 +470,7 @@ class DMRPlugin(BasePlugin):
                             new_config['talkgroup']
                         )
 
-                    flash('Settings saved!', 'success')
+                    flash('[DMR] Settings saved!', 'success')
                     return redirect(
                         url_for(f'{self.name}.settings')
                     )
@@ -498,7 +498,7 @@ class DMRPlugin(BasePlugin):
 
             except Exception as e:
                 print(
-                    f"[{self.name}] Settings error: {e}"
+                    f"[{self.name}][DMR] Settings error: {e}"
                 )
                 traceback.print_exc()
                 return render_template(
@@ -898,14 +898,14 @@ class DMRPlugin(BasePlugin):
 
             if success:
                 print(
-                    f"[{self.name}] ✓ Logged: "
+                    f"[{self.name}][DMR] ✓ Logged: "
                     f"{callsign} DMR TG:{tg}"
                 )
 
             return success
 
         except Exception as e:
-            print(f"[{self.name}] Log error: {e}")
+            print(f"[{self.name}][DMR] Log error: {e}")
             return False
 
     @staticmethod
