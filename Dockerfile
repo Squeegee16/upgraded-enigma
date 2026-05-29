@@ -27,7 +27,7 @@
 FROM python:3.11-slim-bookworm AS builder
 
 LABEL stage="builder"
-LABEL description="Ham Radio App - Python Dependency Builder"
+LABEL description="[BUILDER] Ham Radio App - Python Dependency Builder"
 
 # Python build environment
 ENV PYTHONUNBUFFERED=1 \
@@ -66,7 +66,7 @@ RUN python -m venv /opt/venv && \
 FROM python:3.11-slim-bookworm
 
 LABEL maintainer="Ham Radio App Team"
-LABEL description="Ham Radio Operator Web Application"
+LABEL description="[BUILDER] Ham Radio Operator Web Application"
 LABEL version="0.2.0"
 
 # Go version to install from go.dev/dl/
@@ -224,7 +224,7 @@ RUN apt-get update && \
 # ============================================================
 RUN apt-get update && \
     apt-get install -y --no-install-recommends gnuradio \
-    || echo "INFO: gnuradio not available on $(uname -m) — skipping" && \
+    || echo "[BUILDER] INFO: gnuradio not available on $(uname -m) — skipping" && \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================================
@@ -233,7 +233,7 @@ RUN apt-get update && \
 # NOTE: rm -rf must be a SEPARATE command, not a package name
 # ============================================================
 RUN set -eux; \
-    echo "=== Installing FLdigi ==="; \
+    echo "[BUILDER] === Installing FLdigi ==="; \
     apt-get update; \
     \
     # Install runtime libraries first
@@ -255,23 +255,23 @@ RUN set -eux; \
     \
     # Install fldigi package
     apt-get install -y --no-install-recommends fldigi \
-    || echo "INFO: fldigi not in apt repos"; \
+    || echo "[BUILDER] INFO: fldigi not in apt repos"; \
     \
     # Install optional companion (non-fatal)
     apt-get install -y --no-install-recommends flrig \
-    || echo "INFO: flrig not available"; \
+    || echo "[BUILDER] INFO: flrig not available"; \
     \
     # Clean up apt cache
     rm -rf /var/lib/apt/lists/*; \
     \
     # Verify installation
     if command -v fldigi >/dev/null 2>&1; then \
-        echo "✓ FLdigi: $(fldigi --version 2>&1 | head -1)"; \
+        echo "[BUILDER] ✓ FLdigi: $(fldigi --version 2>&1 | head -1)"; \
     else \
-        echo "INFO: fldigi not installed via apt"; \
+        echo "[BUILDER] INFO: fldigi not installed via apt"; \
     fi; \
     \
-    echo "=== FLdigi setup complete ==="
+    echo "[BUILDER] === FLdigi setup complete ==="
 
 # ============================================================
 # Build SoapySDR from source
@@ -281,7 +281,7 @@ RUN set -eux; \
 # ensures the correct version for the target architecture.
 # ============================================================
 RUN set -eux; \
-    echo "=== Building SoapySDR ==="; \
+    echo "[BUILDER] === Building SoapySDR ==="; \
     cd /tmp; \
     git clone \
         --depth 1 \
@@ -297,7 +297,7 @@ RUN set -eux; \
     ldconfig; \
     cd /; \
     rm -rf /tmp/SoapySDR; \
-    echo "=== SoapySDR build complete ==="
+    echo "[BUILDER] === SoapySDR build complete ==="
 
 # ============================================================
 # Build Hamlib from source
@@ -307,7 +307,7 @@ RUN set -eux; \
 # Version 4.7.0 used for stability and broad compatibility.
 # ============================================================
 RUN set -eux; \
-    echo "=== Building Hamlib 4.7.0 ==="; \
+    echo "[BUILDER] === Building Hamlib 4.7.0 ==="; \
     cd /tmp; \
     wget -q \
         "https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download" \
@@ -320,7 +320,7 @@ RUN set -eux; \
     ldconfig; \
     cd /; \
     rm -rf /tmp/hamlib-4.7.0 /tmp/hamlib-4.7.0.tar.gz; \
-    echo "=== Hamlib build complete ==="
+    echo "[BUILDER] === Hamlib build complete ==="
 
 # ============================================================
 # Build RTL-SDR from source
@@ -329,7 +329,7 @@ RUN set -eux; \
 # RTL2832U-based SDR USB dongles.
 # ============================================================
 RUN set -eux; \
-    echo "=== Building RTL-SDR ==="; \
+    echo "[BUILDER] === Building RTL-SDR ==="; \
     cd /tmp; \
     git clone \
         --depth 1 \
@@ -346,7 +346,7 @@ RUN set -eux; \
     ldconfig; \
     cd /; \
     rm -rf /tmp/rtl-sdr; \
-    echo "=== RTL-SDR build complete ==="
+    echo "[BUILDER] === RTL-SDR build complete ==="
 
 # ============================================================
 # Install Go from official distribution
@@ -373,7 +373,7 @@ RUN set -eux; \
             arm)    GO_ARCH=armv6l ;; \
             386)    GO_ARCH=386 ;; \
             *) \
-                echo "Unknown TARGETARCH: ${TARGETARCH}"; \
+                echo "[BUILDER] Unknown TARGETARCH: ${TARGETARCH}"; \
                 exit 1 ;; \
         esac; \
     else \
@@ -384,7 +384,7 @@ RUN set -eux; \
             armv7l)  GO_ARCH=armv6l ;; \
             armv6l)  GO_ARCH=armv6l ;; \
             *) \
-                echo "Unsupported machine: $MACHINE"; \
+                echo "[BUILDER] Unsupported machine: $MACHINE"; \
                 exit 1 ;; \
         esac; \
     fi; \
@@ -414,7 +414,7 @@ RUN set -eux; \
     \
     # Verify Go runs on this architecture
     /usr/local/go/bin/go version; \
-    echo "=== Go ${GO_VERSION} installed ==="
+    echo "[BUILDER] === Go ${GO_VERSION} installed ==="
 
 # ============================================================
 # Install Rust for building graywolf-modem
@@ -424,7 +424,7 @@ RUN set -eux; \
 # hamradio user home directory.
 # ============================================================
 RUN set -eux; \
-    echo "=== Installing Rust ==="; \
+    echo "[BUILDER] === Installing Rust ==="; \
     curl --proto '=https' --tlsv1.2 \
         -sSf https://sh.rustup.rs \
         | sh -s -- -y \
@@ -432,7 +432,7 @@ RUN set -eux; \
             --default-toolchain stable; \
     /root/.cargo/bin/rustup --version; \
     /root/.cargo/bin/cargo --version; \
-    echo "=== Rust installed ==="
+    echo "[BUILDER] === Rust installed ==="
 
 # ============================================================
 # Install qsstv
@@ -539,6 +539,7 @@ RUN mkdir -p \
 # Rust was installed as root. Copy .cargo and .rustup
 # to the hamradio home so the user can run cargo.
 # ============================================================
+RUN echo "[BUILDER] === Installing Rust ==="
 RUN cp -r /root/.cargo /home/hamradio/.cargo \
         2>/dev/null || true && \
     cp -r /root/.rustup /home/hamradio/.rustup \
@@ -556,6 +557,7 @@ RUN cp -r /root/.cargo /home/hamradio/.cargo \
 # without the binary and show install instructions.
 # ============================================================
 RUN set -eux; \
+    echo "[BUILDER] === Installing SatDump ==="; \
     apt-get update; \
     \
     # Try to install from official SatDump repo
