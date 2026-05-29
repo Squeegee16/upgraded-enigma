@@ -44,9 +44,9 @@ class SecretKeyManager:
         if key_dir and not os.path.exists(key_dir):
             try:
                 os.makedirs(key_dir, mode=0o755, exist_ok=True)
-                print(f"Created directory for secret key: {key_dir}")
+                print(f"[KEY] Created directory for secret key: {key_dir}")
             except Exception as e:
-                print(f"Warning: Could not create directory {key_dir}: {e}")
+                print(f"[KEY] Warning: Could not create directory {key_dir}: {e}")
     
     def _generate_key(self):
         """
@@ -69,13 +69,13 @@ class SecretKeyManager:
                 with open(self.key_file_path, 'r') as f:
                     key = f.read().strip()
                     if key and len(key) >= 32:  # Minimum key length
-                        print(f"✓ Loaded existing secret key from {self.key_file_path}")
+                        print(f"[KEY] ✓ Loaded existing secret key from {self.key_file_path}")
                         return key
                     else:
-                        print(f"Warning: Invalid key in {self.key_file_path}, will regenerate")
+                        print(f"[KEY] Warning: Invalid key in {self.key_file_path}, will regenerate")
                         return None
         except Exception as e:
-            print(f"Warning: Could not read secret key from {self.key_file_path}: {e}")
+            print(f"[KEY] Warning: Could not read secret key from {self.key_file_path}: {e}")
         
         return None
     
@@ -97,10 +97,10 @@ class SecretKeyManager:
             # Set secure permissions (owner read/write only)
             os.chmod(self.key_file_path, 0o600)
             
-            print(f"✓ Secret key saved to {self.key_file_path}")
+            print(f"[KEY] ✓ Secret key saved to {self.key_file_path}")
             return True
         except Exception as e:
-            print(f"ERROR: Could not write secret key to {self.key_file_path}: {e}")
+            print(f"[KEY] ERROR: Could not write secret key to {self.key_file_path}: {e}")
             return False
     
     def get_or_create_key(self):
@@ -122,14 +122,14 @@ class SecretKeyManager:
             return key
         
         # Generate new key
-        print("Generating new secret key...")
+        print("[KEY] Generating new secret key...")
         key = self._generate_key()
         
         # Try to save it
         if self._write_key(key):
-            print("✓ New secret key generated and saved")
+            print("[KEY] ✓ New secret key generated and saved")
         else:
-            print("Warning: Secret key generated but could not be saved")
+            print("[KEY] Warning: Secret key generated but could not be saved")
             print("         Key will be regenerated on next restart")
         
         return key
@@ -143,7 +143,7 @@ class SecretKeyManager:
         Returns:
             str: The new secret key
         """
-        print("Regenerating secret key (this will invalidate all sessions)...")
+        print("[KEY] Regenerating secret key (this will invalidate all sessions)...")
         key = self._generate_key()
         self._write_key(key)
         return key
@@ -159,10 +159,10 @@ class SecretKeyManager:
             tuple: (is_valid, error_message)
         """
         if not key:
-            return False, "Key is empty"
+            return False, "[KEY] Key is empty"
         
         if len(key) < 32:
-            return False, "Key is too short (minimum 32 characters)"
+            return False, "[KEY] Key is too short (minimum 32 characters)"
         
         # Check if it's a known insecure default
         insecure_defaults = [
@@ -174,7 +174,7 @@ class SecretKeyManager:
         ]
         
         if key.lower() in insecure_defaults:
-            return False, "Key is a known insecure default"
+            return False, "[KEY] Key is a known insecure default"
         
         return True, ""
 
