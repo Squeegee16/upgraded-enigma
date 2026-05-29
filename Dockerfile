@@ -363,6 +363,7 @@ RUN set -eux; \
 # ============================================================
 RUN set -eux; \
     \
+     echo "[BUILDER] === Building Go ==="; \
     # Determine Go architecture from Docker TARGETARCH.
     # Fall back to uname -m if TARGETARCH is not set
     # (e.g. plain docker build without buildx).
