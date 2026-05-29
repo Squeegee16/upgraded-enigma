@@ -69,6 +69,7 @@ services:
       - "2237:2237"
       - "8227:8227"
       - "5999:5999"
+      - "2947:2947"
       
     environment:
       - FLASK_ENV=${FLASK_ENV:-production}
