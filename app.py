@@ -251,7 +251,7 @@ def create_app(config_name='default'):
         if gps_device.connect():
             print("[APP] ✓ GPS device initialised")
         else:
-            print("[APP]  ✗ GPS device not available (using mock)")
+            print("[APP] ✗ GPS device not available (using mock)")
         app.extensions['gps_device'] = gps_device
         devices['gps'] = gps_device
     except Exception as e:
@@ -532,9 +532,9 @@ def create_app(config_name='default'):
         except Exception:
             pass
 
-    print("\n[APP]" + "=" * 50)
-    print("[APP] Ham Rad App initialized successfully!")
-    print("=[APP]" * 50 + "\n")
+    print("\n[APP] ==================================================)
+    print("\n[APP] Ham Rad App initialized successfully!")
+    print("=[APP] ==================================================\n")
 
     return app
 
@@ -632,12 +632,12 @@ def main():
     # Determine environment
     config_name = os.environ.get('FLASK_ENV', 'production')
 
-    print("\n[APP] " + "=" * 50)
+    print("\n[APP] ==================================================")
     print("HAM OPERATOR WEB APPLICATION")
-    print("=" * 50)
+    print("==================================================")
     print(f"Environment: {config_name}")
     print(f"Python version: {sys.version.split(chr(10))[0]}")
-    print("=" * 50 + "\n")
+    print("==================================================\n")
 
     # Initialise secret key before app creation
     print("[APP] Initializing security...")
@@ -715,9 +715,9 @@ def main():
     host = app.config.get('HOST', '0.0.0.0')
     port = app.config.get('PORT', 5000)
 
-    print("\n[APP] " + "=" * 50)
+    print("\n[APP] ==================================================")
     print("[APP] SERVER INFORMATION")
-    print("[APP] =" * 50)
+    print("[APP] ==================================================")
     print(f"Server URL: {protocol}://{host}:{port}")
     print(f"Access from WiFi hotspot clients using server IP")
     print(f"Debug mode: {app.config.get('DEBUG', False)}")
@@ -725,7 +725,7 @@ def main():
         f"Mock devices: "
         f"{app.config.get('USE_MOCK_DEVICES', True)}"
     )
-    print("=" * 50 + "\n")
+    print("==================================================\n")
     print("[APP] Starting server...")
     print("[APP] Press CTRL+C to stop\n")
 
