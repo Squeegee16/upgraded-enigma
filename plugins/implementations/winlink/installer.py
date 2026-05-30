@@ -108,7 +108,7 @@ except ImportError:
                 with open(path, 'w') as f:
                     json.dump(data, f, indent=2)
             except Exception as e:
-                print(f"[Winlink][INSTALL] Marker write error: {e}")                )
+                print(f"[Winlink][INSTALL] Marker write error: {e}") 
 
         def read_marker(self, path):
             if not os.path.exists(path):
