@@ -532,7 +532,7 @@ def create_app(config_name='default'):
         except Exception:
             pass
 
-    print("\n[APP] ==================================================)
+    print("\n[APP] ==================================================")
     print("\n[APP] Ham Rad App initialized successfully!")
     print("=[APP] ==================================================\n")
 
