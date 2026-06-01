@@ -3,7 +3,6 @@ P25 Survey Plugin Forms
 ========================
 Settings and logging forms for the P25 Survey plugin.
 """
-
 from flask_wtf import FlaskForm
 from wtforms import (
     StringField, SelectField, IntegerField,
@@ -13,7 +12,6 @@ from wtforms import (
 from wtforms.validators import (
     DataRequired, Optional, Length, NumberRange
 )
-
 
 class P25SettingsForm(FlaskForm):
     """P25 Survey plugin settings form."""
@@ -118,7 +116,32 @@ class P25SettingsForm(FlaskForm):
             'frequency (milliseconds)'
         )
     )
+    
+    talkgroup = IntegerField(
+        'Default Talk Group',
+        validators=[
+            NumberRange(min=1, max=16777215)
+        ],
+        default=302,    # Canada Wide TS1
+        description=(
+            '302 = Canada Wide (TS1 default) | '
+            '9990 = Parrot/Echo test | '
+            '91 = Worldwide | '
+            '3100 = North America'
+        )
+    )
 
+    timeslot = SelectField(
+        'Default Timeslot',
+        choices=[
+            ('1', 'Timeslot 1 (TS1) — default'),
+            ('2', 'Timeslot 2 (TS2)'),
+        ],
+        default='1',
+        description=(
+            'Canada Wide TG302 uses TS1'
+        )
+    )
     # -------------------------------------------------------
     # Audio
     # -------------------------------------------------------
