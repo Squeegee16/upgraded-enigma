@@ -350,6 +350,7 @@ class WinlinkInstaller(BaseInstaller):
                     )
                 }
             )
+            print(f"[Winlink][INSTALL] git request info:{req}")
             with urllib.request.urlopen(
                 req, timeout=30
             ) as response:
