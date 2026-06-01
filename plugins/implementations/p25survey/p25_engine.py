@@ -1157,7 +1157,7 @@ class P25SurveyEngine:
     # Status and data retrieval
     # ----------------------------------------------------------
 
-def get_status(self):
+    def get_status(self):
         """
         Get comprehensive engine status.
 
