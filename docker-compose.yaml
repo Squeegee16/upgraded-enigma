@@ -115,7 +115,7 @@ services:
     devices:
       - /dev/bus/usb:/dev/bus/usb
       # Uncomment for UART GPS on Raspberry Pi:
-      # - /dev/ttyAMA0:/dev/ttyAMA0    # Pi hardware UART
+      - /dev/ttyAMA0:/dev/ttyAMA0    # Pi hardware UART
       # - /dev/ttyUSB0:/dev/ttyUSB0    # GPS
       # - /dev/ttyUSB1:/dev/ttyUSB1    # Radio CAT
     
