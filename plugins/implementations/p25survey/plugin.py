@@ -78,17 +78,22 @@ class P25SurveyPlugin(BasePlugin):
         self._active_call_start = None
 
     def _load_config(self):
-        """Load plugin configuration."""
+        """
+        Load plugin configuration.
+
+        Default talkgroup: 302 (Canada Wide) on TS1.
+        """
         config_file = os.path.join(
             self.plugin_data_dir, 'p25_config.json'
         )
+
         defaults = {
             'center_frequency_mhz': 851.0125,
             'source': 'sdr',
             'sdr_gain': 40,
             'sdr_device_index': 0,
             'op25_port': 8080,
-            'nac': '0',
+            'nac': '0',              # 0 = receive all
             'phase': 1,
             'scan_mode': 'conventional',
             'survey_frequencies': [],
@@ -99,6 +104,9 @@ class P25SurveyPlugin(BasePlugin):
             'auto_log_calls': True,
             'log_encrypted': True,
             'log_min_duration_s': 2,
+            # Canada Wide defaults
+            'talkgroup': 302,        # Canada Wide
+            'timeslot': 1,           # TS1
         }
 
         if os.path.exists(config_file):
@@ -107,7 +115,9 @@ class P25SurveyPlugin(BasePlugin):
                     loaded = json.load(f)
                     defaults.update(loaded)
             except Exception as e:
-                print(f"[P25][PLUGIN] Config error: {e}")
+                print(
+                    f"[P25Survey] Config load error: {e}"
+                )
 
         return defaults
 
