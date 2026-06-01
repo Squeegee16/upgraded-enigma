@@ -46,17 +46,19 @@ import time
 from datetime import datetime
 from collections import deque
 
+# At the top of p25survey/p25_engine.py
+# Find the existing import from p25_constants and add COMMON_TALKGROUPS
 from plugins.implementations.p25survey.p25_constants import (
     P25_DUID,
     TSBK_OPCODES,
     TRUNKING_TYPES,
     ENCRYPTION_ALGOS,
     NAC_SPECIAL,
-    NAC_DEFAULT,          # ← ADD THIS
+    NAC_DEFAULT,
     P25_SYNC_WORD,
     SCAN_STATES,
+    COMMON_TALKGROUPS,   # ← ADD THIS
 )
-
 
 class P25Frame:
     """
