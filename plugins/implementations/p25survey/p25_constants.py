@@ -349,3 +349,66 @@ OP25_MODES = {
     'ysf': 'Yaesu System Fusion',
     'nxdn': 'NXDN',
 }
+# ---------------------------------------------------------------
+# Common P25 / DMR talkgroups
+# Canadian default: TS1 TG302 = Canada Wide
+# ---------------------------------------------------------------
+COMMON_TALKGROUPS = {
+    # -------------------------------------------------------
+    # International
+    # -------------------------------------------------------
+    1:    'Local 1',
+    2:    'Local 2',
+    3:    'Local 3',
+
+    # -------------------------------------------------------
+    # Canada — default system
+    # TS1 TG302 = Canada Wide (default)
+    # -------------------------------------------------------
+    302:  'Canada Wide (TS1)',       # ← DEFAULT
+    3026: 'Canada Nationwide',
+    30261:'Canada - Quebec (FR)',
+    30262:'Canada - Ontario',
+    30263:'Canada - British Columbia',
+    30264:'Canada - Alberta',
+    30265:'Canada - Saskatchewan',
+    30266:'Canada - Manitoba',
+    30267:'Canada - Atlantic',
+    30268:'Canada - Nova Scotia',
+    30269:'Canada - New Brunswick',
+    30270:'Canada - PEI',
+    30271:'Canada - Newfoundland',
+    30272:'Canada - Northwest Territories',
+    30273:'Canada - Yukon',
+    30274:'Canada - Nunavut',
+
+    # -------------------------------------------------------
+    # North America
+    # -------------------------------------------------------
+    91:   'Worldwide',
+    93:   'North America',
+    95:   'Pacific',
+    3100: 'North America',
+    3101: 'USA - New England',
+    3102: 'USA - Atlantic',
+    3103: 'USA - Southeast',
+    3104: 'USA - Great Lakes',
+    3105: 'USA - Central',
+    3106: 'USA - Mountain',
+    3107: 'USA - Pacific',
+
+    # -------------------------------------------------------
+    # Special / Test
+    # -------------------------------------------------------
+    9990: 'Parrot / Echo Test',
+    9999: 'APRS',
+    310998: 'Interop',
+    311:  'TAC 310',
+    312:  'TAC 311',
+    313:  'TAC 312',
+}
+
+# Default talkgroup: Canada Wide on TS1
+DEFAULT_TALKGROUP = 302
+DEFAULT_TIMESLOT = 1
+DEFAULT_TALKGROUP_DESCRIPTION = 'Canada Wide (TS1)'
