@@ -145,7 +145,7 @@ class WinlinkInstaller(BaseInstaller):
 
     # GitHub API for latest release info
     PAT_GITHUB_API = (
-        'https://api.github.com/repos/la5nta/pat/'
+        'https://github.com/la5nta/pat.git'
         'releases/latest'
     )
 
