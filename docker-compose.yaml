@@ -172,12 +172,6 @@ services:
     restart: unless-stopped
     ports:
       - "8073:8073"
-      - "5000:5000"
-      - "7362:7362"
-      - "8080:8080"
-      - "8227:8227"
-      - "5999:5999"
-      - "2947:2947"
 
     volumes:
       - openwebrx_data:/var/lib/openwebrx
