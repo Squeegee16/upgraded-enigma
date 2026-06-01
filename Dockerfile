@@ -122,7 +122,7 @@ RUN apt-get update && apt-get install -y \
     libxcb-render-util0 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get install -y ax25-tools ax25-apps
+#RUN apt-get install -y ax25-tools ax25-apps
 
 # Audio libraries for USB sound card support
 # Required by sounddevice Python package
