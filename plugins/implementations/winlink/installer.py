@@ -283,11 +283,11 @@ class WinlinkInstaller(BaseInstaller):
 
         if self.in_docker and not self.is_root:
             print(
-                "[Winlink] INFO: apt-get not available "
+                "[Winlink][INSTALL] INFO: apt-get not available "
                 "in Docker as non-root."
             )
             print(
-                "[Winlink] INFO: Will download Pat binary "
+                "[Winlink][INSTALL] INFO: Will download Pat binary "
                 "from GitHub instead (no root required)."
             )
             return False
