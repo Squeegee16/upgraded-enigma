@@ -138,6 +138,72 @@
                                 }}
                             </small>
                         </div>
+                        {# ------------------------------------------------ #}
+                        {# Inside the P25 Protocol Parameters card         #}
+                        {# Replace the existing talkgroup reference alert  #}
+                        {# ------------------------------------------------ #}
+                        
+                        <div class="alert alert-info small mb-0">
+                            <strong>
+                                <i class="fas fa-star me-1 text-warning"></i>
+                                Default: TG 302 (Canada Wide) on TS1
+                            </strong>
+                            <hr class="my-1">
+                        
+                            <strong>Canadian Talk Groups:</strong>
+                            <div class="d-flex flex-wrap gap-1 mt-1 mb-2">
+                                {% for tg_id, tg_name in [
+                                    (302,   'Canada Wide (TS1)'),
+                                    (3026,  'Canada Nationwide'),
+                                    (30261, 'Quebec (FR)'),
+                                    (30262, 'Ontario'),
+                                    (30263, 'British Columbia'),
+                                    (30264, 'Alberta'),
+                                    (30265, 'Saskatchewan'),
+                                    (30266, 'Manitoba'),
+                                    (30267, 'Atlantic'),
+                                    (30268, 'Nova Scotia'),
+                                    (30269, 'New Brunswick'),
+                                ] %}
+                                <span class="badge bg-primary font-monospace"
+                                      style="cursor:pointer"
+                                      onclick="document.querySelector(
+                                          '[name=talkgroup]'
+                                      ).value = '{{ tg_id }}'"
+                                      title="{{ tg_name }}">
+                                    {{ tg_id }}
+                                    <small style="font-size:0.65rem;
+                                                  opacity:0.8">
+                                        {{ tg_name.split('(')[0].strip()[:8] }}
+                                    </small>
+                                </span>
+                                {% endfor %}
+                            </div>
+                        
+                            <strong>International / Test:</strong>
+                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                {% for tg_id, tg_name in [
+                                    (9990,  'Parrot/Echo Test'),
+                                    (91,    'Worldwide'),
+                                    (93,    'North America'),
+                                    (3100,  'USA'),
+                                    (3026,  'Canada'),
+                                ] %}
+                                <span class="badge bg-secondary font-monospace"
+                                      style="cursor:pointer"
+                                      onclick="document.querySelector(
+                                          '[name=talkgroup]'
+                                      ).value = '{{ tg_id }}'"
+                                      title="{{ tg_name }}">
+                                    {{ tg_id }}
+                                </span>
+                                {% endfor %}
+                            </div>
+                        
+                            <div class="mt-2 text-muted">
+                                Click a badge to set the talkgroup field.
+                            </div>
+                        </div>        
                     </div>
 
                     {# Survey frequencies #}
