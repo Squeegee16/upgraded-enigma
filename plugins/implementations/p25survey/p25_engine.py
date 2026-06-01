@@ -293,48 +293,46 @@ class P25SurveyEngine:
     """
 
     def __init__(self, config):
-        """
-        Initialise P25 Survey engine.
-
-        Args:
-            config: Plugin configuration dictionary
-        """
+        """Initialise P25 Survey engine."""
         self.config = config
 
-        # Process management
         self._sdr_process = None
         self._decoder_process = None
         self._process_lock = threading.Lock()
 
-        # State
         self._running = False
         self._scan_state = 'IDLE'
         self._source = config.get('source', 'sdr')
 
-        # Current channel — include ALL keys used anywhere
-        # in the engine so KeyError never occurs
+        # Current channel with all required keys
+        # Default: Canada Wide TG302 on TS1
         self._channel = {
             'frequency': float(
                 config.get('center_frequency_mhz', 851.0)
             ),
-            'nac': 0,               # Stored as int always
-            'phase': int(
-                config.get('phase', 1)
-            ),
+            'nac': 0,
+            'phase': int(config.get('phase', 1)),
             'mode': config.get(
                 'scan_mode', 'conventional'
             ),
             'talkgroup': int(
-                config.get('talkgroup', 0)
-            ),              # ← was missing
+                config.get('talkgroup', 302)   # Canada Wide
+            ),
+            'timeslot': int(
+                config.get('timeslot', 1)      # TS1
+            ),
             'source': config.get('source', 'sdr'),
         }
 
-        # Parse NAC from config — may be hex string
+        # Parse NAC from config string or int
         raw_nac = config.get('nac', '0')
         try:
             if isinstance(raw_nac, str):
-                clean = raw_nac.strip().lstrip('0x')
+                clean = (
+                    raw_nac.strip()
+                    .lstrip('0x')
+                    .lstrip('0X')
+                )
                 self._channel['nac'] = (
                     int(clean, 16) if clean else 0
                 )
@@ -343,7 +341,7 @@ class P25SurveyEngine:
         except (ValueError, TypeError):
             self._channel['nac'] = 0
 
-        # Frame history (ring buffer)
+        # Frame history
         self._frames = deque(maxlen=300)
         self._frames_lock = threading.Lock()
 
@@ -351,11 +349,11 @@ class P25SurveyEngine:
         self._systems = {}
         self._systems_lock = threading.Lock()
 
-        # Active call tracking
+        # Active call
         self._active_call = None
         self._active_call_lock = threading.Lock()
 
-        # Survey frequency list
+        # Survey frequencies
         self._survey_freqs = list(
             config.get('survey_frequencies', [])
         )
@@ -382,7 +380,6 @@ class P25SurveyEngine:
             'active_since': None,
         }
 
-        # Find decoder
         self._decoder_name = None
         self._decoder_path = None
         self._find_decoder()
