@@ -282,16 +282,47 @@ fi
 # ---------------------------------------------------------------
 # GPS device
 # ---------------------------------------------------------------
-echo -e "\n${BLUE}[6b/7]--- GPS Status ---${NC}"
-if [ "$USE_MOCK_DEVICES" = "false" ]; then
-    if [ -e "$GPS_SERIAL_PORT" ]; then
-        echo -e "${GREEN}  ✓ GPS device: $GPS_SERIAL_PORT${NC}"
+# ---------------------------------------------------------------
+# GPS Serial Port Check
+# ---------------------------------------------------------------
+echo -e "\n${BLUE}--- GPS Status ---${NC}"
+
+GPS_PORT="${GPS_SERIAL_PORT:-/dev/ttyAMA0}"
+GPS_SOURCE="${GPS_SOURCE:-uart}"
+
+if [ "$GPS_SOURCE" = "uart" ]; then
+    if [ -e "$GPS_PORT" ]; then
+        echo -e "${GREEN}  ✓ GPS port found: $GPS_PORT${NC}"
+
+        # Check if serial console is using the port
+        # This is the most common cause of the 'no data' error
+        PORT_NAME=$(basename "$GPS_PORT")
+        if systemctl is-active --quiet \
+                "serial-getty@${PORT_NAME}.service" \
+                2>/dev/null; then
+            echo -e "${YELLOW}  ⚠ WARNING: Serial console is active on $GPS_PORT${NC}"
+            echo "  This will conflict with GPS!"
+            echo "  Fix on host:"
+            echo "    sudo systemctl stop serial-getty@${PORT_NAME}.service"
+            echo "    sudo systemctl disable serial-getty@${PORT_NAME}.service"
+        else
+            echo -e "${GREEN}  ✓ No serial console conflict${NC}"
+        fi
+
+        # Check permissions
+        if [ -r "$GPS_PORT" ] && [ -w "$GPS_PORT" ]; then
+            echo -e "${GREEN}  ✓ Port is readable and writable${NC}"
+        else
+            echo -e "${YELLOW}  ⚠ Permission issue on $GPS_PORT${NC}"
+            echo "  Add to docker-compose.yml devices:"
+            echo "    - $GPS_PORT:$GPS_PORT"
+        fi
     else
-        echo -e "${YELLOW}  ⚠ GPS device not found: $GPS_SERIAL_PORT${NC}"
-        echo "    Falling back to mock GPS"
+        echo -e "${YELLOW}  ⚠ GPS port not found: $GPS_PORT${NC}"
+        echo "  Mock GPS will be used"
     fi
 else
-    echo "  Mock GPS enabled"
+    echo "  GPS source: $GPS_SOURCE (not UART)"
 fi
 
 # ---------------------------------------------------------------
