@@ -203,10 +203,20 @@ class UARTGPSDevice(BaseGPSDevice):
         Open the serial port and start the reader thread.
 
         Returns:
-            bool: True if connected successfully
+            bool: True if port opened successfully
         """
         try:
             import serial as pyserial
+
+            # Check if port exists before opening
+            import os
+            if not os.path.exists(self.port):
+                print(
+                    f"[GPS-UART] Port not found: "
+                    f"{self.port}. "
+                    f"Check USB/serial connection."
+                )
+                return False
 
             self._serial = pyserial.Serial(
                 port=self.port,
@@ -215,6 +225,8 @@ class UARTGPSDevice(BaseGPSDevice):
                 bytesize=pyserial.EIGHTBITS,
                 parity=pyserial.PARITY_NONE,
                 stopbits=pyserial.STOPBITS_ONE,
+                # Prevent blocking forever on open
+                exclusive=True,
             )
 
             if not self._serial.is_open:
@@ -223,6 +235,11 @@ class UARTGPSDevice(BaseGPSDevice):
             self._connected = True
             self._reading = True
 
+            print(
+                f"[GPS-UART] Connected: {self.port} "
+                f"@ {self.baudrate} baud"
+            )
+
             # Start background NMEA reader thread
             self._reader_thread = threading.Thread(
                 target=self._reader_loop,
@@ -230,23 +247,48 @@ class UARTGPSDevice(BaseGPSDevice):
                 name='gps-uart-reader'
             )
             self._reader_thread.start()
-
-            print(
-                f"[GPS-UART] Connected: {self.port} "
-                f"@ {self.baudrate} baud"
-            )
             return True
 
         except ImportError:
             print(
                 "[GPS-UART] pyserial not installed. "
-                "Add 'pyserial' to requirements.txt"
+                "Add to requirements.txt: pyserial"
             )
             return False
 
         except Exception as e:
+            error_str = str(e).lower()
+
+            if 'permission' in error_str:
+                print(
+                    f"[GPS-UART] Permission denied: "
+                    f"{self.port}. "
+                    f"Run on host: "
+                    f"sudo usermod -a -G dialout $USER "
+                    f"and add device to docker-compose.yml"
+                )
+            elif 'exclusive' in error_str or \
+                    'busy' in error_str or \
+                    'resource' in error_str:
+                print(
+                    f"[GPS-UART] Port in use: {self.port}. "
+                    f"Disable serial console: "
+                    f"sudo systemctl disable "
+                    f"serial-getty@ttyAMA0.service"
+                )
+            elif 'not found' in error_str or \
+                    'no such' in error_str:
+                print(
+                    f"[GPS-UART] Port not found: "
+                    f"{self.port}"
+                )
+            else:
+                print(
+                    f"[GPS-UART] Connection error: {e}"
+                )
+
             print(
-                f"[GPS-UART] Connection error: {e}"
+                "[GPS-UART] Falling back to mock GPS"
             )
             self._connected = False
             return False
@@ -389,52 +431,99 @@ class UARTGPSDevice(BaseGPSDevice):
 
     def _reader_loop(self):
         """
-        Background thread: read NMEA sentences
-        continuously from the serial port.
+        Background thread: read NMEA sentences from UART.
 
-        Reads line by line, passes each line to the
-        NMEAParser, and updates the state. Grid square
-        is calculated here so get_position() is fast.
+        Handles common errors gracefully:
+        - 'no data' / device disconnected: reconnect
+        - timeout: normal for GPS waiting for fix
+        - SerialException: log and retry
         """
-        # Keep last 50 raw sentences for debug display
+        import time
+
         self._raw_sentences = []
+        consecutive_errors = 0
+        max_consecutive_errors = 5
+        reconnect_delay = 5  # seconds
 
         print(
             "[GPS-UART] Reader thread started. "
             "Waiting for NMEA data..."
         )
 
-        consecutive_errors = 0
-
         while self._reading and self._connected:
             try:
                 if not self._serial or \
                         not self._serial.is_open:
-                    time.sleep(1)
+                    print(
+                        "[GPS-UART] Port closed, "
+                        "attempting reconnect..."
+                    )
+                    time.sleep(reconnect_delay)
+                    try:
+                        self._serial.open()
+                    except Exception as e:
+                        print(
+                            f"[GPS-UART] Reconnect "
+                            f"failed: {e}"
+                        )
                     continue
 
-                # Read one line from serial port
+                # Read one line — timeout set in connect()
                 try:
                     raw_bytes = self._serial.readline()
                 except Exception as e:
-                    print(
-                        f"[GPS-UART] Read error: {e}"
-                    )
-                    consecutive_errors += 1
-                    if consecutive_errors > 10:
-                        print(
-                            "[GPS-UART] Too many errors, "
-                            "stopping reader"
-                        )
-                        self._connected = False
-                        break
-                    time.sleep(0.1)
-                    continue
+                    error_str = str(e)
 
+                    # This specific error means the device
+                    # disconnected or another process has
+                    # the port open simultaneously
+                    if 'no data' in error_str.lower() or \
+                            'returned no data' in \
+                            error_str.lower():
+
+                        consecutive_errors += 1
+                        print(
+                            f"[GPS-UART] Read error "
+                            f"({consecutive_errors}/"
+                            f"{max_consecutive_errors}): "
+                            f"No data from GPS. "
+                            f"Check:\n"
+                            f"  1. GPS module connected\n"
+                            f"  2. Serial console disabled:\n"
+                            f"     sudo systemctl disable "
+                            f"serial-getty@ttyAMA0.service\n"
+                            f"  3. Correct port/baud: "
+                            f"{self.port} "
+                            f"@ {self.baudrate}"
+                        )
+
+                        if consecutive_errors >= \
+                                max_consecutive_errors:
+                            print(
+                                "[GPS-UART] Too many "
+                                "read errors. "
+                                "Pausing 30s before retry."
+                            )
+                            time.sleep(30)
+                            consecutive_errors = 0
+                        else:
+                            time.sleep(2)
+                        continue
+
+                    else:
+                        print(
+                            f"[GPS-UART] Read error: {e}"
+                        )
+                        consecutive_errors += 1
+                        time.sleep(1)
+                        continue
+
+                # Successful read — reset error counter
                 consecutive_errors = 0
 
                 if not raw_bytes:
-                    time.sleep(0.01)
+                    # Timeout — normal when GPS has no fix
+                    time.sleep(0.1)
                     continue
 
                 # Decode bytes to string
@@ -450,9 +539,10 @@ class UARTGPSDevice(BaseGPSDevice):
 
                 # Store raw sentence for debug display
                 if sentence.startswith('$'):
+                    timestamp = datetime.utcnow()\
+                        .strftime('%H:%M:%S')
                     self._raw_sentences.append(
-                        f"{datetime.utcnow().strftime('%H:%M:%S')} "
-                        f"{sentence}"
+                        f"{timestamp} {sentence}"
                     )
                     if len(self._raw_sentences) > 50:
                         self._raw_sentences.pop(0)
@@ -465,7 +555,6 @@ class UARTGPSDevice(BaseGPSDevice):
                 if result:
                     self._stats['sentences_parsed'] += 1
 
-                    # Record when fix was first acquired
                     if result.get('has_fix') and \
                             self._stats[
                                 'fix_acquired_at'
@@ -477,22 +566,20 @@ class UARTGPSDevice(BaseGPSDevice):
                             "[GPS-UART] ✓ GPS fix acquired!"
                         )
 
-                    # Update shared state
                     with self._state_lock:
                         self._gps_state = result
-
                 else:
                     if sentence.startswith('$'):
                         self._stats['parse_errors'] += 1
 
             except Exception as e:
                 print(
-                    f"[GPS-UART] Reader error: {e}"
+                    f"[GPS-UART] Unexpected error: {e}"
                 )
-                time.sleep(0.1)
+                time.sleep(0.5)
 
         print("[GPS-UART] Reader thread stopped")
-
+    
 
 # ------------------------------------------------------------------
 # gpsd-based GPS
