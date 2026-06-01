@@ -292,7 +292,7 @@ class P25SurveyEngine:
 
     def __init__(self, config):
         """
-        Initialise P25 engine.
+        Initialise P25 Survey engine.
 
         Args:
             config: Plugin configuration dictionary
@@ -309,22 +309,44 @@ class P25SurveyEngine:
         self._scan_state = 'IDLE'
         self._source = config.get('source', 'sdr')
 
-        # Current channel
+        # Current channel — include ALL keys used anywhere
+        # in the engine so KeyError never occurs
         self._channel = {
-            'frequency': config.get(
-                'center_frequency_mhz', 851.0
+            'frequency': float(
+                config.get('center_frequency_mhz', 851.0)
             ),
-            'nac': config.get('nac', NAC_DEFAULT),
-            'phase': config.get('phase', 1),
-            'mode': config.get('scan_mode', 'conventional'),
+            'nac': 0,               # Stored as int always
+            'phase': int(
+                config.get('phase', 1)
+            ),
+            'mode': config.get(
+                'scan_mode', 'conventional'
+            ),
+            'talkgroup': int(
+                config.get('talkgroup', 0)
+            ),              # ← was missing
+            'source': config.get('source', 'sdr'),
         }
 
-        # Frame history
+        # Parse NAC from config — may be hex string
+        raw_nac = config.get('nac', '0')
+        try:
+            if isinstance(raw_nac, str):
+                clean = raw_nac.strip().lstrip('0x')
+                self._channel['nac'] = (
+                    int(clean, 16) if clean else 0
+                )
+            else:
+                self._channel['nac'] = int(raw_nac or 0)
+        except (ValueError, TypeError):
+            self._channel['nac'] = 0
+
+        # Frame history (ring buffer)
         self._frames = deque(maxlen=300)
         self._frames_lock = threading.Lock()
 
         # Discovered systems
-        self._systems = {}   # {nac: P25System}
+        self._systems = {}
         self._systems_lock = threading.Lock()
 
         # Active call tracking
@@ -1053,12 +1075,14 @@ class P25SurveyEngine:
     # ----------------------------------------------------------
     # Channel control
     # ----------------------------------------------------------
-
     def set_frequency(self, freq_mhz):
         """Set receive frequency."""
-        self._channel['frequency'] = float(freq_mhz)
+        try:
+            self._channel['frequency'] = float(freq_mhz)
+        except (TypeError, ValueError):
+            pass
         self._add_log(
-            f"Frequency: {freq_mhz:.4f} MHz"
+            f"Frequency: {self._channel['frequency']:.4f} MHz"
         )
         if self._running:
             self.stop_receive()
@@ -1066,51 +1090,50 @@ class P25SurveyEngine:
             self.start_receive()
 
     def set_source(self, source):
-        """Switch between SDR and radio source."""
+        """Switch receive source."""
         if source not in ('sdr', 'radio'):
             return
         was_running = self._running
         if was_running:
             self.stop_receive()
         self._source = source
+        self._channel['source'] = source
         if was_running:
             self.start_receive()
 
     def set_nac(self, nac):
-        """
-        Set Network Access Code filter.
-
-        Always converts to integer internally regardless
-        of whether a hex string or integer is passed.
-
-        Args:
-            nac: NAC as hex string ('293', '0x293')
-                 or integer (659)
-        """
+        """Set NAC filter — always stores as int."""
         try:
             if isinstance(nac, str):
-                clean = nac.strip().lstrip('0x').lstrip('0X')
+                clean = nac.strip().lstrip('0x')
                 self._channel['nac'] = (
                     int(clean, 16) if clean else 0
                 )
             else:
-                self._channel['nac'] = int(nac)
-
+                self._channel['nac'] = int(nac or 0)
             self._add_log(
-                f"NAC filter: "
-                f"0x{self._channel['nac']:03X}"
+                f"NAC: 0x{self._channel['nac']:03X}"
             )
         except (ValueError, TypeError) as e:
             self._add_log(
-                f"Invalid NAC value '{nac}': {e}",
-                'warning'
+                f"Invalid NAC '{nac}': {e}", 'warning'
             )
             self._channel['nac'] = 0
 
     def set_scan_mode(self, mode):
-        """Set scan mode (conventional/survey/trunked)."""
+        """Set scan mode."""
         self._channel['mode'] = mode
         self._add_log(f"Scan mode: {mode}")
+
+    def set_talkgroup(self, tg):
+        """Set active talkgroup."""
+        try:
+            self._channel['talkgroup'] = int(tg or 0)
+            self._add_log(
+                f"Talkgroup: {self._channel['talkgroup']}"
+            )
+        except (TypeError, ValueError):
+            self._channel['talkgroup'] = 0
 
     def update_survey_frequencies(self, freq_list):
         """Update the survey frequency list."""
@@ -1134,78 +1157,91 @@ class P25SurveyEngine:
     # Status and data retrieval
     # ----------------------------------------------------------
 
-    def get_status(self):
-        """Get comprehensive engine status."""
+def get_status(self):
+        """
+        Get comprehensive engine status.
+
+        Uses .get() with defaults throughout so missing
+        keys in _channel never cause KeyError.
+
+        Returns:
+            dict: Current status information
+        """
         with self._active_call_lock:
             active = (
                 dict(self._active_call)
                 if self._active_call else None
             )
 
-# Use .get() — 'talkgroup' may be absent before
-        # any signal is received or after a channel reset.
-        tg = self._channel.get('talkgroup')
-        tg_name = COMMON_TALKGROUPS.get(tg, '') if tg else ''
+        # Get talkgroup safely
+        tg = self._channel.get('talkgroup', 0)
+        tg_name = COMMON_TALKGROUPS.get(tg, '')
 
-        # FIX: Convert NAC to int safely before formatting.
-        # Config stores NAC as a hex string (e.g. '293')
-        # or integer. We need int for :03X format code.
+        # Get NAC safely and format as hex
         raw_nac = self._channel.get('nac', 0)
         try:
             if isinstance(raw_nac, str):
-                # Handle '0x293', '293', or '0' formats
-                nac_int = int(
-                    raw_nac, 16
-                ) if raw_nac.strip() else 0
+                clean = raw_nac.strip().lstrip('0x')
+                nac_int = (
+                    int(clean, 16) if clean else 0
+                )
             else:
-                nac_int = int(raw_nac)
-        except (ValueError, TypeError):
+                nac_int = int(raw_nac or 0)
+        except (TypeError, ValueError):
             nac_int = 0
 
         decoder_info = {
             'name': self._decoder_name or 'None',
             'path': self._decoder_path or '',
-            'available': self._decoder_name is not None,
+            'available': (
+                self._decoder_name is not None
+            ),
         }
+
+        tgs = self._stats.get('talkgroups_heard', set())
+        units = self._stats.get('units_heard', set())
 
         return {
             'running': self._running,
             'scan_state': self._scan_state,
             'source': self._source,
-            'frequency': self._channel.get('frequency'),
-            # FIX: format nac_int (integer), not raw_nac
+            'frequency': self._channel.get(
+                'frequency', 851.0
+            ),
             'nac': f'0x{nac_int:03X}',
             'nac_int': nac_int,
             'phase': self._channel.get('phase', 1),
-            'scan_mode': self._channel.get('mode', 'conventional'),
+            'scan_mode': self._channel.get(
+                'mode', 'conventional'
+            ),
+            'talkgroup': tg,
+            'talkgroup_name': tg_name,
             'active_call': active,
             'rssi': self._stats.get('last_rssi'),
-            'ber_avg': self._stats.get('ber_avg', 0),
+            'ber_avg': self._stats.get('ber_avg', 0.0),
             'stats': {
-                'frames_decoded': (
-                    self._stats['frames_decoded']
+                'frames_decoded': self._stats.get(
+                    'frames_decoded', 0
                 ),
-                'voice_frames': (
-                    self._stats['voice_frames']
+                'voice_frames': self._stats.get(
+                    'voice_frames', 0
                 ),
-                'tsbk_frames': (
-                    self._stats['tsbk_frames']
+                'tsbk_frames': self._stats.get(
+                    'tsbk_frames', 0
                 ),
-                'data_frames': (
-                    self._stats['data_frames']
+                'data_frames': self._stats.get(
+                    'data_frames', 0
                 ),
-                'systems_found': (
-                    self._stats['systems_found']
+                'systems_found': self._stats.get(
+                    'systems_found', 0
                 ),
-                'talkgroups_heard': len(
-                    self._stats['talkgroups_heard']
+                'talkgroups_heard': len(tgs),
+                'units_heard': len(units),
+                'ber_avg': self._stats.get(
+                    'ber_avg', 0.0
                 ),
-                'units_heard': len(
-                    self._stats['units_heard']
-                ),
-                'ber_avg': self._stats['ber_avg'],
-                'active_since': (
-                    self._stats['active_since']
+                'active_since': self._stats.get(
+                    'active_since'
                 ),
             },
             'decoder': decoder_info,
