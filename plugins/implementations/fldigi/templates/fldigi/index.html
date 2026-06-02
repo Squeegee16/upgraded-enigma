@@ -220,36 +220,132 @@ function showToast(msg, type) {
     el.className = `toast align-items-center text-white bg-${type}`;
     new bootstrap.Toast(el, {delay: 4000}).show();
 }
-
-function apiPost(url, data, cb) {
-    $.ajax({
-        url: url, method: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify(data || {}),
-        success: cb,
-        error: () => showToast('Server error', 'danger')
-    });
-}
-
-function startFldigi() {
-    showToast('Starting FLdigi...', 'info');
-    apiPost('{{ url_for("FLdigi.api_start") }}', {}, function(data) {
-        showToast(
-            data.success ? 'FLdigi started!' : 'Failed: ' + data.message,
-            data.success ? 'success' : 'danger'
-        );
-        if (data.success) setTimeout(() => location.reload(), 3000);
-    });
-}
-
+/**
+ * Connect to existing FLdigi instance.
+ * Shows clear message if connection is refused.
+ */
 function connectFldigi() {
     showToast('Connecting to FLdigi...', 'info');
-    apiPost('{{ url_for("FLdigi.api_connect") }}', {}, function(data) {
-        showToast(
-            data.success ? data.message : 'Failed: ' + data.message,
-            data.success ? 'success' : 'warning'
+
+    apiPost(
+        '{{ url_for("FLdigi.api_connect") }}',
+        {},
+        function(data) {
+            if (data.success) {
+                showToast(
+                    '✓ ' + data.message,
+                    'success'
+                );
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                // Show actionable error message
+                const msg = data.message || data.error || 'Connection failed';
+
+                // Check if it is a connection refused error
+                if (msg.toLowerCase().includes('not running') ||
+                        msg.toLowerCase().includes('refused') ||
+                        msg.toLowerCase().includes('not started')) {
+                    showToast(
+                        'FLdigi is not running. Click "Start FLdigi" first.',
+                        'warning'
+                    );
+                    // Highlight the Start button
+                    const startBtn = document.querySelector(
+                        '[onclick="startFldigi()"]'
+                    );
+                    if (startBtn) {
+                        startBtn.classList.add(
+                            'btn-warning'
+                        );
+                        startBtn.classList.remove(
+                            'btn-success'
+                        );
+                        setTimeout(() => {
+                            startBtn.classList.remove(
+                                'btn-warning'
+                            );
+                            startBtn.classList.add(
+                                'btn-success'
+                            );
+                        }, 3000);
+                    }
+                } else {
+                    showToast(msg, 'warning');
+                }
+            }
+        }
+    );
+}
+
+/**
+ * Start FLdigi process with Xvfb and PulseAudio.
+ * Polls for XML-RPC connection after start.
+ */
+function startFldigi() {
+    showToast('Starting FLdigi...', 'info');
+
+    // Disable button during start
+    const btn = document.getElementById('start-fldigi-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = (
+            '<div class="spinner-border spinner-border-sm me-1"></div>' +
+            'Starting...'
         );
-        if (data.success) setTimeout(() => location.reload(), 2000);
+    }
+
+    apiPost(
+        '{{ url_for("FLdigi.api_start") }}',
+        {},
+        function(data) {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = (
+                    '<i class="fas fa-play me-1"></i>' +
+                    'Start FLdigi'
+                );
+            }
+
+            if (data.success) {
+                showToast(data.message, 'success');
+                // Reload after a delay to show updated status
+                setTimeout(() => location.reload(), 3000);
+            } else {
+                const msg = data.message || data.error;
+                showToast('Failed: ' + msg, 'danger');
+            }
+        },
+        function() {
+            // Error callback
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = (
+                    '<i class="fas fa-play me-1"></i>' +
+                    'Start FLdigi'
+                );
+            }
+            showToast('Server error starting FLdigi', 'danger');
+        }
+    );
+}
+
+/**
+ * Updated apiPost to support error callback
+ */
+function apiPost(url, data, successCb, errorCb) {
+    $.ajax({
+        url: url,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data || {}),
+        success: successCb,
+        error: function() {
+            if (errorCb) {
+                errorCb();
+            } else {
+                showToast('Server error', 'danger');
+            }
+        }
     });
 }
 
