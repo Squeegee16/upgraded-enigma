@@ -430,6 +430,8 @@ ASOUNDRC
 
 chmod 644 /home/hamradio/.asoundrc
 echo -e "${GREEN}  ✓ ALSA configured for PulseAudio${NC}"
+
+
 # =================================================================
 # Verify Qt xcb plugin is loadable
 # =================================================================
@@ -465,57 +467,88 @@ else
 fi
 
 # =================================================================
-# Start Xvfb virtual display for GUI applications
-# FLdigi and QSSTV require an X11 display to launch.
+# [6b/7] Starting virtual display (Xvfb) for Qt applications
+#
+# WSJT-X, FLdigi, and QSSTV all require an X11 display.
+# Xvfb provides a virtual framebuffer — no monitor needed.
+# DISPLAY must be :99 (not :0) inside the container.
 # =================================================================
-echo -e "\n${YELLOW}[6g/7] Starting virtual display (Xvfb)...${NC}"
+echo -e "\n${YELLOW}[6b/7] Starting virtual display (Xvfb)...${NC}"
+
+XVFB_DISPLAY=":99"
+XVFB_READY=false
 
 # Ensure X11 socket directory exists with correct permissions
-# This is needed because /tmp/.X11-unix may not exist yet
+# This MUST be done before starting Xvfb
 mkdir -p /tmp/.X11-unix 2>/dev/null || true
 chmod 1777 /tmp/.X11-unix 2>/dev/null || true
 
-XVFB_DISPLAY=:99
-XVFB_STARTED=false
+# Remove stale lock files from previous container runs
+rm -f /tmp/.X99-lock 2>/dev/null || true
+rm -f /tmp/.X11-unix/X99 2>/dev/null || true
 
 if command -v Xvfb >/dev/null 2>&1; then
-    # Remove stale lock and socket files
-    rm -f /tmp/.X99-lock 2>/dev/null || true
-    rm -f /tmp/.X11-unix/X99 2>/dev/null || true
 
-    # Start Xvfb
+    # Start Xvfb on display :99
     Xvfb ${XVFB_DISPLAY} \
-        -screen 0 1024x768x24 \
+        -screen 0 1280x1024x24 \
         -nolisten tcp \
         -ac \
         +extension GLX \
+        +extension RANDR \
         2>/tmp/xvfb.log &
+
     XVFB_PID=$!
 
-    # Wait for Xvfb to initialise (up to 5 seconds)
-    for i in 1 2 3 4 5; do
+    # Wait up to 8 seconds for Xvfb to be ready
+    for i in 1 2 3 4 5 6 7 8; do
         sleep 1
-        if [ -S "/tmp/.X11-unix/X99" ] || \
-           [ -f "/tmp/.X99-lock" ]; then
-            XVFB_STARTED=true
+        # Check socket file exists (Xvfb is ready)
+        if [ -S "/tmp/.X11-unix/X99" ]; then
+            XVFB_READY=true
+            break
+        fi
+        # Also check lock file as fallback
+        if [ -f "/tmp/.X99-lock" ]; then
+            XVFB_READY=true
             break
         fi
     done
 
-    if [ "$XVFB_STARTED" = "true" ]; then
-        export DISPLAY=${XVFB_DISPLAY}
-        echo -e "${GREEN}  ✓ Xvfb started on ${XVFB_DISPLAY}${NC}"
+    if [ "$XVFB_READY" = "true" ]; then
+        # Export DISPLAY so all child processes use :99
+        export DISPLAY="${XVFB_DISPLAY}"
+        echo -e "${GREEN}  ✓ Xvfb running on ${XVFB_DISPLAY} (PID: ${XVFB_PID})${NC}"
+        echo "  DISPLAY=${DISPLAY}"
+
+        # Verify xcb plugin is loadable
+        if command -v python3 >/dev/null 2>&1; then
+            python3 -c "
+import subprocess, os
+env = os.environ.copy()
+env['DISPLAY'] = '${XVFB_DISPLAY}'
+r = subprocess.run(
+    ['xdpyinfo'],
+    capture_output=True, env=env, timeout=3
+)
+if r.returncode == 0:
+    print('  ✓ X11 display verified with xdpyinfo')
+else:
+    print('  ⚠ xdpyinfo failed (non-fatal)')
+" 2>/dev/null || true
+        fi
     else
-        echo -e "${YELLOW}  ⚠ Xvfb did not start${NC}"
-        cat /tmp/xvfb.log 2>/dev/null | head -5
-        echo "  GUI plugins (FLdigi, QSSTV) may not work"
-        echo "  but the application will continue"
+        echo -e "${YELLOW}  ⚠ Xvfb did not start in time${NC}"
+        cat /tmp/xvfb.log 2>/dev/null | head -10
+        echo "  Qt GUI applications will not work."
+        echo "  Ensure /tmp/.X11-unix exists with mode 1777"
     fi
+
 else
     echo -e "${YELLOW}  ⚠ Xvfb not installed${NC}"
-    echo "  Add to Dockerfile: apt-get install -y xvfb"
+    echo "  Add to Dockerfile:"
+    echo "    apt-get install -y xvfb"
 fi
-
 # =================================================================
 # Start VNC server for remote GUI access
 # =================================================================
