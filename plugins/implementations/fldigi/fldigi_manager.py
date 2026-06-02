@@ -1216,3 +1216,44 @@ class FldigiManager:
             return True, "TX aborted"
         except Exception as e:
             return False, f"TX Abort error: {e}"
+
+def _build_fldigi_command(self, binary, display):
+        """Build FLdigi command with correct settings."""
+        cmd = [binary]
+
+        # XML-RPC server
+        cmd.extend([
+            '--xmlrpc-server-address',
+            self.config.get('xmlrpc_host', 'localhost'),
+            '--xmlrpc-server-port',
+            str(self.config.get('xmlrpc_port', 7362)),
+        ])
+
+        # Config directory
+        cmd.extend(['--config-dir', self.fldigi_home])
+
+        return cmd
+
+    def _build_env(self, display):
+        """
+        Build environment for FLdigi/Qt apps.
+
+        Args:
+            display: X11 display string
+
+        Returns:
+            dict: Environment variables
+        """
+        env = os.environ.copy()
+        env['DISPLAY'] = display
+
+        # Force xcb platform — prevents :0 fallback
+        env['QT_QPA_PLATFORM'] = 'xcb'
+        env['QT_ACCESSIBILITY'] = '0'
+
+        # Find and set Qt plugin path
+        qt_plugin = self._find_qt_plugin_path()
+        if qt_plugin:
+            env['QT_PLUGIN_PATH'] = qt_plugin
+
+        return env
