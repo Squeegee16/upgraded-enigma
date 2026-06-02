@@ -79,23 +79,25 @@
                 </ul>
 
                 <div class="mt-3 d-grid gap-2">
-                    {% if status.xmlrpc_connected %}
-                    <button class="btn btn-danger btn-sm" onclick="stopFldigi()">
-                        <i class="fas fa-stop"></i> Stop FLdigi
+                    {# In the status card — replace the start button #}
+                    {% if not status.xmlrpc_connected %}
+                    <button class="btn btn-success btn-sm"
+                            id="start-fldigi-btn"
+                            onclick="startFldigi()"
+                            {% if not install_complete %}disabled{% endif %}>
+                        <i class="fas fa-play me-1"></i>
+                        Start FLdigi
                     </button>
-                    {% if status.trx_status == 'tx' %}
-                    <button class="btn btn-warning btn-sm" onclick="abortTx()">
-                        <i class="fas fa-ban"></i> Abort TX
+                    <button class="btn btn-outline-primary btn-sm"
+                            onclick="connectFldigi()">
+                        <i class="fas fa-link me-1"></i>
+                        Connect to FLdigi
                     </button>
-                    {% endif %}
                     {% else %}
-                    <button class="btn btn-success btn-sm" onclick="connectFldigi()"
-                            {% if not install_complete %}disabled{% endif %}>
-                        <i class="fas fa-link"></i> Connect to FLdigi
-                    </button>
-                    <button class="btn btn-primary btn-sm" onclick="startFldigi()"
-                            {% if not install_complete %}disabled{% endif %}>
-                        <i class="fas fa-play"></i> Start FLdigi
+                    <button class="btn btn-danger btn-sm"
+                            onclick="stopFldigi()">
+                        <i class="fas fa-stop me-1"></i>
+                        Stop FLdigi
                     </button>
                     {% endif %}
                 </div>
