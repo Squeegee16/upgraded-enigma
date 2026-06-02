@@ -491,7 +491,7 @@ RUN set -eux; \
     cd /tmp; \
     git clone \
         --depth 1 \
-        git clone https://github.com/SatDump/SatDump.git; \
+        https://github.com/SatDump/SatDump.git; \
     cd SatDump; \
     mkdir build; \
     cd build; \
