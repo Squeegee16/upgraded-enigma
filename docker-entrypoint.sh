@@ -138,7 +138,7 @@ else
 fi
 
 # ---------------------------------------------------------------
-# RTL-SDR detection
+# 6/7 a) RTL-SDR detection
 # ---------------------------------------------------------------
 echo -e "\n${YELLOW}[6/7] Initializing devices...${NC}"
 echo -e "\n${BLUE}[6a/7]--- RTL-SDR Status ---${NC}"
@@ -156,7 +156,7 @@ if [ -d "/dev/bus/usb" ]; then
             grep -iE "0bda:2832|0bda:2838|0bda:2839|\
 realtek" || true)
         if [ -n "$RTL_USB" ]; then
-            echo -e "${GREEN}  ✓ RTL-SDR detected:${NC}"
+            echo -e "${GREEN} ✓ RTL-SDR detected:${NC}"
             echo "    $RTL_USB"
         else
             echo -e "${YELLOW}  ⚠ RTL-SDR not found via lsusb${NC}"
@@ -176,7 +176,7 @@ realtek" || true)
 
     # RTL-SDR symlink from udev rules
     if ls /dev/rtlsdr* >/dev/null 2>&1; then
-        echo -e "${GREEN}  ✓ RTL-SDR symlink: \
+        echo -e "${GREEN} ✓ RTL-SDR symlink: \
 $(ls /dev/rtlsdr*)${NC}"
     fi
 
@@ -225,7 +225,7 @@ fi
 # Check rtlsdr symlink from udev rules
 # ---------------------------------------------------------------
 if ls /dev/rtlsdr* >/dev/null 2>&1; then
-    echo -e "${GREEN}  ✓ RTL-SDR symlink found: $(ls /dev/rtlsdr*)${NC}"
+    echo -e "${GREEN} ✓ RTL-SDR symlink found: $(ls /dev/rtlsdr*)${NC}"
 fi
 
 # ---------------------------------------------------------------
@@ -234,7 +234,7 @@ fi
 # ---------------------------------------------------------------
 # GPS Serial Port Check
 # ---------------------------------------------------------------
-echo -e "\n${BLUE}--- GPS Status ---${NC}"
+echo -e "\n${BLUE} [6b/7] --- GPS Status ---${NC}"
 
 GPS_PORT="${GPS_SERIAL_PORT:-/dev/ttyAMA0}"
 GPS_SOURCE="${GPS_SOURCE:-uart}"
@@ -260,7 +260,7 @@ if [ "$GPS_SOURCE" = "uart" ]; then
 
         # Check permissions
         if [ -r "$GPS_PORT" ] && [ -w "$GPS_PORT" ]; then
-            echo -e "${GREEN}  ✓ Port is readable and writable${NC}"
+            echo -e "${GREEN} ✓ Port is readable and writable${NC}"
         else
             echo -e "${YELLOW}  ⚠ Permission issue on $GPS_PORT${NC}"
             echo "  Add to docker-compose.yml devices:"
@@ -275,7 +275,7 @@ else
 fi
 
 # ---------------------------------------------------------------
-# Radio device
+# [6c/7] Radio device
 # ---------------------------------------------------------------
 echo -e "\n${BLUE}[6c/7]--- Radio Status ---${NC}"
 if [ "$USE_MOCK_DEVICES" = "false" ]; then
@@ -289,7 +289,7 @@ else
     echo "  Mock radio enabled"
 fi
 # ---------------------------------------------------------------
-# Go toolchain check (for GrayWolf plugin)
+# [6d/7]Go toolchain check (for GrayWolf plugin)
 # ---------------------------------------------------------------
 # ---------------------------------------------------------------
 # Go toolchain check (for GrayWolf and other Go plugins)
@@ -330,7 +330,7 @@ else
     echo "  Rebuild the Docker image with a current Go version"
 fi
 # ---------------------------------------------------------------
-# OpenWebRX sidecar availability check
+# [6e/7] OpenWebRX sidecar availability check
 # ---------------------------------------------------------------
 echo -e "\n${BLUE}[6e/7]--- Check OpenWebRX Sidecar ---${NC}"
 OWRX_URL="${OPENWEBRX_URL:-http://0.0.0.0:8073}"
@@ -388,13 +388,13 @@ if command -v pulseaudio >/dev/null 2>&1; then
         sink_name=fldigi_null \
         sink_properties=device.description="FLdigi_Null_Sink" \
         2>/dev/null && \
-        echo -e "${GREEN}  ✓ PulseAudio null sink created${NC}" || \
+        echo -e "${GREEN} ✓ PulseAudio null sink created${NC}" || \
         echo -e "${YELLOW}  ⚠ PulseAudio null sink failed${NC}"
 
     # Set the null sink as default
     pactl set-default-sink fldigi_null 2>/dev/null || true
 
-    echo -e "${GREEN}  ✓ PulseAudio started${NC}"
+    echo -e "${GREEN} ✓ PulseAudio started${NC}"
 else
     echo -e "${YELLOW}  ⚠ PulseAudio not available${NC}"
     echo "  FLdigi audio will be limited"
@@ -433,9 +433,9 @@ echo -e "${GREEN}  ✓ ALSA configured for PulseAudio${NC}"
 
 
 # =================================================================
-# Verify Qt xcb plugin is loadable
+# [6g/7] Verify Qt xcb plugin is loadable
 # =================================================================
-echo -e "\n${BLUE}--- Qt Platform Check ---${NC}"
+echo -e "\n${BLUE}[6g/7] --- Qt Platform Check ---${NC}"
 
 if [ "$XVFB_READY" = "true" ]; then
     # Check xcb library exists
@@ -467,13 +467,13 @@ else
 fi
 
 # =================================================================
-# [6b/7] Starting virtual display (Xvfb) for Qt applications
+# [6h/7] Starting virtual display (Xvfb) for Qt applications
 #
 # WSJT-X, FLdigi, and QSSTV all require an X11 display.
 # Xvfb provides a virtual framebuffer — no monitor needed.
 # DISPLAY must be :99 (not :0) inside the container.
 # =================================================================
-echo -e "\n${YELLOW}[6b/7] Starting virtual display (Xvfb)...${NC}"
+echo -e "\n${YELLOW}[6h/7] Starting virtual display (Xvfb)...${NC}"
 
 XVFB_DISPLAY=":99"
 XVFB_READY=false
@@ -550,9 +550,9 @@ else
     echo "    apt-get install -y xvfb"
 fi
 # =================================================================
-# Start VNC server for remote GUI access
+# [6i/7] Start VNC server for remote GUI access
 # =================================================================
-echo -e "\n${YELLOW}[6h/7] Starting VNC server...${NC}"
+echo -e "\n${YELLOW}[6i/7] Starting VNC server...${NC}"
 
 if command -v vncserver >/dev/null 2>&1; then
     # Start VNC server on display :99 (same as Xvfb)
@@ -577,9 +577,9 @@ else
 fi
 
 # =================================================================
-# Initialize FLdigi XML-RPC configuration
+# [6j/7] Initialize FLdigi XML-RPC configuration
 # =================================================================
-echo -e "\n${YELLOW}[6i/7] Configuring FLdigi XML-RPC...${NC}"
+echo -e "\n${YELLOW}[6j/7] Configuring FLdigi XML-RPC...${NC}"
 
 if command -v fldigi >/dev/null 2>&1; then
     # FLdigi config directory
