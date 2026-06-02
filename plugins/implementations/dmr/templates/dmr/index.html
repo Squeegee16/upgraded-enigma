@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}DMR Radio - Ham Radio App{% endblock %}
+{% block title %}DMR Radio - Ham Rad App{% endblock %}
 
 {% block extra_css %}
 {# Safe percentage calculation macro #}
@@ -737,17 +737,15 @@
                            'calls_received', 0) }}
                     </dd>
                 </dl>
+                </div>
             </div>
         </div>
     </div>
-
 </div>
-
 {# ============================================================ #}
 {# Decoded frames and activity log                              #}
 {# ============================================================ #}
 <div class="row">
-
     {# Frame decode table #}
     <div class="col-md-8 mb-3">
         <div class="card bg-dark border-secondary">
@@ -881,7 +879,8 @@
             </div>
         </div>
     </div>
-
+</div>
+<div class="row">
     {# Engine log #}
     <div class="col-md-4 mb-3">
         <div class="card bg-dark border-secondary h-100">
@@ -920,7 +919,6 @@
             </div>
         </div>
     </div>
-
 </div>
 
 {# ============================================================ #}
