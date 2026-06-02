@@ -415,6 +415,24 @@ sudo nano /boot/firmware/cmdline.txt
 # rootfstype=ext4 fsck.repair=yes rootwait
 # cgroup_enable=memory cgroup_memory=1
 
+systemctl status serial-getty@ttyAMA0.service
+# If active: sudo systemctl disable --now serial-getty@ttyAMA0.service
+
+# 2. Check what is using the port
+lsof /dev/ttyAMA0 2>/dev/null || fuser /dev/ttyAMA0 2>/dev/null
+# If anything shows up, kill it or disable it
+
+# 3. Check GPS is sending NMEA data
+cat /dev/ttyAMA0
+# Should see lines like: $GPGGA,143200.00,...
+
+# 4. Check with correct baud rate
+stty -F /dev/ttyAMA0 9600
+cat /dev/ttyAMA0
+# If garbage appears, try 4800 baud:
+stty -F /dev/ttyAMA0 4800
+cat /dev/ttyAMA0
+
 sudo reboot
 ### Finding Your Hamlib Radio Model Number
 ##### List all supported radios
