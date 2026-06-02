@@ -528,6 +528,8 @@ RUN mkdir -p \
 # Must be created as root. The hamradio user can then
 # start Xvfb without permission errors.
 # ============================================================
+# Create X11 socket directory with sticky bit
+# Required for Xvfb to start as non-root
 RUN mkdir -p /tmp/.X11-unix && \
     chmod 1777 /tmp/.X11-unix && \
     chown root:root /tmp/.X11-unix
