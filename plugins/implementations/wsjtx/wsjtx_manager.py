@@ -304,39 +304,69 @@ class WSJTXManager:
 
     def start_wsjtx(self):
         """
-        Launch WSJT-X process.
+        Launch WSJT-X with correct X11 display.
 
-        Starts WSJT-X with UDP multicast enabled so
-        this plugin can receive decoded data.
+        Verifies that:
+        1. WSJT-X binary exists
+        2. An X11 display is available (Xvfb :99)
+        3. Qt xcb plugin is loadable
 
         Returns:
-            tuple: (success, message)
+            tuple: (success: bool, message: str)
         """
         with self._process_lock:
-            if self._process and self._process.poll() is None:
-                return False, "[WSJTX][init] WSJT-X already running"
+            if self._process and \
+                    self._process.poll() is None:
+                return False, "WSJT-X already running"
 
             if not shutil.which('wsjtx'):
                 return False, (
-                    "[WSJTX][init] WSJT-X binary not found. "
-                    "Please install WSJT-X."
+                    "WSJT-X binary not found. "
+                    "Install wsjtx: "
+                    "docker compose build --no-cache"
                 )
 
             try:
-                # Build WSJT-X command
-                cmd = ['wsjtx']
+                # Get display — must use :99 (Xvfb)
+                # NOT :0 which does not exist in Docker
+                display = self._get_display()
 
-                # Set UDP server address for multicast
-                # WSJT-X reads these from its config file
-                # We launch it normally - UDP is configured in WSJT-X
+                if not display:
+                    return False, (
+                        "No X11 display available. "
+                        "Xvfb must be running on :99."
+                    )
 
+                self._add_log(
+                    f"Using display: {display}"
+                )
+
+                # Build environment
                 env = os.environ.copy()
-                env['DISPLAY'] = self.config.get('display', ':0')
+                env['DISPLAY'] = display
 
-                self._add_log("[WSJTX][init] Launching WSJT-X...")
+                # Set Qt platform to xcb explicitly
+                # Prevents Qt from trying other platforms
+                env['QT_QPA_PLATFORM'] = 'xcb'
+
+                # Disable Qt accessibility warnings
+                env['QT_ACCESSIBILITY'] = '0'
+
+                # Point Qt to xcb plugin location
+                # (helps when xcb is in non-standard path)
+                qt_plugin_path = self._find_qt_plugin_path()
+                if qt_plugin_path:
+                    env['QT_PLUGIN_PATH'] = qt_plugin_path
+                    self._add_log(
+                        f"Qt plugin path: {qt_plugin_path}"
+                    )
+
+                self._add_log(
+                    f"Launching WSJT-X on {display}..."
+                )
 
                 self._process = subprocess.Popen(
-                    cmd,
+                    ['wsjtx'],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
@@ -345,23 +375,251 @@ class WSJTXManager:
 
                 self._status['process_running'] = True
                 self._status['pid'] = self._process.pid
-
                 self._add_log(
-                    f"[WSJTX][init] ✓ WSJT-X started (PID: {self._process.pid})"
+                    f"✓ WSJT-X started "
+                    f"(PID: {self._process.pid})"
                 )
 
                 # Start process monitor
                 self._start_process_monitor()
 
                 return True, (
-                    f"[WSJTX][init] WSJT-X started (PID: {self._process.pid})"
+                    f"WSJT-X started "
+                    f"(PID: {self._process.pid})"
                 )
 
             except Exception as e:
                 error = str(e)
-                self._status['error'] = error
-                self._add_log(f"[WSJTX][init] ERROR: {error}", 'error')
-                return False, f"[WSJTX][init] Failed to start: {error}"
+                self._add_log(f"ERROR: {error}", 'error')
+                return False, f"Failed: {error}"
+
+    def _get_display(self):
+        """
+        Get a valid X11 display for WSJT-X.
+
+        Returns :99 if Xvfb is running there,
+        otherwise falls back to DISPLAY env var.
+
+        Returns:
+            str: Display string or None if unavailable
+        """
+        # Prefer :99 (Xvfb set up by entrypoint)
+        if self._is_display_available(':99'):
+            os.environ['DISPLAY'] = ':99'
+            return ':99'
+
+        # Fall back to DISPLAY env var
+        env_display = os.environ.get('DISPLAY', '').strip()
+        if env_display and \
+                self._is_display_available(env_display):
+            return env_display
+
+        # Try to start Xvfb as last resort
+        if shutil.which('Xvfb'):
+            if self._start_xvfb(':99'):
+                return ':99'
+
+        return None
+
+    def _is_display_available(self, display):
+        """
+        Check if an X11 display is actually available.
+
+        Checks both the socket file and verifies a
+        connection can be made.
+
+        Args:
+            display: Display string e.g. ':99'
+
+        Returns:
+            bool: True if display is usable
+        """
+        num = display.replace(':', '')
+
+        # Check socket file exists
+        socket_path = f'/tmp/.X11-unix/X{num}'
+        if not os.path.exists(socket_path):
+            return False
+
+        # Try connecting with xdpyinfo
+        try:
+            env = os.environ.copy()
+            env['DISPLAY'] = display
+            result = subprocess.run(
+                ['xdpyinfo'],
+                capture_output=True,
+                env=env,
+                timeout=3
+            )
+            return result.returncode == 0
+        except Exception:
+            # xdpyinfo not available — just trust the socket
+            return True
+
+    def _start_xvfb(self, display=':99'):
+        """
+        Start Xvfb virtual framebuffer.
+
+        Args:
+            display: Display to use
+
+        Returns:
+            bool: True if started
+        """
+        import time
+
+        if not shutil.which('Xvfb'):
+            self._add_log(
+                "Xvfb not available", 'warning'
+            )
+            return False
+
+        num = display.replace(':', '')
+
+        # Clean up stale files
+        for path in [
+            f'/tmp/.X{num}-lock',
+            f'/tmp/.X11-unix/X{num}'
+        ]:
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+
+        try:
+            xvfb = subprocess.Popen(
+                [
+                    'Xvfb', display,
+                    '-screen', '0', '1280x1024x24',
+                    '-nolisten', 'tcp',
+                    '-ac'
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+
+            for _ in range(8):
+                time.sleep(0.5)
+                if os.path.exists(
+                    f'/tmp/.X11-unix/X{num}'
+                ):
+                    os.environ['DISPLAY'] = display
+                    self._add_log(
+                        f"✓ Xvfb started on {display}"
+                    )
+                    return True
+
+            self._add_log(
+                "Xvfb did not start", 'warning'
+            )
+            return False
+
+        except Exception as e:
+            self._add_log(
+                f"Xvfb error: {e}", 'warning'
+            )
+            return False
+
+    def _find_qt_plugin_path(self):
+        """
+        Find the Qt platform plugins directory.
+
+        Searches common locations for Qt xcb plugin
+        to help Qt locate it if not in default path.
+
+        Returns:
+            str: Path to Qt plugins dir or None
+        """
+        search_paths = [
+            '/usr/lib/qt5/plugins',
+            '/usr/lib/aarch64-linux-gnu/qt5/plugins',
+            '/usr/lib/x86_64-linux-gnu/qt5/plugins',
+            '/usr/lib/arm-linux-gnueabihf/qt5/plugins',
+            '/usr/local/lib/qt5/plugins',
+        ]
+
+        for path in search_paths:
+            xcb = os.path.join(
+                path, 'platforms', 'libqxcb.so'
+            )
+            if os.path.exists(xcb):
+                return path
+
+        # Try to find via dpkg
+        try:
+            result = subprocess.run(
+                ['find', '/usr', '-name',
+                 'libqxcb.so', '-type', 'f'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.stdout.strip():
+                # Return the platforms/ parent's parent
+                xcb_path = result.stdout.strip().split(
+                    '\n'
+                )[0]
+                return os.path.dirname(
+                    os.path.dirname(xcb_path)
+                )
+        except Exception:
+            pass
+
+        return None
+
+    def _start_process_monitor(self):
+        """Monitor WSJT-X process output."""
+        def monitor():
+            if not self._process or \
+                    not self._process.stdout:
+                return
+
+            try:
+                for line in iter(
+                    self._process.stdout.readline, ''
+                ):
+                    if not line:
+                        break
+                    line = line.strip()
+                    if line:
+                        self._add_log(line)
+                        # Detect Qt xcb error
+                        if 'xcb' in line.lower() and \
+                                'could not' in line.lower():
+                            self._add_log(
+                                "Qt xcb error detected. "
+                                "Ensure libxcb packages "
+                                "are installed in Docker "
+                                "and DISPLAY=:99",
+                                'error'
+                            )
+                        elif 'display' in line.lower() and \
+                                'connect' in line.lower():
+                            self._add_log(
+                                f"Display error: {line}. "
+                                f"DISPLAY should be :99 "
+                                f"(Xvfb), not :0",
+                                'error'
+                            )
+            except Exception:
+                pass
+            finally:
+                self._status['process_running'] = False
+                self._status['pid'] = None
+                self._add_log(
+                    "WSJT-X process terminated",
+                    'warning'
+                )
+
+        import threading
+        thread = threading.Thread(
+            target=monitor,
+            daemon=True,
+            name='wsjtx-monitor'
+        )
+        thread.start()
+    
 
     def stop_wsjtx(self):
         """
