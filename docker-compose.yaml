@@ -101,6 +101,8 @@ services:
       - AUDIO_OUTPUT_DEVICE=${AUDIO_OUTPUT_DEVICE:-}
       - QT_QPA_PLATFORM:-xcb
       - QT_DEBUG_PLUGINS:-1
+      - XVFB_DISPLAY=":99"
+      - XVFB_READY=false
       
     volumes:
       # Single volume covers all /data subdirectories
