@@ -451,6 +451,12 @@ RUN apt-get update && \
 # SatDump repo is tried later. If it fails, the plugin
 # runs in demo mode and shows install instructions.
 # ============================================================
+RUN apt-get update && \
+    apt-get install -y curl gnupg && \
+    curl -fsSL "https://downloads.satdump.org/key.gpg" | apt-key add - && \
+    apt-get update && \
+    apt-get install -y satdump && \
+    rm -rf /var/lib/apt/lists/*
 
 # ============================================================
 # Install wsjtx
