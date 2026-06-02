@@ -466,6 +466,11 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================================
+# Install Pat for winlink
+# ============================================================
+RUN go install github.com/la5nta/pat@latest
+
+# ============================================================
 # Copy and configure entrypoint script AS ROOT
 #
 # Must happen BEFORE USER hamradio because:
