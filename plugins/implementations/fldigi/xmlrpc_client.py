@@ -68,20 +68,23 @@ class FldigiXMLRPC:
                 self.url,
                 allow_none=True
             )
-
-            # Test connection by calling fldigi.version()
+            # Test with a simple call
             version = self._server.fldigi.version()
             self._connected = True
-            print(f"[FLdigi][XMLRPC] Connected: FLdigi {version}")
             return True
 
         except ConnectionRefusedError:
+            # FLdigi is not running or XML-RPC disabled
             self._connected = False
-            print("[FLdigi][XMLRPC] Connection Refused")
             return False
+
+        except OSError as e:
+            # Network error or port not open
+            self._connected = False
+            return False
+
         except Exception as e:
             self._connected = False
-            print(f"[FLdigi][XMLRPC] Connection error: {e}")
             return False
 
     def disconnect(self):
@@ -99,7 +102,6 @@ class FldigiXMLRPC:
         """
         if not self._server:
             return False
-
         try:
             self._server.fldigi.version()
             self._connected = True
