@@ -205,57 +205,171 @@ class FldigiManager:
     # ----------------------------------------------------------
     # Display (Xvfb) management
     # ----------------------------------------------------------
-
     def _get_display(self):
         """
-        Determine the X11 display to use for FLdigi.
+        Determine X11 display for FLdigi.
 
         Priority:
-            1. Explicit config value
+            1. Configured display value
             2. DISPLAY environment variable
-            3. Running Xvfb on :99
+            3. Xvfb on :99 if already running
             4. Start Xvfb on :99
             5. Fall back to :0
 
         Returns:
             str: Display string (e.g. ':99')
         """
+        import os
+
         # 1. Explicit config
         configured = self.config.get('display', '').strip()
         if configured:
-            self._add_log(
-                f"Using configured display: {configured}"
-            )
             return configured
 
-        # 2. DISPLAY environment variable
+        # 2. Environment variable
         env_display = os.environ.get('DISPLAY', '').strip()
         if env_display:
             self._add_log(
-                f" [FLDIGI] [init] Using DISPLAY env: {env_display}"
+                f"Using DISPLAY={env_display}"
             )
             return env_display
 
-        # 3. Check if Xvfb is already running on :99
-        xvfb_display = self.config.get(
-            'xvfb_display', ':99'
-        )
+        # 3. Check if Xvfb already running on :99
+        xvfb_display = ':99'
         if self._is_xvfb_running(xvfb_display):
+            os.environ['DISPLAY'] = xvfb_display
             self._add_log(
-                f"[FLDIGI] [init] Using existing Xvfb: {xvfb_display}"
+                f"Using existing Xvfb: {xvfb_display}"
             )
             return xvfb_display
 
-        # 4. Try to start Xvfb
+        # 4. Start Xvfb
         if shutil.which('Xvfb'):
             if self._start_xvfb(xvfb_display):
                 return xvfb_display
 
-        # 5. Last resort
+        # 5. Fall back
         self._add_log(
-            "[FLDIGI] [init] No display found, trying :0", 'warning'
+            "No display found, trying :0", 'warning'
         )
         return ':0'
+
+    def _is_xvfb_running(self, display):
+        """
+        Check if Xvfb is running on the given display.
+
+        Args:
+            display: Display string e.g. ':99'
+
+        Returns:
+            bool: True if Xvfb is active
+        """
+        import os
+        num = display.replace(':', '')
+
+        # Check socket file
+        socket_path = f'/tmp/.X11-unix/X{num}'
+        if os.path.exists(socket_path):
+            return True
+
+        # Check lock file
+        lock_path = f'/tmp/.X{num}-lock'
+        if os.path.exists(lock_path):
+            try:
+                with open(lock_path, 'r') as f:
+                    pid = int(f.read().strip())
+                os.kill(pid, 0)
+                return True
+            except (ValueError, OSError):
+                try:
+                    os.remove(lock_path)
+                except Exception:
+                    pass
+        return False
+
+    def _start_xvfb(self, display=':99'):
+        """
+        Start a virtual framebuffer for FLdigi GUI.
+
+        Args:
+            display: Display number to use
+
+        Returns:
+            bool: True if Xvfb started
+        """
+        import os
+        import time
+
+        if not shutil.which('Xvfb'):
+            self._add_log(
+                "Xvfb not installed. "
+                "Add xvfb to Dockerfile.",
+                'warning'
+            )
+            return False
+
+        # Clean up stale files
+        num = display.replace(':', '')
+        for path in [
+            f'/tmp/.X{num}-lock',
+            f'/tmp/.X11-unix/X{num}'
+        ]:
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+
+        self._add_log(f"Starting Xvfb on {display}...")
+
+        try:
+            self._xvfb_process = subprocess.Popen(
+                [
+                    'Xvfb', display,
+                    '-screen', '0', '1024x768x24',
+                    '-nolisten', 'tcp',
+                    '-ac'
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+
+            for _ in range(10):
+                time.sleep(0.5)
+                if self._xvfb_process.poll() is not None:
+                    stderr = ''
+                    try:
+                        stderr = (
+                            self._xvfb_process
+                            .stderr.read(300)
+                        )
+                    except Exception:
+                        pass
+                    self._add_log(
+                        f"Xvfb exited: {stderr}",
+                        'error'
+                    )
+                    return False
+
+                if self._is_xvfb_running(display):
+                    os.environ['DISPLAY'] = display
+                    self._add_log(
+                        f"✓ Xvfb started on {display}"
+                    )
+                    return True
+
+            self._add_log(
+                "Xvfb did not start in time",
+                'warning'
+            )
+            return False
+
+        except Exception as e:
+            self._add_log(
+                f"Xvfb start error: {e}", 'error'
+            )
+            return False
 
     def _is_xvfb_running(self, display):
         """
@@ -292,27 +406,30 @@ class FldigiManager:
 
     def _start_xvfb(self, display=':99'):
         """
-        Start a virtual framebuffer X server.
+        Start a virtual framebuffer for FLdigi GUI.
 
         Args:
             display: Display number to use
 
         Returns:
-            bool: True if Xvfb started successfully
+            bool: True if Xvfb started
         """
+        import os
+        import time
+
         if not shutil.which('Xvfb'):
             self._add_log(
                 "Xvfb not installed. "
-                "Add 'xvfb' to Dockerfile.",
+                "Add xvfb to Dockerfile.",
                 'warning'
             )
             return False
 
-        # Remove stale files
-        display_num = display.replace(':', '')
+        # Clean up stale files
+        num = display.replace(':', '')
         for path in [
-            f'/tmp/.X{display_num}-lock',
-            f'/tmp/.X11-unix/X{display_num}'
+            f'/tmp/.X{num}-lock',
+            f'/tmp/.X11-unix/X{num}'
         ]:
             if os.path.exists(path):
                 try:
@@ -320,21 +437,7 @@ class FldigiManager:
                 except Exception:
                     pass
 
-        # Ensure socket directory exists
-        try:
-            os.makedirs('/tmp/.X11-unix', exist_ok=True)
-            os.chmod('/tmp/.X11-unix', 0o1777)
-        except Exception as e:
-            self._add_log(
-                f" [FLDIGI] [init] Cannot create /tmp/.X11-unix: {e}. "
-                "This directory must be created as root "
-                "in the Dockerfile.",
-                'warning'
-            )
-
-        self._add_log(
-            f"[FLDIGI] [init] Starting Xvfb on {display}..."
-        )
+        self._add_log(f"Starting Xvfb on {display}...")
 
         try:
             self._xvfb_process = subprocess.Popen(
@@ -349,7 +452,6 @@ class FldigiManager:
                 text=True
             )
 
-            # Wait for Xvfb to initialise
             for _ in range(10):
                 time.sleep(0.5)
                 if self._xvfb_process.poll() is not None:
@@ -357,7 +459,7 @@ class FldigiManager:
                     try:
                         stderr = (
                             self._xvfb_process
-                            .stderr.read(500)
+                            .stderr.read(300)
                         )
                     except Exception:
                         pass
@@ -368,21 +470,21 @@ class FldigiManager:
                     return False
 
                 if self._is_xvfb_running(display):
-                    self._add_log(
-                        f"[FLDIGI] [init] ✓ Xvfb running on {display} "
-                        f"(PID: {self._xvfb_process.pid})"
-                    )
                     os.environ['DISPLAY'] = display
+                    self._add_log(
+                        f"✓ Xvfb started on {display}"
+                    )
                     return True
 
             self._add_log(
-                "[FLDIGI] [init] Xvfb did not start in time", 'warning'
+                "Xvfb did not start in time",
+                'warning'
             )
             return False
 
         except Exception as e:
             self._add_log(
-                f"[FLDIGI] [init] Xvfb start error: {e}", 'error'
+                f"Xvfb start error: {e}", 'error'
             )
             return False
 
@@ -401,58 +503,75 @@ class FldigiManager:
     # ----------------------------------------------------------
     # Audio environment setup
     # ----------------------------------------------------------
-
     def _setup_audio_environment(self):
         """
-        Configure virtual audio for FLdigi in Docker.
+        Configure virtual audio for FLdigi.
 
-        FLdigi requires audio I/O. In Docker without real
-        hardware we use a PulseAudio null sink.
+        Creates PulseAudio null sink if not already
+        present so FLdigi can initialise its audio
+        subsystem without real hardware.
 
         Returns:
-            dict: Environment variables for FLdigi process
+            dict: Environment variables for FLdigi
         """
         env = os.environ.copy()
 
-        if not shutil.which('pactl'):
-            self._add_log(
-                "[FLDIGI] [init] pactl not available — audio may fail. "
-                "Add pulseaudio to Dockerfile.",
-                'warning'
-            )
-            return env
-
         # Check if PulseAudio is running
-        result = subprocess.run(
-            ['pactl', 'info'],
-            capture_output=True, text=True, timeout=5
-        )
-
-        if result.returncode != 0:
-            # Try to start PulseAudio
-            subprocess.run(
-                [
-                    'pulseaudio', '--start',
-                    '--exit-idle-time=-1',
-                    '--log-level=error'
-                ],
-                capture_output=True, timeout=10
-            )
-            time.sleep(1)
-
-        # Load null sink (ignore if already loaded)
-        subprocess.run(
-            [
-                'pactl', 'load-module',
-                'module-null-sink',
-                'sink_name=fldigi_null',
-                (
-                    'sink_properties='
-                    'device.description=FLdigi_Virtual_Sink'
+        pa_running = False
+        if shutil.which('pactl'):
+            try:
+                result = subprocess.run(
+                    ['pactl', 'info'],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
                 )
-            ],
-            capture_output=True, timeout=5
-        )
+                pa_running = (result.returncode == 0)
+            except Exception:
+                pass
+
+        if not pa_running:
+            # Try to start PulseAudio
+            if shutil.which('pulseaudio'):
+                try:
+                    subprocess.run(
+                        [
+                            'pulseaudio',
+                            '--start',
+                            '--exit-idle-time=-1',
+                            '--log-level=error'
+                        ],
+                        capture_output=True,
+                        timeout=10
+                    )
+                    time.sleep(1)
+                    pa_running = True
+                    self._add_log(
+                        "✓ PulseAudio started"
+                    )
+                except Exception as e:
+                    self._add_log(
+                        f"PulseAudio start failed: {e}",
+                        'warning'
+                    )
+
+        if pa_running and shutil.which('pactl'):
+            # Load null sink (ignore if already loaded)
+            try:
+                subprocess.run(
+                    [
+                        'pactl', 'load-module',
+                        'module-null-sink',
+                        'sink_name=fldigi_null',
+                        'sink_properties='
+                        'device.description='
+                        'FLdigi_Virtual_Sink'
+                    ],
+                    capture_output=True,
+                    timeout=5
+                )
+            except Exception:
+                pass
 
         # Write ALSA config if missing
         asoundrc = os.path.expanduser('~/.asoundrc')
@@ -472,11 +591,11 @@ class FldigiManager:
                     )
             except Exception as e:
                 self._add_log(
-                    f"[FLDIGI] [init] ALSA config warning: {e}", 'warning'
+                    f"ALSA config warning: {e}",
+                    'warning'
                 )
 
         env['PULSE_LATENCY_MSEC'] = '30'
-        self._add_log("[FLDIGI] [init] ✓ Audio environment configured")
         return env
 
     # ----------------------------------------------------------
@@ -508,51 +627,118 @@ class FldigiManager:
         cmd.extend(['--config-dir', self.fldigi_home])
 
         return cmd
+        
+    def connect_to_existing(self):
+        """
+        Connect to an already-running FLdigi instance.
 
+        Attempts to connect to the XML-RPC server.
+        If connection is refused, provides clear guidance
+        on how to start FLdigi.
+
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        host = self.config.get('xmlrpc_host', 'localhost')
+        port = self.config.get('xmlrpc_port', 7362)
+
+        self._add_log(
+            f"Attempting XML-RPC connection to "
+            f"{host}:{port}..."
+        )
+
+        # Check if FLdigi binary exists before trying
+        binary = shutil.which('fldigi')
+        if not binary:
+            msg = (
+                "FLdigi binary not found. "
+                "Add fldigi to Dockerfile and rebuild: "
+                "docker compose build --no-cache"
+            )
+            self._add_log(msg, 'error')
+            return False, msg
+
+        # Attempt XML-RPC connection
+        if self.rpc.connect():
+            version = self.rpc.get_version()
+            self._status['xmlrpc_connected'] = True
+            self._status['version'] = version
+            self._update_status_from_rpc()
+            self._start_monitor()
+            self._add_log(
+                f"✓ Connected to FLdigi {version}"
+            )
+            return True, f"Connected to FLdigi {version}"
+
+        # Connection refused — FLdigi is not running
+        msg = (
+            "Cannot connect to FLdigi "
+            f"({host}:{port}). "
+            "FLdigi is not running. "
+            "Click 'Start FLdigi' to launch it."
+        )
+        self._add_log(msg, 'warning')
+        self._add_log(
+            "To start manually inside the container: "
+            "DISPLAY=:99 fldigi "
+            "--xmlrpc-server-address localhost "
+            f"--xmlrpc-server-port {port} &",
+            'info'
+        )
+        return False, msg
+        
     def start_fldigi(self):
         """
-        Launch FLdigi with virtual display and audio.
+        Launch FLdigi with Xvfb virtual display and
+        PulseAudio virtual audio.
 
-        Steps:
-            1. Find and setup display (Xvfb if needed)
-            2. Configure virtual audio (PulseAudio)
-            3. Build and launch FLdigi command
-            4. Wait for XML-RPC to become available
-            5. Start log/contact monitor
+        Complete startup sequence:
+            1. Verify FLdigi binary exists
+            2. Ensure Xvfb display is running
+            3. Ensure PulseAudio null sink is available
+            4. Launch FLdigi process
+            5. Wait up to 30s for XML-RPC to respond
+            6. Start log monitor on success
 
         Returns:
             tuple: (success: bool, message: str)
         """
         with self._process_lock:
+
+            # Already running
             if self._process and \
                     self._process.poll() is None:
-                return False, "[FLdigi] [init] already running"
+                return False, "FLdigi process already running"
 
+            # Check binary
             binary = shutil.which('fldigi')
             if not binary:
-                return False, (
-                    "[FLdigi] [init] binary not found. "
+                msg = (
+                    "FLdigi binary not found. "
                     "Add fldigi to Dockerfile and rebuild."
                 )
+                self._add_log(msg, 'error')
+                return False, msg
 
             try:
-                # Step 1: Get display
+                # Step 1: Get or create display
                 display = self._get_display()
                 self._status['display'] = display
-                self._add_log(f"Display: {display}")
+                self._add_log(f"Using display: {display}")
 
-                # Step 2: Audio setup
+                # Step 2: Set up audio environment
                 env = self._setup_audio_environment()
                 env['DISPLAY'] = display
 
-                # Step 3: Build command and launch
+                # Step 3: Build command
                 cmd = self._build_fldigi_command(
                     binary, display
                 )
                 self._add_log(
-                    f"[FLdigi] [init] Launching: {' '.join(cmd)}"
+                    f"Launching: {' '.join(cmd)}"
                 )
 
+                # Step 4: Launch FLdigi
                 self._process = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
@@ -565,19 +751,25 @@ class FldigiManager:
                 self._status['process_running'] = True
                 self._status['pid'] = self._process.pid
                 self._add_log(
-                    f"[FLdigi] [init] ✓ started "
+                    f"✓ FLdigi launched "
                     f"(PID: {self._process.pid})"
                 )
 
-                # Step 4: Monitor output
+                # Step 5: Monitor output
                 self._start_output_monitor()
 
-                # Step 5: Wait for XML-RPC
+                # Step 6: Wait for XML-RPC
+                host = self.config.get(
+                    'xmlrpc_host', 'localhost'
+                )
+                port = self.config.get('xmlrpc_port', 7362)
                 timeout = self.config.get(
                     'connect_timeout', 30
                 )
+
                 self._add_log(
-                    f"[FLdigi] [init] Waiting for XML-RPC "
+                    f"Waiting for XML-RPC on "
+                    f"{host}:{port} "
                     f"(up to {timeout}s)..."
                 )
 
@@ -585,90 +777,75 @@ class FldigiManager:
                 for attempt in range(timeout // 2):
                     time.sleep(2)
 
+                    # Check process still alive
                     if self._process.poll() is not None:
                         code = self._process.poll()
-                        return False, (
-                            f"[FLdigi] [init] exited (code {code}). "
-                            "Check audio and display config."
+                        msg = (
+                            f"FLdigi exited with code "
+                            f"{code}. "
+                            "Check display (Xvfb) and "
+                            "audio (PulseAudio) are running."
                         )
+                        self._add_log(msg, 'error')
+                        self._status['process_running'] = (
+                            False
+                        )
+                        return False, msg
 
                     if self.rpc.connect():
                         connected = True
                         version = self.rpc.get_version()
-                        self._status['version'] = version
                         self._status[
                             'xmlrpc_connected'
                         ] = True
+                        self._status['version'] = version
                         self._add_log(
-                            f"[FLdigi] [init] ✓ XML-RPC connected: "
+                            f"✓ XML-RPC connected: "
                             f"FLdigi {version}"
                         )
                         self._start_monitor()
                         break
 
                     self._add_log(
-                        f"  [FLdigi] [init] Attempt {attempt + 1}: "
-                        "waiting for XML-RPC..."
+                        f"  Attempt {attempt + 1}: "
+                        f"waiting for XML-RPC..."
                     )
 
                 if not connected:
+                    # FLdigi started but XML-RPC not ready
+                    # This is not necessarily a failure —
+                    # user may need to enable XML-RPC in
+                    # FLdigi Configure menu
+                    self._add_log(
+                        "FLdigi started but XML-RPC is "
+                        "not responding. "
+                        "In FLdigi: Configure → "
+                        "XML-RPC server → enable → "
+                        f"port {port}",
+                        'warning'
+                    )
                     return (
                         True,
-                        "[FLdigi] [init] started but XML-RPC not "
-                        "responding. Check FLdigi settings: "
-                        "Configure → XML-RPC → port 7362."
+                        f"FLdigi started (PID "
+                        f"{self._process.pid}) but "
+                        f"XML-RPC not yet connected. "
+                        f"Enable XML-RPC in FLdigi: "
+                        f"Configure → XML-RPC → "
+                        f"port {port}"
                     )
 
                 return (
                     True,
-                    f"[FLdigi] [init] started and connected "
+                    f"FLdigi started and connected "
                     f"(PID: {self._process.pid})"
                 )
 
             except Exception as e:
-                msg = f"[FLdigi] [init] Failed to start: {e}"
+                msg = f"Failed to start FLdigi: {e}"
                 self._add_log(msg, 'error')
                 import traceback
                 traceback.print_exc()
                 return False, msg
-
-    def connect_to_existing(self):
-        """
-        Connect to an already-running FLdigi instance
-        via XML-RPC.
-
-        Used when FLdigi is:
-            - Started manually by the user
-            - Running on the host machine
-            - Started in a previous session
-
-        Returns:
-            tuple: (success: bool, message: str)
-        """
-        self._add_log(
-            f"[FLdigi] [init] Connecting to XML-RPC at "
-            f"{self.xmlrpc_host}:{self.xmlrpc_port}..."
-        )
-
-        if self.rpc.connect():
-            version = self.rpc.get_version()
-            self._status['xmlrpc_connected'] = True
-            self._status['version'] = version
-            self._update_status_from_rpc()
-            self._start_monitor()
-            self._add_log(
-                f"[FLdigi] [init] ✓ RPC Connected to FLdigi {version}"
-            )
-            return True, f"[FLdigi] [init] RPC Connected to FLdigi {version}"
-
-        msg = (
-            f"[FLdigi] [init] FLdigi cannot connect to XML-RPC "
-            f"({self.xmlrpc_host}:{self.xmlrpc_port}). "
-            "Start FLdigi and enable XML-RPC: "
-            "Configure → XML-RPC → port 7362."
-        )
-        self._add_log(msg, 'warning')
-        return False, msg
 
     def stop_fldigi(self, save_options=True):
         """
