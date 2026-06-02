@@ -199,57 +199,6 @@ else
     echo "  RTL-SDR will use mock device until"
     echo "  USB passthrough is configured."
 fi
-# ---------------------------------------------------------------
-# RTL-SDR detection and diagnosis
-# ---------------------------------------------------------------
-# echo -e "\n${BLUE}--- RTL-SDR Status ---${NC}"
-
-# # Check if /dev/bus/usb is accessible inside the container
-# if [ -d "/dev/bus/usb" ]; then
-#     echo "✓ /dev/bus/usb is accessible"
-
-#     # Count USB devices visible in container
-#     USB_COUNT=$(find /dev/bus/usb -type c 2>/dev/null | wc -l)
-#     echo "  USB device nodes visible: $USB_COUNT"
-
-#     # Try to find RTL-SDR using lsusb if available
-#     if command -v lsusb >/dev/null 2>&1; then
-#         RTL_USB=$(lsusb 2>/dev/null | \
-#             grep -iE "0bda:2832|0bda:2838|0bda:2839|realtek" || true)
-#         if [ -n "$RTL_USB" ]; then
-#             echo -e "${GREEN}  ✓ RTL-SDR detected via lsusb:${NC}"
-#             echo "    $RTL_USB"
-#         else
-#             echo -e "${YELLOW}  ⚠ RTL-SDR not found via lsusb${NC}"
-#         fi
-#     fi
-
-#     # Try rtl_test if available in this container
-#     if command -v rtl_test >/dev/null 2>&1; then
-#         echo "  Testing RTL-SDR with rtl_test..."
-#         RTL_TEST_OUTPUT=$(timeout 5 rtl_test -t 2>&1 || true)
-#         if echo "$RTL_TEST_OUTPUT" | \
-#                 grep -q "Found.*device\|No supported"; then
-#             if echo "$RTL_TEST_OUTPUT" | \
-#                     grep -q "Found.*device"; then
-#                 echo -e "${GREEN}  ✓ RTL-SDR responds to rtl_test${NC}"
-#             else
-#                 echo -e "${YELLOW}  ⚠ rtl_test: No RTL-SDR found${NC}"
-#                 echo "    This container uses OpenWebRX sidecar"
-#                 echo "    for SDR. RTL-SDR should be passed to"
-#                 echo "    the openwebrx container instead."
-#             fi
-#         fi
-#     fi
-
-# else
-#     echo -e "${YELLOW}  ⚠ /dev/bus/usb not accessible${NC}"
-#     echo "    RTL-SDR is handled by the openwebrx sidecar."
-#     echo "    Ensure docker-compose.yml has:"
-#     echo "    devices:"
-#     echo "      - /dev/bus/usb:/dev/bus/usb"
-#     echo "    in the openwebrx service block."
-# fi
 
 # ---------------------------------------------------------------
 # Check if kernel drivers are blocking the device
@@ -481,6 +430,39 @@ ASOUNDRC
 
 chmod 644 /home/hamradio/.asoundrc
 echo -e "${GREEN}  ✓ ALSA configured for PulseAudio${NC}"
+# =================================================================
+# Verify Qt xcb plugin is loadable
+# =================================================================
+echo -e "\n${BLUE}--- Qt Platform Check ---${NC}"
+
+if [ "$XVFB_READY" = "true" ]; then
+    # Check xcb library exists
+    XCB_LIB=$(find /usr -name "libqxcb.so" \
+        -type f 2>/dev/null | head -1)
+
+    if [ -n "$XCB_LIB" ]; then
+        echo -e "${GREEN}  ✓ Qt xcb plugin: $XCB_LIB${NC}"
+        # Set QT_PLUGIN_PATH so Qt can find it
+        QT_PLUGIN_DIR=$(dirname $(dirname "$XCB_LIB"))
+        export QT_PLUGIN_PATH="$QT_PLUGIN_DIR"
+        echo "  QT_PLUGIN_PATH=$QT_PLUGIN_PATH"
+    else
+        echo -e "${YELLOW}  ⚠ Qt xcb plugin not found${NC}"
+        echo "  Add to Dockerfile:"
+        echo "    apt-get install -y libxcb1 libxcb-icccm4 \\"
+        echo "      libxcb-image0 libxcb-keysyms1 \\"
+        echo "      libxcb-randr0 libxcb-render-util0 \\"
+        echo "      libxcb-shape0 libxcb-xkb1 \\"
+        echo "      libxkbcommon-x11-0"
+    fi
+
+    # Export for child processes
+    export QT_QPA_PLATFORM=xcb
+    export QT_ACCESSIBILITY=0
+    echo "  QT_QPA_PLATFORM=xcb"
+else
+    echo -e "${YELLOW}  ⚠ Skipping Qt check (no display)${NC}"
+fi
 
 # =================================================================
 # Start Xvfb virtual display for GUI applications
