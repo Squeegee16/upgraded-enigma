@@ -486,12 +486,26 @@ RUN apt-get update && \
 # SatDump repo is tried later. If it fails, the plugin
 # runs in demo mode and shows install instructions.
 # ============================================================
-RUN apt-get update && \
-    apt-get install -y curl gnupg && \
-    curl -fsSL "https://downloads.satdump.org/key.gpg" | apt-key add - && \
-    apt-get update && \
-    apt-get install -y satdump && \
-    rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    echo "[BUILDER] === Building Satdump ==="; \
+    cd /tmp; \
+    git clone \
+        --depth 1 \
+        git clone https://github.com/SatDump/SatDump.git; \
+    cd SatDump; \
+    mkdir build; \
+    cd build; \
+    cmake \
+        -DBUILD_GUI=ON \
+        -DCMAKE_BUILD_TYPE=Release \
+        ..; \
+    #make -j$(nproc); \
+    make -j1; \
+    make install; \
+    ldconfig; \
+    cd /; \
+    rm -rf /tmp/SatDump; \
+    echo "[BUILDER] === RTL-SDR build complete ==="
 
 # ============================================================
 # Install wsjtx
