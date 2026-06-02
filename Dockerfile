@@ -230,6 +230,41 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================================
+# Qt5 platform plugins required by WSJT-X, QSSTV, and
+# other Qt GUI applications running under Xvfb.
+#
+# Without these packages Qt cannot find the xcb platform
+# plugin and crashes with:
+#   "Could not load the Qt platform plugin xcb"
+# ============================================================
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    libxcb1 \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-randr0 \
+    libxcb-render-util0 \
+    libxcb-shape0 \
+    libxcb-shm0 \
+    libxcb-sync1 \
+    libxcb-xfixes0 \
+    libxcb-xinerama0 \
+    libxcb-xkb1 \
+    libxkbcommon-x11-0 \
+    libxkbcommon0 \
+    libgl1-mesa-glx \
+    libgl1 \
+    libglib2.0-0 \
+    libdbus-1-3 \
+    libfontconfig1 \
+    libfreetype6 \
+    libx11-6 \
+    libx11-xcb1 \
+    x11-utils \
+    xvfb \
+    && rm -rf /var/lib/apt/lists/*
+# ============================================================
 # Install FLdigi and dependencies
 # NOTE: libasound2 renamed to libasound2t64 in Bookworm
 # NOTE: rm -rf must be a SEPARATE command, not a package name
