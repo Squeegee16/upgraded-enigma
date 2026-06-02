@@ -496,8 +496,11 @@ RUN set -eux; \
     mkdir build; \
     cd build; \
     cmake \
-        -DBUILD_GUI=ON \
+        -DBUILD_GUI=OFF \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DBUILD_GUI=OFF \
+        -DPLUGIN_ALL=ON \
         ..; \
     #make -j$(nproc); \
     make -j1; \
