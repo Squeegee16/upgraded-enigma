@@ -483,13 +483,14 @@ RUN apt-get update && \
 # SatDump — dependancies
 
 RUN echo "[BUILDER] === Installing Essential Satdump Dependancies ==="
-RUN apt-get install build-essential cmake g++ pkgconf libpng-dev libjemalloc2 libjemalloc-dev libtiff-dev libcurl4-openssl-dev sqlite3 sqlite3-libsqlite3-dev
+RUN apt-get update && apt-get install -y build-essential cmake g++ pkgconf libpng-dev libjemalloc2 libjemalloc-dev libtiff-dev libcurl4-openssl-dev sqlite3 sqlite3-libsqlite3-dev libtiff-dev
 
-RUN wget https://fftw.org/fftw-3.3.11.tar.gz
-RUN tar zxvf fftw-3.3.11.tar.gz
-Run cd fftw-3.3.11
-RUN ./configure
-RUN make && make check && make install
+
+#RUN wget https://fftw.org/fftw-3.3.11.tar.gz
+#RUN tar zxvf fftw-3.3.11.tar.gz
+#Run cd fftw-3.3.11
+#RUN ./configure
+#RUN make && make check && make install
 
 # If this package is not found, use libvolk2-dev or libvolk1-dev
 RUN apt-get install libvolk-dev 
