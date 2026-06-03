@@ -152,6 +152,9 @@ class WinlinkInstaller(BaseInstaller):
     # Installation directory (user-writable, on PATH)
     INSTALL_DIR = os.path.expanduser('~/.local/bin')
 
+    # go install option
+    GO_PAT_URL = ('github.com/la5nta/pat@latest')
+
     # Required Python packages
     REQUIRED_PACKAGES = [
         'requests',
