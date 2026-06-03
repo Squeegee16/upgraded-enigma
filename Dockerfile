@@ -533,6 +533,20 @@ RUN apt-get update && \
 # Install Pat for winlink
 # ============================================================
 RUN /usr/local/go/bin/go install github.com/la5nta/pat@latest
+# ============================================================
+# Install decoder for p25 survey
+# ============================================================
+RUN set -eux; \
+    echo "[BUILDER] === Building P25 decoder ==="; \
+    cd /tmp; \
+    git clone \
+        https://github.com/boatbod/op25.git; \
+    cd op25; \
+    ./install.sh; \ 
+    ldconfig; \
+    cd /; \
+    rm -rf /tmp/op25; \
+    echo "[BUILDER] === P25 decoder build complete ==="
 
 # ============================================================
 # Copy and configure entrypoint script AS ROOT
