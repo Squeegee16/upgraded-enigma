@@ -480,25 +480,30 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends qsstv && \
     rm -rf /var/lib/apt/lists/*
 # ============================================================
-# SatDump — dependancies
+# SatDump — dependencies
+#
+# Note: libjemalloc-dev and libtiff-dev not available in Debian Bookworm
+# libvolk-dev has been replaced by libvolk2-dev
 
-RUN echo "[BUILDER] === Installing Essential Satdump Dependancies ==="
-RUN apt-get update && apt-get install -y build-essential cmake g++ pkgconf libpng-dev libjemalloc2 libjemalloc-dev libtiff-dev libcurl4-openssl-dev sqlite3 sqlite3-libsqlite3-dev libtiff-dev
-
-
-#RUN wget https://fftw.org/fftw-3.3.11.tar.gz
-#RUN tar zxvf fftw-3.3.11.tar.gz
-#Run cd fftw-3.3.11
-#RUN ./configure
-#RUN make && make check && make install
-
-# If this package is not found, use libvolk2-dev or libvolk1-dev
-RUN apt-get install -y libvolk-dev 
-RUN apt-get install -y libnng-dev
-RUN apt-get install -y zenity portaudio19-dev libzstd-dev libomp-dev
-RUN apt-get install -y libarmadillo-dev 
-# GUI libs
-# RUN apt install libdbus-1-dev libglfw3-dev  libhdf5-dev
+RUN echo "[BUILDER] === Installing Essential SatDump Dependencies ===" && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    g++ \
+    pkgconf \
+    libpng-dev \
+    libcurl4-openssl-dev \
+    sqlite3 \
+    libvolk2-dev \
+    libnng-dev \
+    zenity \
+    portaudio19-dev \
+    libzstd-dev \
+    libomp-dev \
+    libarmadillo-dev \
+    && rm -rf /var/lib/apt/lists/* 
+# GUI libs (optional — uncomment if needed)
+# RUN apt-get update && apt-get install -y --no-install-recommends libdbus-1-dev libglfw3-dev libhdf5-dev && rm -rf /var/lib/apt/lists/*
 # libraries for other SDRS
 #RUN libhackrf-dev libairspy-dev libairspyhf-dev libad9361-dev libiio-dev libbladerf-dev 
 # RUN interl based computers
@@ -510,31 +515,12 @@ RUN apt-get install -y libarmadillo-dev
 # Debian Bookworm has limited SDR packages. The official
 # SatDump repo is tried later. If it fails, the plugin
 # runs in demo mode and shows install instructions.
+# 
+# Source build commented out due to compilation issues.
+# Try repo installation first.
 # ============================================================
 
-RUN set -eux; \
-    echo "[BUILDER] === Building Satdump ==="; \
-    cd /tmp; \
-    git clone \
-        --depth 1 \
-        https://github.com/SatDump/SatDump.git; \
-    cd SatDump; \
-    mkdir build; \
-    cd build; \
-    cmake \
-        -DBUILD_GUI=OFF \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX=/usr/local \
-        -DBUILD_GUI=OFF \
-        -DPLUGIN_ALL=ON \
-        ..; \
-    #make -j$(nproc); \
-    make -j1; \
-    make install; \
-    ldconfig; \
-    cd /; \
-    rm -rf /tmp/SatDump; \
-    echo "[BUILDER] === RTL-SDR build complete ==="
+# (Source build skipped — see repo installation below)
 
 # ============================================================
 # Install wsjtx
@@ -546,7 +532,7 @@ RUN apt-get update && \
 # ============================================================
 # Install Pat for winlink
 # ============================================================
-RUN go install github.com/la5nta/pat@latest
+RUN /usr/local/go/bin/go install github.com/la5nta/pat@latest
 
 # ============================================================
 # Copy and configure entrypoint script AS ROOT
