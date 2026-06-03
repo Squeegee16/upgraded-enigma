@@ -42,6 +42,7 @@ RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     make \
+    pkgconf \
     libffi-dev \
     libssl-dev \
     python3-dev \
@@ -478,7 +479,24 @@ RUN set -eux; \
 RUN apt-get update && \
     apt-get install -y --no-install-recommends qsstv && \
     rm -rf /var/lib/apt/lists/*
+# ============================================================
+# SatDump — dependancies
 
+RUN echo "[BUILDER] === Installing Essential Satdump Dependancies ==="
+RUN apt install build-essential cmake g++ pkgconf libfftw3-dev libpng-dev \
+                 libtiff-dev libjemalloc-dev libcurl4-openssl-dev libsqlite3-dev
+# If this package is not found, use libvolk2-dev or libvolk1-dev
+RUN apt install libvolk-dev 
+RUN apt install libnng-dev
+RUN apt install zenity portaudio19-dev libzstd-dev libomp-dev
+RUN apt install libarmadillo-dev 
+# GUI libs
+# RUN apt install libdbus-1-dev libglfw3-dev  libhdf5-dev
+# libraries for other SDRS
+RUN libhackrf-dev libairspy-dev libairspyhf-dev libad9361-dev libiio-dev libbladerf-dev 
+# RUN interl based computers
+# RUN apt install ocl-icd-opencl-dev intel-opencl-icd mesa-opencl-icd 
+  
 # ============================================================
 # SatDump — Optional from repo, skipped if unavailable
 #
@@ -486,6 +504,7 @@ RUN apt-get update && \
 # SatDump repo is tried later. If it fails, the plugin
 # runs in demo mode and shows install instructions.
 # ============================================================
+
 RUN set -eux; \
     echo "[BUILDER] === Building Satdump ==="; \
     cd /tmp; \
