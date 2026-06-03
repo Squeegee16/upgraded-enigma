@@ -493,10 +493,10 @@ RUN apt-get update && apt-get install -y build-essential cmake g++ pkgconf libpn
 #RUN make && make check && make install
 
 # If this package is not found, use libvolk2-dev or libvolk1-dev
-RUN apt-get install libvolk-dev 
-RUN apt-get install libnng-dev
-RUN apt-get install zenity portaudio19-dev libzstd-dev libomp-dev
-RUN apt-get install libarmadillo-dev 
+RUN apt-get install -y libvolk-dev 
+RUN apt-get install -y libnng-dev
+RUN apt-get install -y zenity portaudio19-dev libzstd-dev libomp-dev
+RUN apt-get install -y libarmadillo-dev 
 # GUI libs
 # RUN apt install libdbus-1-dev libglfw3-dev  libhdf5-dev
 # libraries for other SDRS
