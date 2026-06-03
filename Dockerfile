@@ -483,17 +483,23 @@ RUN apt-get update && \
 # SatDump — dependancies
 
 RUN echo "[BUILDER] === Installing Essential Satdump Dependancies ==="
-RUN apt install build-essential cmake g++ pkgconf libfftw3-dev libpng-dev \
-                 libtiff-dev libjemalloc-dev libcurl4-openssl-dev libsqlite3-dev
+RUN apt-get install build-essential cmake g++ pkgconf libpng-dev libjemalloc2 libjemalloc-dev libtiff-dev libcurl4-openssl-dev sqlite3 sqlite3-libsqlite3-dev
+
+RUN wget https://fftw.org/fftw-3.3.11.tar.gz
+RUN tar zxvf fftw-3.3.11.tar.gz
+Run cd fftw-3.3.11
+RUN ./configure
+RUN make && make check && make install
+
 # If this package is not found, use libvolk2-dev or libvolk1-dev
-RUN apt install libvolk-dev 
-RUN apt install libnng-dev
-RUN apt install zenity portaudio19-dev libzstd-dev libomp-dev
-RUN apt install libarmadillo-dev 
+RUN apt-get install libvolk-dev 
+RUN apt-get install libnng-dev
+RUN apt-get install zenity portaudio19-dev libzstd-dev libomp-dev
+RUN apt-get install libarmadillo-dev 
 # GUI libs
 # RUN apt install libdbus-1-dev libglfw3-dev  libhdf5-dev
 # libraries for other SDRS
-RUN libhackrf-dev libairspy-dev libairspyhf-dev libad9361-dev libiio-dev libbladerf-dev 
+#RUN libhackrf-dev libairspy-dev libairspyhf-dev libad9361-dev libiio-dev libbladerf-dev 
 # RUN interl based computers
 # RUN apt install ocl-icd-opencl-dev intel-opencl-icd mesa-opencl-icd 
   
