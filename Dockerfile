@@ -533,6 +533,15 @@ RUN apt-get update && \
 # Install Pat for winlink
 # ============================================================
 RUN /usr/local/go/bin/go install github.com/la5nta/pat@latest
+
+# ============================================================
+# Install op25 P25 decoder dependencies
+# CppUnit required for op25 build
+# ============================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libcppunit-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # ============================================================
 # Install decoder for p25 survey
 # ============================================================
@@ -542,7 +551,8 @@ RUN set -eux; \
     git clone \
         https://github.com/boatbod/op25.git; \
     cd op25; \
-    ./install.sh; \ 
+    sed -i 's/sudo //g' install.sh; \
+    ./install.sh; \
     ldconfig; \
     cd /; \
     rm -rf /tmp/op25; \
