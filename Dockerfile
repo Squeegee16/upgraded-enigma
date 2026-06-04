@@ -536,10 +536,11 @@ RUN /usr/local/go/bin/go install github.com/la5nta/pat@latest
 
 # ============================================================
 # Install op25 P25 decoder dependencies
-# CppUnit required for op25 build
+# CppUnit and GNURadio development headers required for op25 build
 # ============================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcppunit-dev \
+    gnuradio-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
