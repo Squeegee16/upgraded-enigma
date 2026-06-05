@@ -510,17 +510,77 @@ RUN echo "[BUILDER] === Installing Essential SatDump Dependencies ===" && \
 # RUN apt install ocl-icd-opencl-dev intel-opencl-icd mesa-opencl-icd 
   
 # ============================================================
-# SatDump — Optional from repo, skipped if unavailable
+# Install SatDump from official .deb package
 #
-# Debian Bookworm has limited SDR packages. The official
-# SatDump repo is tried later. If it fails, the plugin
-# runs in demo mode and shows install instructions.
-# 
-# Source build commented out due to compilation issues.
-# Try repo installation first.
+# There is no active apt repository for SatDump.
+# The official pre-built .deb packages are downloaded
+# directly from the SatDump GitHub releases page.
+#
+# ARM64 (Raspberry Pi 4/5 / aarch64):
+#   satdump_1.2.2_arm64.deb
+#
+# AMD64 (x86_64 PC/server):
+#   satdump_1.2.2_amd64.deb
+#
+# Release page:
+#   https://github.com/SatDump/SatDump/releases
 # ============================================================
-
-# (Source build skipped — see repo installation below)
+RUN set -eux; \
+    \
+    # Detect architecture for correct .deb selection
+    ARCH=$(dpkg --print-architecture); \
+    echo "Installing SatDump 1.2.2 for ${ARCH}"; \
+    \
+    # Install curl if not already present
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates; \
+    \
+    # Select .deb URL based on architecture
+    case "${ARCH}" in \
+        arm64|aarch64) \
+            DEB_URL="https://github.com/SatDump/SatDump/releases/download/1.2.2/satdump_1.2.2_arm64.deb" \
+            ;; \
+        amd64|x86_64) \
+            DEB_URL="https://github.com/SatDump/SatDump/releases/download/1.2.2/satdump_1.2.2_amd64.deb" \
+            ;; \
+        *) \
+            echo "WARNING: No SatDump .deb for ${ARCH}"; \
+            echo "SatDump plugin will run in demo mode"; \
+            DEB_URL="" \
+            ;; \
+    esac; \
+    \
+    # Download and install if URL is available
+    if [ -n "${DEB_URL}" ]; then \
+        echo "Downloading: ${DEB_URL}"; \
+        curl -fsSL \
+            --retry 3 \
+            --retry-delay 5 \
+            -o /tmp/satdump.deb \
+            "${DEB_URL}"; \
+        \
+        # Verify download is a valid .deb
+        file /tmp/satdump.deb | grep -q "Debian" || \
+            (echo "ERROR: Invalid .deb file downloaded" && exit 1); \
+        \
+        # Install the .deb package
+        echo "Installing satdump.deb..."; \
+        dpkg -i /tmp/satdump.deb \
+            || apt-get install -f -y; \
+        \
+        # Verify installation
+        which satdump && \
+            echo "✓ SatDump installed: $(satdump --version 2>&1 | head -1)" \
+            || echo "WARNING: satdump binary not in PATH"; \
+        \
+        # Clean up
+        rm -f /tmp/satdump.deb; \
+    fi; \
+    \
+    rm -rf /var/lib/apt/lists/*; \
+    echo "=== SatDump setup complete ==="
 
 # ============================================================
 # Install wsjtx
