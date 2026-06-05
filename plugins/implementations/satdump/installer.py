@@ -3,34 +3,53 @@ SatDump Installer
 ==================
 Handles first-run installation of SatDump and dependencies.
 
-Docker Deployment Notes:
-    SatDump requires root to install. In Docker the runtime
-    user (hamradio, UID 1000) cannot run apt-get or sudo.
+Installation Method:
+    Downloads and installs the official SatDump .deb package
+    directly from the SatDump GitHub releases page.
 
-    SatDump MUST be installed in the Dockerfile at build time.
-    Add to Dockerfile before USER hamradio:
+    This approach is used because:
+        - There is no active apt repository for SatDump
+        - The official .deb packages are pre-built and tested
+        - .deb installation handles all system dependencies
+          via dpkg/apt dependency resolution
 
-        # Add SatDump apt repository and install
-        RUN apt-get update && \\
-            curl -fsSL https://downloads.satdump.org/key.gpg \\
-                | apt-key add - && \\
-            echo "deb https://downloads.satdump.org/apt \\
-                stable main" \\
-                > /etc/apt/sources.list.d/satdump.list && \\
-            apt-get update && \\
-            apt-get install -y satdump && \\
-            rm -rf /var/lib/apt/lists/*
+    Package Source:
+        https://github.com/SatDump/SatDump/releases/
 
-    This installer detects Docker and logs clear instructions
-    rather than attempting a doomed runtime install.
+    ARM64 (Raspberry Pi 4/5):
+        satdump_1.2.2_arm64.deb
 
-SatDump Installation Methods (outside Docker):
-    1. apt-get via official PPA (Debian/Ubuntu)
-    2. Flatpak from Flathub
-    3. AUR via yay (Arch Linux)
-    4. Build from source (GitHub fallback)
+    AMD64 (x86_64 PC/server):
+        satdump_1.2.2_amd64.deb
 
-Source: https://github.com/SatDump/SatDump
+    .deb Installation Process:
+        1. Detect system architecture (arm64 / amd64)
+        2. Download .deb from GitHub releases
+        3. Install with dpkg -i
+        4. Fix any missing dependencies with apt-get -f install
+        5. Verify satdump binary is executable
+
+Docker Notes:
+    In Docker as non-root (hamradio user), dpkg cannot
+    be run directly. The installer detects this and logs
+    clear Dockerfile instructions instead.
+
+    Add to Dockerfile (ARM64 / Raspberry Pi):
+        RUN curl -fsSL -o /tmp/satdump.deb \\
+            https://github.com/SatDump/SatDump/releases/download/1.2.2/satdump_1.2.2_arm64.deb && \\
+            dpkg -i /tmp/satdump.deb || \\
+            apt-get install -f -y && \\
+            rm /tmp/satdump.deb
+
+    Add to Dockerfile (AMD64):
+        RUN curl -fsSL -o /tmp/satdump.deb \\
+            https://github.com/SatDump/SatDump/releases/download/1.2.2/satdump_1.2.2_amd64.deb && \\
+            dpkg -i /tmp/satdump.deb || \\
+            apt-get install -f -y && \\
+            rm /tmp/satdump.deb
+
+Author: Ham Radio App Team
+Version: 1.0.0
 """
 
 import os
@@ -39,7 +58,9 @@ import json
 import shutil
 import platform
 import subprocess
-import traceback
+import urllib.request
+import tempfile
+from pathlib import Path
 from datetime import datetime
 
 try:
@@ -61,7 +82,10 @@ except ImportError:
             )
             self._sudo = (
                 []
-                if (self.is_root or not self.sudo_available)
+                if (
+                    self.is_root or
+                    not self.sudo_available
+                )
                 else ['sudo']
             )
             self.in_docker = (
@@ -83,10 +107,7 @@ except ImportError:
                     timeout=120
                 )
                 return True
-            except Exception as e:
-                print(
-                    f"[SatDump][Install] PIP error: {e}"
-                )
+            except Exception:
                 return False
 
         def install_python_packages(self, packages):
@@ -102,17 +123,20 @@ except ImportError:
                 'timestamp': datetime.utcnow().isoformat(),
                 'in_docker': self.in_docker,
             }
-            if extra_data and isinstance(extra_data, dict):
+            if extra_data and isinstance(
+                extra_data, dict
+            ):
                 data.update(extra_data)
             try:
-                marker_dir = os.path.dirname(path)
-                if marker_dir:
-                    os.makedirs(marker_dir, exist_ok=True)
+                os.makedirs(
+                    os.path.dirname(path),
+                    exist_ok=True
+                )
                 with open(path, 'w') as f:
                     json.dump(data, f, indent=2)
             except Exception as e:
                 print(
-                    f"[SatDump][Install] Marker write error: {e}"
+                    f"[SatDump] Marker error: {e}"
                 )
 
         def read_marker(self, path):
@@ -125,13 +149,56 @@ except ImportError:
                 return {}
 
 
+# ---------------------------------------------------------------
+# SatDump release configuration
+# Update SATDUMP_VERSION and URLs when a new release is
+# available on https://github.com/SatDump/SatDump/releases
+# ---------------------------------------------------------------
+
+SATDUMP_VERSION = '1.2.2'
+
+SATDUMP_RELEASE_BASE = (
+    f'https://github.com/SatDump/SatDump/releases/'
+    f'download/{SATDUMP_VERSION}/'
+)
+
+# Architecture-specific .deb package URLs
+SATDUMP_DEB_URLS = {
+    'aarch64': (
+        f'{SATDUMP_RELEASE_BASE}'
+        f'satdump_{SATDUMP_VERSION}_arm64.deb'
+    ),
+    'arm64': (
+        f'{SATDUMP_RELEASE_BASE}'
+        f'satdump_{SATDUMP_VERSION}_arm64.deb'
+    ),
+    'x86_64': (
+        f'{SATDUMP_RELEASE_BASE}'
+        f'satdump_{SATDUMP_VERSION}_amd64.deb'
+    ),
+    'amd64': (
+        f'{SATDUMP_RELEASE_BASE}'
+        f'satdump_{SATDUMP_VERSION}_amd64.deb'
+    ),
+}
+
+# Fallback: GitHub API URL for fetching latest release info
+SATDUMP_RELEASES_API = (
+    'https://api.github.com/repos/'
+    'SatDump/SatDump/releases/latest'
+)
+
+
 class SatDumpInstaller(BaseInstaller):
     """
-    Manages SatDump installation and verification.
+    Manages SatDump installation via official .deb package.
 
-    Extends BaseInstaller for Docker-aware handling.
-    In Docker as non-root, system installs are skipped
-    with clear Dockerfile instructions logged.
+    Downloads the pre-built .deb from the SatDump GitHub
+    releases page and installs it with dpkg. Handles
+    missing dependencies automatically using apt-get -f.
+
+    Falls back gracefully in Docker as non-root with
+    clear Dockerfile instructions for the operator.
     """
 
     # Installation state marker
@@ -144,16 +211,7 @@ class SatDumpInstaller(BaseInstaller):
     SATDUMP_BINARY = 'satdump'
     SATDUMP_UI_BINARY = 'satdump-ui'
 
-    # SatDump GitHub repository
-    SATDUMP_REPO = 'https://github.com/SatDump/SatDump.git'
-
-    # Official apt repository
-    SATDUMP_APT_REPO = 'https://downloads.satdump.org'
-
-    # Flathub application ID
-    FLATPAK_APP_ID = 'org.satdump.SatDump'
-
-    # Required Python packages
+    # Python packages required by the plugin
     REQUIRED_PACKAGES = [
         'requests',
         'psutil',
@@ -161,80 +219,46 @@ class SatDumpInstaller(BaseInstaller):
         'watchdog',
     ]
 
-    # Optional Python packages
+    # Optional packages for satellite tracking
     OPTIONAL_PACKAGES = [
         'ephem',
         'pyorbital',
     ]
 
-    # Build dependencies for source compilation
-    BUILD_DEPS_APT = [
-        'build-essential',
-        'cmake',
-        'git',
-        'pkgconf',
-        'libfftw3-dev',
-        'libnng-dev',
-        'libjpeg-dev',
-        'libpng-dev',
-        'libtiff-dev',
-        'libglfw3-dev',
-        'libvolk-dev',
-        'libcurl4-openssl-dev',
-        'libhdf5-dev',
-        'libzstd-dev',
-        'librtlsdr-dev',
-        'libairspy-dev',
-        'libhackrf-dev',
-    ]
-
     def __init__(self):
-        """
-        Initialise installer with environment detection.
-        """
+        """Initialise installer with environment detection."""
         super().__init__()
 
+        self._arch = platform.machine().lower()
         self._package_manager = (
             self._detect_package_manager()
         )
-        self._arch = platform.machine()
-        self.satdump_binary_path = shutil.which(
-            self.SATDUMP_BINARY
-        )
 
         print(
-            f"[SatDump][Install] Installer init | "
+            f"[SatDump] Installer init | "
             f"Docker: {self.in_docker} | "
             f"Root: {self.is_root} | "
-            f"sudo: {self.sudo_available} | "
-            f"pkg mgr: {self._package_manager or 'none'}"
+            f"Arch: {self._arch} | "
+            f"Version: {SATDUMP_VERSION}"
         )
 
     def _detect_package_manager(self):
-        """
-        Detect available system package manager.
-
-        Returns:
-            str: Package manager name or None
-        """
-        for mgr in ['apt-get', 'dnf', 'yum', 'pacman']:
+        """Detect available package manager."""
+        for mgr in ['apt-get', 'dpkg']:
             if shutil.which(mgr):
                 return mgr
         return None
 
-    def _run_system_command(self, cmd, timeout=300):
+    def _run_command(self, cmd, timeout=300):
         """
         Run a system command safely.
 
-        Handles FileNotFoundError (missing sudo or binary)
-        without raising an unhandled exception.
-
         Args:
-            cmd: Command list to execute
+            cmd: Command list
             timeout: Maximum seconds to wait
 
         Returns:
-            tuple: (success: bool, stdout: str, stderr: str)
+            tuple: (success, stdout, stderr)
         """
         try:
             result = subprocess.run(
@@ -249,12 +273,12 @@ class SatDumpInstaller(BaseInstaller):
                 result.stderr or ''
             )
         except FileNotFoundError as e:
+            return False, '', f"Not found: {cmd[0]}: {e}"
+        except subprocess.TimeoutExpired:
             return (
                 False, '',
-                f"[SatDump][Install] File not found: {cmd[0]} — {e}"
+                f"Timed out after {timeout}s"
             )
-        except subprocess.TimeoutExpired:
-            return False, '', f"[SatDump][Install] Timed out after {timeout}s"
         except Exception as e:
             return False, '', str(e)
 
@@ -267,343 +291,278 @@ class SatDumpInstaller(BaseInstaller):
         """
         if not os.path.exists(self.INSTALL_MARKER):
             return False
+
         return (
-            shutil.which(self.SATDUMP_BINARY) is not None or
+            shutil.which(self.SATDUMP_BINARY) is not None
+            or
             shutil.which(self.SATDUMP_UI_BINARY) is not None
         )
 
-    def install_python_packages(self):
+    def get_deb_url(self):
         """
-        Install required and optional Python packages.
+        Get the .deb download URL for this architecture.
+
+        Normalises architecture names to match the
+        SatDump release naming convention.
+
+        Returns:
+            str: Download URL or None if unsupported
+        """
+        arch = self._arch.lower()
+
+        # Map architecture aliases
+        arch_map = {
+            'aarch64': 'aarch64',
+            'arm64':   'aarch64',
+            'armv8':   'aarch64',
+            'x86_64':  'x86_64',
+            'amd64':   'x86_64',
+            'x64':     'x86_64',
+        }
+
+        normalised = arch_map.get(arch)
+
+        if not normalised:
+            print(
+                f"[SatDump] WARNING: Architecture "
+                f"'{arch}' may not have a pre-built "
+                f"SatDump .deb package."
+            )
+            return None
+
+        url = SATDUMP_DEB_URLS.get(normalised)
+        if url:
+            print(
+                f"[SatDump] .deb URL for {arch}: {url}"
+            )
+        return url
+
+    def _download_deb(self, url, dest_path):
+        """
+        Download the SatDump .deb package.
+
+        Shows download progress and verifies the
+        downloaded file is a valid .deb archive.
+
+        Args:
+            url: Download URL
+            dest_path: Destination file path
+
+        Returns:
+            bool: True if downloaded successfully
+        """
+        print(
+            f"[SatDump] Downloading SatDump {SATDUMP_VERSION}..."
+        )
+        print(f"[SatDump] URL: {url}")
+
+        try:
+            def progress_hook(block_num, block_size,
+                               total_size):
+                """Show download progress."""
+                if total_size > 0:
+                    downloaded = block_num * block_size
+                    pct = min(
+                        100,
+                        int(downloaded * 100 / total_size)
+                    )
+                    if pct % 20 == 0 or pct == 100:
+                        size_mb = total_size / 1024 / 1024
+                        dl_mb = downloaded / 1024 / 1024
+                        print(
+                            f"[SatDump]   {pct}% "
+                            f"({dl_mb:.1f}/{size_mb:.1f} MB)"
+                        )
+
+            # Use requests if available for better
+            # error handling and progress reporting
+            try:
+                import requests
+                print(f"[SatDump] Downloading via requests...")
+
+                response = requests.get(
+                    url,
+                    stream=True,
+                    timeout=120,
+                    headers={
+                        'User-Agent': 'HamRadioApp/1.0'
+                    }
+                )
+                response.raise_for_status()
+
+                total = int(
+                    response.headers.get(
+                        'content-length', 0
+                    )
+                )
+                downloaded = 0
+
+                with open(dest_path, 'wb') as f:
+                    for chunk in response.iter_content(
+                        chunk_size=65536
+                    ):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if total > 0:
+                                pct = int(
+                                    downloaded * 100 / total
+                                )
+                                if pct % 25 == 0:
+                                    print(
+                                        f"[SatDump]   "
+                                        f"{pct}% "
+                                        f"({downloaded//1024//1024}"
+                                        f"/"
+                                        f"{total//1024//1024}"
+                                        f" MB)"
+                                    )
+
+            except ImportError:
+                # Fall back to urllib
+                print(
+                    "[SatDump] Downloading via urllib..."
+                )
+                req = urllib.request.Request(
+                    url,
+                    headers={
+                        'User-Agent': 'HamRadioApp/1.0'
+                    }
+                )
+                urllib.request.urlretrieve(
+                    url,
+                    dest_path,
+                    reporthook=progress_hook
+                )
+
+            # Verify download
+            if not os.path.exists(dest_path):
+                print("[SatDump] ERROR: Download failed")
+                return False
+
+            size = os.path.getsize(dest_path)
+            size_mb = size / 1024 / 1024
+            print(
+                f"[SatDump] ✓ Downloaded {size_mb:.1f} MB"
+            )
+
+            # Basic sanity check — .deb files start with
+            # the ar archive magic bytes '!<arch>'
+            with open(dest_path, 'rb') as f:
+                magic = f.read(7)
+            if magic != b'!<arch>':
+                print(
+                    f"[SatDump] ERROR: Downloaded file "
+                    f"does not appear to be a valid "
+                    f".deb archive (magic: {magic})"
+                )
+                return False
+
+            print("[SatDump] ✓ .deb file verified")
+            return True
+
+        except Exception as e:
+            print(f"[SatDump] Download error: {e}")
+            return False
+
+    def _install_deb(self, deb_path):
+        """
+        Install the SatDump .deb package.
+
+        Runs:
+            dpkg -i satdump.deb
+            apt-get install -f -y   (fix dependencies)
+
+        Must run as root or with sudo.
+
+        Args:
+            deb_path: Path to the .deb file
+
+        Returns:
+            bool: True if installation succeeded
+        """
+        print(f"[SatDump] Installing: {deb_path}")
+
+        if not shutil.which('dpkg'):
+            print("[SatDump] ERROR: dpkg not found")
+            return False
+
+        # Step 1: dpkg -i (install the package)
+        # May fail due to missing dependencies —
+        # that is OK, we fix them in step 2
+        print("[SatDump] Step 1: dpkg -i ...")
+        ok, stdout, stderr = self._run_command(
+            self._sudo + ['dpkg', '-i', deb_path],
+            timeout=180
+        )
+
+        if ok:
+            print("[SatDump] ✓ dpkg install succeeded")
+        else:
+            # dpkg may fail if dependencies are missing.
+            # apt-get -f install will fix this.
+            print(
+                f"[SatDump] dpkg reported issues "
+                f"(fixing with apt-get -f)..."
+            )
+            if stderr:
+                print(
+                    f"[SatDump] dpkg stderr: "
+                    f"{stderr[:300]}"
+                )
+
+        # Step 2: apt-get install -f (fix dependencies)
+        # This resolves any missing .deb dependencies
+        if shutil.which('apt-get'):
+            print(
+                "[SatDump] Step 2: "
+                "apt-get install -f -y ..."
+            )
+            fix_ok, fix_stdout, fix_stderr = (
+                self._run_command(
+                    self._sudo + [
+                        'apt-get', 'install', '-f', '-y'
+                    ],
+                    timeout=300
+                )
+            )
+            if fix_ok:
+                print(
+                    "[SatDump] ✓ Dependencies resolved"
+                )
+            else:
+                print(
+                    f"[SatDump] WARNING: "
+                    f"Dependency fix failed: "
+                    f"{fix_stderr[:200]}"
+                )
+                # Non-fatal — satdump may still work
+
+        return True
+
+    def install_python_packages_all(self):
+        """
+        Install required Python packages.
 
         Returns:
             bool: True if required packages available
         """
-        print("[SatDump][Install] Checking Python packages...")
+        print("[SatDump] Checking Python packages...")
 
-        available, failed = super().install_python_packages(
+        available, failed = self.install_python_packages(
             self.REQUIRED_PACKAGES
         )
 
-        # Optional packages — non-fatal
         for pkg in self.OPTIONAL_PACKAGES:
             self.pip_install(pkg)
 
         if failed and self.in_docker:
             print(
-                f"[SatDump][Install] INFO: Add to requirements.txt: "
+                f"[SatDump] Add to requirements.txt: "
                 f"{', '.join(failed)}"
             )
 
         return len(failed) == 0
-
-    def _install_via_apt_ppa(self):
-        """
-        Install SatDump via official apt PPA.
-
-        Uses self._sudo prefix for all system commands.
-        In Docker as non-root, returns False immediately.
-
-        Returns:
-            bool: True if installation successful
-        """
-        print("[SatDump][Install] Installing via apt PPA...")
-
-        if not shutil.which('apt-get'):
-            print("[SatDump][Install] apt-get not available")
-            return False
-
-        if self.in_docker and not self.is_root:
-            print(
-                "[SatDump][Install] INFO: Cannot apt-get in Docker "
-                "as non-root. Add to Dockerfile:"
-            )
-            print(
-                "[SatDump][Install] INFO:   RUN curl -fsSL "
-                "https://downloads.satdump.org/key.gpg"
-                " | apt-key add - && \\"
-            )
-            print(
-                '[SatDump][Install] INFO:       echo "deb '
-                'https://downloads.satdump.org/apt '
-                'stable main" '
-                '> /etc/apt/sources.list.d/satdump.list'
-                ' && \\'
-            )
-            print(
-                "[SatDump][Install] INFO:       apt-get update && "
-                "apt-get install -y satdump"
-            )
-            return False
-
-        # Install prerequisites
-        ok, _, stderr = self._run_system_command(
-            self._sudo + [
-                'apt-get', 'install', '-y',
-                'curl', 'apt-transport-https', 'gnupg'
-            ],
-            timeout=120
-        )
-        if not ok:
-            print(
-                f"[SatDump][Install] Prerequisites failed: "
-                f"{stderr[:100]}"
-            )
-            return False
-
-        # Add GPG key
-        print("[SatDump][Install] Adding repository key...")
-        key_ok, key_data, _ = self._run_system_command(
-            [
-                'curl', '-fsSL',
-                f'{self.SATDUMP_APT_REPO}/key.gpg'
-            ],
-            timeout=30
-        )
-
-        if key_ok and key_data:
-            try:
-                key_proc = subprocess.Popen(
-                    self._sudo + ['apt-key', 'add', '-'],
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-                key_proc.communicate(
-                    input=key_data.encode(),
-                    timeout=15
-                )
-            except Exception as e:
-                print(
-                    f"[SatDump][Install] GPG key warning: {e}"
-                )
-
-        # Detect distro
-        ok, distro, _ = self._run_system_command(
-            ['lsb_release', '-cs'],
-            timeout=5
-        )
-        distro_name = distro.strip() if ok else 'bullseye'
-
-        # Add repository
-        print(
-            f"[SatDump][Install] Adding repository "
-            f"for {distro_name}..."
-        )
-        repo_line = (
-            f"deb [arch=amd64] "
-            f"{self.SATDUMP_APT_REPO}/apt "
-            f"{distro_name} main\n"
-        )
-
-        try:
-            list_file = '/tmp/satdump.list'
-            with open(list_file, 'w') as f:
-                f.write(repo_line)
-            self._run_system_command(
-                self._sudo + [
-                    'cp', list_file,
-                    '/etc/apt/sources.list.d/satdump.list'
-                ],
-                timeout=10
-            )
-        except Exception as e:
-            print(
-                f"[SatDump][Install] Repo add warning: {e}"
-            )
-
-        # Update and install
-        ok, _, stderr = self._run_system_command(
-            self._sudo + ['apt-get', 'update', '-q'],
-            timeout=120
-        )
-        if not ok:
-            print(
-                f"[SatDump][Install] Update failed: {stderr[:100]}"
-            )
-            return False
-
-        ok, _, stderr = self._run_system_command(
-            self._sudo + [
-                'apt-get', 'install', '-y', 'satdump'
-            ],
-            timeout=300
-        )
-
-        if ok:
-            print("[SatDump][Install] ✓ Installed via apt PPA")
-            return True
-
-        print(
-            f"[SatDump][Install] apt install failed: {stderr[:200]}"
-        )
-        return False
-
-    def _install_via_flatpak(self):
-        """
-        Install SatDump via Flatpak from Flathub.
-
-        Returns:
-            bool: True if installation successful
-        """
-        print("[SatDump][Install] Installing via Flatpak...")
-
-        if not shutil.which('flatpak'):
-            print("[SatDump][Install] Flatpak not available")
-            return self._build_from_source()
-
-        # Add Flathub
-        self._run_system_command(
-            [
-                'flatpak', 'remote-add',
-                '--if-not-exists', 'flathub',
-                'https://flathub.org/repo/flathub.flatpakrepo'
-            ],
-            timeout=30
-        )
-
-        ok, _, stderr = self._run_system_command(
-            [
-                'flatpak', 'install',
-                '-y', 'flathub', self.FLATPAK_APP_ID
-            ],
-            timeout=300
-        )
-
-        if not ok:
-            print(
-                f"[SatDump][Install] Flatpak failed: {stderr[:200]}"
-            )
-            return self._build_from_source()
-
-        # Create wrapper
-        wrapper_dir = os.path.expanduser('~/.local/bin')
-        os.makedirs(wrapper_dir, exist_ok=True)
-        wrapper_path = os.path.join(wrapper_dir, 'satdump')
-
-        try:
-            with open(wrapper_path, 'w') as f:
-                f.write(
-                    '#!/bin/bash\n'
-                    f'exec flatpak run '
-                    f'{self.FLATPAK_APP_ID} "$@"\n'
-                )
-            os.chmod(wrapper_path, 0o755)
-        except Exception as e:
-            print(
-                f"[SatDump][Install] Wrapper warning: {e}"
-            )
-
-        print("[SatDump][Install] ✓ Installed via Flatpak")
-        return True
-
-    def _build_from_source(self):
-        """
-        Build SatDump from GitHub source.
-
-        Not available in Docker as non-root.
-
-        Returns:
-            bool: True if build successful
-        """
-        if self.in_docker and not self.is_root:
-            print(
-                "[SatDump][Install] INFO: Cannot build from source "
-                "in Docker as non-root."
-            )
-            return False
-
-        print("[SatDump] Building from source...")
-        build_dir = os.path.join(
-            os.path.expanduser('~'), '_satdump_build'
-        )
-
-        try:
-            if shutil.which('apt-get') and \
-                    (self.is_root or self.sudo_available):
-                self._run_system_command(
-                    self._sudo + [
-                        'apt-get', 'install', '-y'
-                    ] + self.BUILD_DEPS_APT,
-                    timeout=300
-                )
-
-            if os.path.exists(build_dir):
-                shutil.rmtree(build_dir)
-
-            ok, _, stderr = self._run_system_command(
-                [
-                    'git', 'clone', '--depth', '1',
-                    '--recurse-submodules',
-                    self.SATDUMP_REPO, build_dir
-                ],
-                timeout=180
-            )
-            if not ok:
-                print(
-                    f"[SatDump][Install] Clone failed: {stderr}"
-                )
-                return False
-
-            cmake_dir = os.path.join(build_dir, 'build')
-            os.makedirs(cmake_dir, exist_ok=True)
-
-            ok, _, stderr = self._run_system_command(
-                [
-                    'cmake', '..',
-                    '-DCMAKE_BUILD_TYPE=Release',
-                    '-DCMAKE_INSTALL_PREFIX=/usr/local',
-                    '-DBUILD_GUI=OFF',
-                    '-DPLUGIN_ALL=ON',
-                ],
-                timeout=300
-            )
-            if not ok:
-                print(
-                    f"[SatDump][Install] cmake failed: {stderr[:200]}"
-                )
-                return False
-
-            cpu_count = os.cpu_count() or 2
-            ok, _, stderr = self._run_system_command(
-                ['make', f'-j{cpu_count}'],
-                timeout=1800
-            )
-            if not ok:
-                print(
-                    f"[SatDump][Install] make failed: {stderr[:200]}"
-                )
-                return False
-
-            ok, _, stderr = self._run_system_command(
-                self._sudo + ['make', 'install'],
-                timeout=120
-            )
-            if not ok:
-                print(
-                    f"[SatDump][Install] install failed: "
-                    f"{stderr[:200]}"
-                )
-                return False
-
-            self._run_system_command(
-                self._sudo + ['ldconfig'],
-                timeout=30
-            )
-
-            print("[SatDump][Install] ✓ Built from source")
-            return True
-
-        except Exception as e:
-            print(f"[SatDump][Install] Source build error: {e}")
-            traceback.print_exc()
-            return False
-
-        finally:
-            if os.path.exists(build_dir):
-                shutil.rmtree(
-                    build_dir, ignore_errors=True
-                )
 
     def get_version(self):
         """
@@ -615,6 +574,7 @@ class SatDumpInstaller(BaseInstaller):
         binary = shutil.which(self.SATDUMP_BINARY)
         if not binary:
             return None
+
         try:
             result = subprocess.run(
                 [binary, '--version'],
@@ -622,14 +582,20 @@ class SatDumpInstaller(BaseInstaller):
                 text=True,
                 timeout=10
             )
-            output = (result.stdout + result.stderr).strip()
-            for line in output.splitlines():
-                if 'satdump' in line.lower() or \
-                        line.strip().startswith(('0.', '1.')):
-                    return line.strip()[:50]
-            return output[:50] if output else 'installed'
+            output = (
+                result.stdout + result.stderr
+            ).strip()
+            if output:
+                for line in output.splitlines():
+                    if 'satdump' in line.lower() or \
+                            any(
+                                c.isdigit()
+                                for c in line
+                            ):
+                        return line.strip()[:50]
+            return f'installed (v{SATDUMP_VERSION})'
         except Exception:
-            return 'installed'
+            return f'installed (v{SATDUMP_VERSION})'
 
     def write_install_marker(self, method, version=None):
         """Write installation marker."""
@@ -637,10 +603,13 @@ class SatDumpInstaller(BaseInstaller):
             self.INSTALL_MARKER,
             extra_data={
                 'method': method,
-                'version': version,
-                'binary': shutil.which(self.SATDUMP_BINARY),
+                'version': version or SATDUMP_VERSION,
+                'satdump_version': SATDUMP_VERSION,
                 'platform': platform.platform(),
                 'arch': self._arch,
+                'binary': shutil.which(
+                    self.SATDUMP_BINARY
+                ),
             }
         )
 
@@ -648,133 +617,257 @@ class SatDumpInstaller(BaseInstaller):
         """Read installation marker."""
         return self.read_marker(self.INSTALL_MARKER)
 
+    def _log_dockerfile_instructions(self):
+        """
+        Log Dockerfile instructions for adding SatDump
+        to the Docker image at build time.
+
+        This is called when we are in Docker as non-root
+        and cannot install system packages at runtime.
+        """
+        arch = self._arch
+        deb_url = self.get_deb_url() or (
+            f"{SATDUMP_RELEASE_BASE}"
+            f"satdump_{SATDUMP_VERSION}_arm64.deb"
+        )
+
+        print(
+            f"\n[SatDump] ======================================"
+        )
+        print("[SatDump] DOCKER INSTALLATION REQUIRED")
+        print(
+            "[SatDump] ======================================"
+        )
+        print(
+            f"[SatDump] Architecture detected: {arch}"
+        )
+        print(
+            "[SatDump] Add the following to your "
+            "Dockerfile and rebuild:"
+        )
+        print()
+        print(
+            "[SatDump]   # Install SatDump from "
+            f"official .deb (v{SATDUMP_VERSION})"
+        )
+        print(
+            "[SatDump]   RUN set -eux; \\"
+        )
+        print(
+            "[SatDump]       apt-get update; \\"
+        )
+        print(
+            "[SatDump]       apt-get install -y \\"
+        )
+        print(
+            "[SatDump]           --no-install-recommends \\"
+        )
+        print(
+            "[SatDump]           curl ca-certificates; \\"
+        )
+        print(
+            f"[SatDump]       curl -fsSL \\"
+        )
+        print(
+            f"[SatDump]           -o /tmp/satdump.deb \\"
+        )
+        print(
+            f"[SatDump]           '{deb_url}'; \\"
+        )
+        print(
+            "[SatDump]       dpkg -i /tmp/satdump.deb \\"
+        )
+        print(
+            "[SatDump]           || apt-get install "
+            "-f -y; \\"
+        )
+        print(
+            "[SatDump]       rm /tmp/satdump.deb; \\"
+        )
+        print(
+            "[SatDump]       rm -rf /var/lib/apt/lists/*"
+        )
+        print()
+        print(
+            "[SatDump]   Then rebuild:"
+        )
+        print(
+            "[SatDump]   docker compose build --no-cache"
+        )
+        print(
+            "[SatDump] ======================================"
+        )
+        print()
+
+        # Also log the direct download URL for reference
+        print(
+            f"[SatDump] Direct .deb URL:"
+        )
+        print(f"[SatDump]   {deb_url}")
+        print()
+
+        # Log all available .deb URLs
+        print("[SatDump] All available .deb packages:")
+        for arch_name, url in SATDUMP_DEB_URLS.items():
+            if arch_name in ('aarch64', 'x86_64'):
+                print(f"[SatDump]   {arch_name}: {url}")
+
     def run(self):
         """
         Execute the complete installation process.
 
-        In Docker as non-root: logs Dockerfile
-        instructions and returns False.
-
-        Outside Docker: tries apt PPA, Flatpak,
-        then source build in order.
+        Installation strategy:
+            1. Check if already installed (skip)
+            2. Check if binary already in PATH (mark)
+            3. Install Python packages
+            4. If in Docker as non-root:
+               → Log Dockerfile instructions
+               → Return False (cannot install at runtime)
+            5. If root or has sudo:
+               → Get architecture-specific .deb URL
+               → Download .deb to temp directory
+               → Install with dpkg + apt-get -f
+               → Verify binary is present
+               → Write installation marker
 
         Returns:
             bool: True if installed or already present
         """
+        # Already installed
         if self.is_installed():
-            print("[SatDump][Install]✓ Already installed")
+            print("[SatDump] ✓ Already installed")
             return True
 
+        # Binary in PATH but no marker
         if shutil.which(self.SATDUMP_BINARY):
             version = self.get_version()
-            self.write_install_marker('existing', version)
-            print("[SatDump][Install] ✓ Found in PATH")
+            self.write_install_marker(
+                'existing', version
+            )
+            print(
+                f"[SatDump] ✓ Found in PATH: "
+                f"{shutil.which(self.SATDUMP_BINARY)}"
+            )
             return True
 
         print("[SatDump] ==========================================")
-        print("[SatDump] Starting first-run installation")
+        print("[SatDump] Installing SatDump from .deb package")
+        print(f"[SatDump] Version: {SATDUMP_VERSION}")
         print("[SatDump] ==========================================")
 
-        # Docker non-root: cannot install system packages
+        # Step 1: Python packages (non-fatal)
+        print("\n[SatDump] Step 1: Python packages...")
+        self.install_python_packages_all()
+
+        # Step 2: Check if we can install system packages
         if self.in_docker and not self.is_root:
+            self._log_dockerfile_instructions()
+            return False
+
+        if not self.is_root and not self.sudo_available:
             print(
-                "\n[SatDump][Install] ======================================"
+                "[SatDump] ERROR: Cannot install without "
+                "root or sudo. "
+                "Add satdump to Dockerfile."
             )
-            print("[SatDump][Install] DOCKER INSTALLATION REQUIRED")
+            self._log_dockerfile_instructions()
+            return False
+
+        # Step 3: Get .deb URL for this architecture
+        print(
+            f"\n[SatDump] Step 2: Downloading .deb "
+            f"for {self._arch}..."
+        )
+
+        deb_url = self.get_deb_url()
+        if not deb_url:
             print(
-                "[SatDump][Install] ======================================"
-            )
-            print(
-                "[SatDump][Install] Add to Dockerfile and rebuild:"
-            )
-            print()
-            print("[SatDump][Install]   # Add SatDump repository")
-            print(
-                "[SatDump][Install]  RUN apt-get update && \\"
-            )
-            print(
-                "[SatDump][Install]      apt-get install -y "
-                "curl gnupg && \\"
-            )
-            print(
-                "[SatDump][Install]       curl -fsSL "
-                "https://downloads.satdump.org/key.gpg"
-                " | apt-key add - && \\"
-            )
-            print(
-                '[SatDump][Install]       echo "deb '
-                'https://downloads.satdump.org/apt '
-                'stable main" '
-                '> /etc/apt/sources.list.d/satdump.list'
-                ' && \\'
+                f"[SatDump] ERROR: No .deb available "
+                f"for architecture: {self._arch}"
             )
             print(
-                "[SatDump][Install]       apt-get update && \\"
+                "[SatDump] Check available packages at:"
             )
             print(
-                "[SatDump][Install]      apt-get install -y "
-                "satdump && \\"
-            )
-            print(
-                "[SatDump][Install]      rm -rf /var/lib/apt/lists/*"
-            )
-            print()
-            print(
-                "[SatDump][Install]   docker compose build --no-cache"
-            )
-            print(
-                "[SatDump][Install] ======================================"
+                "[SatDump]   https://github.com/"
+                "SatDump/SatDump/releases"
             )
             return False
 
-        # Step 1: Python packages
-        print("\n[SatDump][Install] Step 1: Python packages...")
-        self.install_python_packages()
+        # Step 4: Download to temp directory
+        with tempfile.TemporaryDirectory(
+            prefix='satdump_install_'
+        ) as tmp_dir:
+            deb_filename = os.path.basename(deb_url)
+            deb_path = os.path.join(tmp_dir, deb_filename)
 
-        # Step 2: Install SatDump
-        print(
-            f"\n[SatDump][Install] Step 2: Installing SatDump "
-            f"(pkg mgr: "
-            f"{self._package_manager or 'none'})..."
-        )
-        success = False
-
-        if self._package_manager in ('apt-get', 'apt'):
-            success = self._install_via_apt_ppa()
-            if not success:
-                success = self._install_via_flatpak()
-        elif shutil.which('flatpak'):
-            success = self._install_via_flatpak()
-        elif self._package_manager == 'pacman':
-            if shutil.which('yay'):
-                ok, _, _ = self._run_system_command(
-                    ['yay', '-S', '--noconfirm', 'satdump'],
-                    timeout=300
+            if not self._download_deb(deb_url, deb_path):
+                print(
+                    "[SatDump] ERROR: Download failed. "
+                    "Check internet connection and "
+                    "try again."
                 )
-                success = ok
-            if not success:
-                success = self._install_via_flatpak()
-        else:
-            success = self._install_via_flatpak()
+                return False
 
-        if not success:
-            print("[SatDump][Install] ERROR: Installation failed")
+            # Step 5: Install the .deb
+            print(
+                f"\n[SatDump] Step 3: Installing .deb..."
+            )
+
+            if not self._install_deb(deb_path):
+                print(
+                    "[SatDump] ERROR: .deb installation failed"
+                )
+                return False
+
+        # Step 6: Verify installation
+        print("\n[SatDump] Step 4: Verifying...")
+
+        binary = shutil.which(self.SATDUMP_BINARY)
+        if not binary:
+            # Sometimes dpkg installs to /usr/local/bin
+            for search_path in [
+                '/usr/local/bin/satdump',
+                '/usr/bin/satdump',
+                '/opt/satdump/bin/satdump',
+            ]:
+                if os.path.isfile(search_path):
+                    binary = search_path
+                    break
+
+        if binary:
+            version = self.get_version()
+            print(
+                f"[SatDump] ✓ Binary found: {binary}"
+            )
+            if version:
+                print(f"[SatDump] ✓ Version: {version}")
+        else:
+            print(
+                "[SatDump] ERROR: satdump binary not "
+                "found after installation. "
+                "dpkg may have partially installed it."
+            )
+            print(
+                "[SatDump] Try manually: "
+                "apt-get install -f -y"
+            )
             return False
 
+        # Step 7: Write marker
         version = self.get_version()
-        self.write_install_marker(
-            self._package_manager or 'flatpak',
-            version
-        )
+        self.write_install_marker('deb', version)
 
         print(
-            "\n[SatDump][Install]=========================================="
+            "\n[SatDump] =========================================="
         )
-        print("[SatDump][Install] ✓ Installation complete!")
-        if version:
-            print(f"[SatDump][Install]  Version: {version}")
+        print("[SatDump] ✓ Installation complete!")
+        print(f"[SatDump]   Version : {version}")
+        print(f"[SatDump]   Binary  : {binary}")
+        print(f"[SatDump]   Method  : .deb package")
+        print(f"[SatDump]   Source  : {deb_url}")
         print(
-            "[SatDump][Install] =========================================="
+            "[SatDump] =========================================="
             "\n"
         )
 
