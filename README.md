@@ -579,6 +579,8 @@ After installation:
 ##### SatDump
  - [ ] SatDump build requires ~4 GB disk space
  - [ ] Build time: 15-30 minutes on Raspberry Pi 4
+ - [ ] # In plugins/implementations/satdump/installer.py
+        SATDUMP_VERSION = '1.2.3'   # ← update this one line
 ###### Recommended antennas:
  - [ ] VHF (137 MHz): V-dipole or QFH for NOAA/METEOR
  - [ ] L-Band (1.7 GHz): Patch antenna for GOES/Meteosat
