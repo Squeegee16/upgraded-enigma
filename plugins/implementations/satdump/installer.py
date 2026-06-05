@@ -273,11 +273,11 @@ class SatDumpInstaller(BaseInstaller):
                 result.stderr or ''
             )
         except FileNotFoundError as e:
-            return False, '', f"Not found: {cmd[0]}: {e}"
+            return False, '', f" [SatDump] Not found: {cmd[0]}: {e}"
         except subprocess.TimeoutExpired:
             return (
                 False, '',
-                f"Timed out after {timeout}s"
+                f"[SatDump] Timed out after {timeout}s"
             )
         except Exception as e:
             return False, '', str(e)
