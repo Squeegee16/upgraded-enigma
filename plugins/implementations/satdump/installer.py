@@ -233,7 +233,11 @@ class SatDumpInstaller(BaseInstaller):
         self._package_manager = (
             self._detect_package_manager()
         )
-
+        self.satdump_binary_path = (
+            shutil.which(self.SATDUMP_BINARY) or
+            shutil.which(self.SATDUMP_UI_BINARY) or
+            '/usr/bin/satdump'
+        )
         print(
             f"[SatDump] Installer init | "
             f"Docker: {self.in_docker} | "
