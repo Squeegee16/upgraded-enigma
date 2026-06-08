@@ -192,26 +192,16 @@ SATDUMP_RELEASES_API = (
 class SatDumpInstaller(BaseInstaller):
     """
     Manages SatDump installation via official .deb package.
-
-    Downloads the pre-built .deb from the SatDump GitHub
-    releases page and installs it with dpkg. Handles
-    missing dependencies automatically using apt-get -f.
-
-    Falls back gracefully in Docker as non-root with
-    clear Dockerfile instructions for the operator.
     """
 
-    # Installation state marker
     INSTALL_MARKER = os.path.join(
         os.path.dirname(__file__),
         '.installed'
     )
 
-    # SatDump binary names
     SATDUMP_BINARY = 'satdump'
     SATDUMP_UI_BINARY = 'satdump-ui'
 
-    # Python packages required by the plugin
     REQUIRED_PACKAGES = [
         'requests',
         'psutil',
@@ -219,7 +209,6 @@ class SatDumpInstaller(BaseInstaller):
         'watchdog',
     ]
 
-    # Optional packages for satellite tracking
     OPTIONAL_PACKAGES = [
         'ephem',
         'pyorbital',
@@ -233,17 +222,37 @@ class SatDumpInstaller(BaseInstaller):
         self._package_manager = (
             self._detect_package_manager()
         )
+
+        # -------------------------------------------------------
+        # satdump_binary_path: resolved path to the binary.
+        #
+        # Checked in order:
+        #   1. satdump in PATH (system install)
+        #   2. satdump-ui in PATH (GUI version)
+        #   3. Fallback to /usr/bin/satdump
+        #
+        # Updated by:
+        #   - is_installed() when binary is found
+        #   - run() after successful .deb install
+        #   - get_install_info() on each call
+        #
+        # Read by:
+        #   - plugin.py SatDumpPlugin.initialize()
+        #   - satdump_manager.py SatDumpManager.__init__()
+        # -------------------------------------------------------
         self.satdump_binary_path = (
             shutil.which(self.SATDUMP_BINARY) or
             shutil.which(self.SATDUMP_UI_BINARY) or
             '/usr/bin/satdump'
         )
+
         print(
             f"[SatDump] Installer init | "
             f"Docker: {self.in_docker} | "
             f"Root: {self.is_root} | "
             f"Arch: {self._arch} | "
-            f"Version: {SATDUMP_VERSION}"
+            f"Version: {SATDUMP_VERSION} | "
+            f"Binary: {self.satdump_binary_path}"
         )
 
     def _detect_package_manager(self):
@@ -286,9 +295,12 @@ class SatDumpInstaller(BaseInstaller):
         except Exception as e:
             return False, '', str(e)
 
-    def is_installed(self):
+def is_installed(self):
         """
         Check if SatDump is installed.
+
+        Also updates satdump_binary_path if binary
+        is found so the attribute is always current.
 
         Returns:
             bool: True if marker exists and binary found
@@ -296,11 +308,18 @@ class SatDumpInstaller(BaseInstaller):
         if not os.path.exists(self.INSTALL_MARKER):
             return False
 
-        return (
-            shutil.which(self.SATDUMP_BINARY) is not None
-            or
-            shutil.which(self.SATDUMP_UI_BINARY) is not None
+        # Find binary
+        binary = (
+            shutil.which(self.SATDUMP_BINARY) or
+            shutil.which(self.SATDUMP_UI_BINARY)
         )
+
+        if binary:
+            # Keep satdump_binary_path up to date
+            self.satdump_binary_path = binary
+            return True
+
+        return False
 
     def get_deb_url(self):
         """
@@ -617,8 +636,24 @@ class SatDumpInstaller(BaseInstaller):
             }
         )
 
-    def get_install_info(self):
-        """Read installation marker."""
+def get_install_info(self):
+        """
+        Read installation marker data.
+
+        Also refreshes satdump_binary_path from the
+        current system state.
+
+        Returns:
+            dict: Marker contents or empty dict
+        """
+        # Refresh binary path
+        found = (
+            shutil.which(self.SATDUMP_BINARY) or
+            shutil.which(self.SATDUMP_UI_BINARY)
+        )
+        if found:
+            self.satdump_binary_path = found
+
         return self.read_marker(self.INSTALL_MARKER)
 
     def _log_dockerfile_instructions(self):
@@ -827,6 +862,9 @@ class SatDumpInstaller(BaseInstaller):
         # Step 6: Verify installation
         print("\n[SatDump] Step 4: Verifying...")
 
+# Step 6: Verify installation
+        print("\n[SatDump] Step 4: Verifying...")
+
         binary = shutil.which(self.SATDUMP_BINARY)
         if not binary:
             # Sometimes dpkg installs to /usr/local/bin
@@ -840,6 +878,10 @@ class SatDumpInstaller(BaseInstaller):
                     break
 
         if binary:
+            # Update instance attribute so plugin.py
+            # and satdump_manager.py can find the binary
+            self.satdump_binary_path = binary
+
             version = self.get_version()
             print(
                 f"[SatDump] ✓ Binary found: {binary}"
@@ -849,12 +891,7 @@ class SatDumpInstaller(BaseInstaller):
         else:
             print(
                 "[SatDump] ERROR: satdump binary not "
-                "found after installation. "
-                "dpkg may have partially installed it."
-            )
-            print(
-                "[SatDump] Try manually: "
-                "apt-get install -f -y"
+                "found after installation."
             )
             return False
 
