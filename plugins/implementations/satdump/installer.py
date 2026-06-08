@@ -295,7 +295,7 @@ class SatDumpInstaller(BaseInstaller):
         except Exception as e:
             return False, '', str(e)
 
-def is_installed(self):
+    def is_installed(self):
         """
         Check if SatDump is installed.
 
