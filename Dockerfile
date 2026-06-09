@@ -59,8 +59,11 @@ RUN python -m venv /opt/venv && \
     . /opt/venv/bin/activate && \
     pip install --upgrade pip setuptools wheel && \
     pip install -r requirements.txt
-
-
+##
+# add user to functional groups
+##
+RUN usermod -a -G dialout hamradio 2>/dev/null || true && \
+    usermod -a -G tty hamradio 2>/dev/null || true
 # ============================================================
 # Stage 2: Runtime
 # ============================================================
