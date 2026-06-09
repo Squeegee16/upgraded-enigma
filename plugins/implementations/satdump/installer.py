@@ -636,7 +636,7 @@ class SatDumpInstaller(BaseInstaller):
             }
         )
 
-def get_install_info(self):
+    def get_install_info(self):
         """
         Read installation marker data.
 
