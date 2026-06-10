@@ -519,7 +519,12 @@ class FldigiManager:
             dict: Environment variables for FLdigi process
         """
         env = os.environ.copy()
+         # Suppress cosmetic ALSA hardware probe errors
+        # ALSA_DEBUG=0 prevents the card probe messages
+        env['ALSA_DEBUG'] = '0'
 
+        # Redirect ALSA error output to /dev/null
+        # Set in .asoundrc via pcm_hook (alternative approach)
         # -------------------------------------------------------
         # Step 1: Ensure PulseAudio is running
         # -------------------------------------------------------
@@ -684,19 +689,10 @@ class FldigiManager:
     # ----------------------------------------------------------
 
     def _build_fldigi_command(self, binary, display):
-        """
-        Build the FLdigi launch command.
-
-        Args:
-            binary: Full path to fldigi executable
-            display: X11 display string
-
-        Returns:
-            list: Command and arguments
-        """
+        """Build FLdigi launch command."""
         cmd = [binary]
 
-        # XML-RPC server settings
+        # XML-RPC server
         cmd.extend([
             '--xmlrpc-server-address',
             self.config.get('xmlrpc_host', 'localhost'),
@@ -704,7 +700,7 @@ class FldigiManager:
             str(self.config.get('xmlrpc_port', 7362)),
         ])
 
-        # Dedicated config directory
+        # Config directory
         cmd.extend(['--config-dir', self.fldigi_home])
 
         return cmd
@@ -769,57 +765,33 @@ class FldigiManager:
         return False, msg
         
     def start_fldigi(self):
-        """
-        Launch FLdigi with Xvfb virtual display and
-        PulseAudio virtual audio.
-
-        Complete startup sequence:
-            1. Verify FLdigi binary exists
-            2. Ensure Xvfb display is running
-            3. Ensure PulseAudio null sink is available
-            4. Launch FLdigi process
-            5. Wait up to 30s for XML-RPC to respond
-            6. Start log monitor on success
-
-        Returns:
-            tuple: (success: bool, message: str)
-        """
+        """Launch FLdigi."""
         with self._process_lock:
-
-            # Already running
             if self._process and \
                     self._process.poll() is None:
-                return False, "FLdigi process already running"
+                return False, "FLdigi already running"
 
-            # Check binary
             binary = shutil.which('fldigi')
             if not binary:
-                msg = (
-                    "FLdigi binary not found. "
-                    "Add fldigi to Dockerfile and rebuild."
+                return False, (
+                    "FLdigi not found. "
+                    "Add fldigi to Dockerfile."
                 )
-                self._add_log(msg, 'error')
-                return False, msg
 
             try:
-                # Step 1: Get or create display
                 display = self._get_display()
                 self._status['display'] = display
-                self._add_log(f"Using display: {display}")
-
-                # Step 2: Set up audio environment
                 env = self._setup_audio_environment()
                 env['DISPLAY'] = display
+                env['QT_QPA_PLATFORM'] = 'xcb'
 
-                # Step 3: Build command
                 cmd = self._build_fldigi_command(
                     binary, display
                 )
-                self._add_log(
-                    f"Launching: {' '.join(cmd)}"
-                )
+                self._add_log(f"Launching: {' '.join(cmd)}")
 
-                # Step 4: Launch FLdigi
+                # Redirect stderr to a pipe but filter
+                # ALSA noise from the log buffer
                 self._process = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
@@ -832,87 +804,61 @@ class FldigiManager:
                 self._status['process_running'] = True
                 self._status['pid'] = self._process.pid
                 self._add_log(
-                    f"✓ FLdigi launched "
+                    f"✓ FLdigi started "
                     f"(PID: {self._process.pid})"
                 )
 
-                # Step 5: Monitor output
                 self._start_output_monitor()
 
-                # Step 6: Wait for XML-RPC
-                host = self.config.get(
-                    'xmlrpc_host', 'localhost'
-                )
+                # Wait for XML-RPC — longer timeout due
+                # to audio init retries
                 port = self.config.get('xmlrpc_port', 7362)
                 timeout = self.config.get(
                     'connect_timeout', 45
                 )
 
                 self._add_log(
-                    f"Waiting for XML-RPC on "
-                    f"localhost:{self.config.get('xmlrpc_port', 7362)} "
-                    f"(up to {timeout}s — audio init may be slow)..."
+                    f"Waiting for XML-RPC (up to {timeout}s)..."
+                )
+                self._add_log(
+                    "Note: ALSA 'cannot find card' messages "
+                    "are normal in Docker — FLdigi is using "
+                    "PulseAudio null sink instead"
                 )
 
                 connected = False
                 for attempt in range(timeout // 2):
                     time.sleep(2)
 
-                    # Check process still alive
                     if self._process.poll() is not None:
                         code = self._process.poll()
-                        msg = (
-                            f"FLdigi exited with code "
-                            f"{code}. "
-                            "Check display (Xvfb) and "
-                            "audio (PulseAudio) are running."
+                        return False, (
+                            f"FLdigi exited (code {code}). "
+                            "Check display and audio config."
                         )
-                        self._add_log(msg, 'error')
-                        self._status['process_running'] = (
-                            False
-                        )
-                        return False, msg
 
                     if self.rpc.connect():
                         connected = True
                         version = self.rpc.get_version()
-                        self._status[
-                            'xmlrpc_connected'
-                        ] = True
+                        self._status['xmlrpc_connected'] = True
                         self._status['version'] = version
                         self._add_log(
-                            f"✓ XML-RPC connected: "
-                            f"FLdigi {version}"
+                            f"✓ XML-RPC ready: FLdigi {version}"
                         )
                         self._start_monitor()
                         break
 
                     self._add_log(
                         f"  Attempt {attempt + 1}: "
-                        f"waiting for XML-RPC..."
+                        "waiting for XML-RPC..."
                     )
 
                 if not connected:
-                    # FLdigi started but XML-RPC not ready
-                    # This is not necessarily a failure —
-                    # user may need to enable XML-RPC in
-                    # FLdigi Configure menu
-                    self._add_log(
-                        "FLdigi started but XML-RPC is "
-                        "not responding. "
-                        "In FLdigi: Configure → "
-                        "XML-RPC server → enable → "
-                        f"port {port}",
-                        'warning'
-                    )
                     return (
                         True,
-                        f"FLdigi started (PID "
-                        f"{self._process.pid}) but "
-                        f"XML-RPC not yet connected. "
-                        f"Enable XML-RPC in FLdigi: "
-                        f"Configure → XML-RPC → "
-                        f"port {port}"
+                        f"FLdigi started but XML-RPC "
+                        "not ready. Enable it in FLdigi: "
+                        f"Configure → XML-RPC → port {port}"
                     )
 
                 return (
@@ -922,11 +868,10 @@ class FldigiManager:
                 )
 
             except Exception as e:
-                msg = f"Failed to start FLdigi: {e}"
-                self._add_log(msg, 'error')
+                self._add_log(str(e), 'error')
                 import traceback
                 traceback.print_exc()
-                return False, msg
+                return False, f"Failed: {e}"
 
     def stop_fldigi(self, save_options=True):
         """
@@ -986,11 +931,36 @@ class FldigiManager:
 
     def _start_output_monitor(self):
         """
-        Monitor FLdigi stdout/stderr in a background thread.
+        Monitor FLdigi stdout/stderr.
 
-        Reads process output and stores in log buffer.
-        Detects and logs early process termination.
+        Filters out known-harmless ALSA probe errors
+        so the plugin log stays readable.
         """
+        # Patterns that are cosmetic ALSA errors —
+        # not actual problems with FLdigi
+        ALSA_NOISE_PATTERNS = [
+            'ALSA lib',
+            'snd_pcm_open_noupdate',
+            'Cannot open device /dev/dsp',
+            'jack server is not running',
+            'JackShmReadWritePtr',
+            'Cannot connect to server socket',
+            'Cannot connect to server request',
+            'snd_config_get_card',
+            'parse_card',
+            'snd_func_card',
+            'snd_func_concat',
+            'snd_func_refer',
+            'snd_config_expand',
+        ]
+
+        def is_alsa_noise(line):
+            """Return True if line is harmless ALSA spam."""
+            for pattern in ALSA_NOISE_PATTERNS:
+                if pattern in line:
+                    return True
+            return False
+
         def monitor():
             if not self._process or \
                     not self._process.stdout:
@@ -1004,10 +974,17 @@ class FldigiManager:
                         break
                     stripped = line.strip()
                     if stripped:
-                        self._add_log(stripped)
+                        # Only log non-ALSA-noise lines
+                        if not is_alsa_noise(stripped):
+                            self._add_log(stripped)
+                        # But always log XML-RPC related lines
+                        elif 'xmlrpc' in stripped.lower():
+                            self._add_log(stripped)
+
             except Exception as e:
                 self._add_log(
-                    f"[FLdigi] [init] Output monitor error: {e}", 'warning'
+                    f"Output monitor error: {e}",
+                    'warning'
                 )
             finally:
                 code = (
@@ -1016,25 +993,21 @@ class FldigiManager:
                 )
                 self._status['process_running'] = False
                 self._status['pid'] = None
-
                 if code is not None and code != 0:
                     self._add_log(
-                        f"[FLdigi] [init] o/p monitor terminated "
-                        f"(exit code: {code})",
+                        f"FLdigi exited (code {code})",
                         'warning'
                     )
                 else:
-                    self._add_log(
-                        "[FLdigi] [init] o/p monitor terminated"
-                    )
+                    self._add_log("FLdigi process ended")
 
+        import threading
         thread = threading.Thread(
             target=monitor,
             daemon=True,
             name='fldigi-output-monitor'
         )
         thread.start()
-
     def _start_monitor(self):
         """
         Start background XML-RPC status monitor.
