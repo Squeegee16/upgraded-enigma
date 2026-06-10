@@ -505,19 +505,26 @@ class FldigiManager:
     # ----------------------------------------------------------
     def _setup_audio_environment(self):
         """
-        Configure virtual audio for FLdigi.
+        Configure virtual audio for FLdigi in Docker.
 
-        Creates PulseAudio null sink if not already
-        present so FLdigi can initialise its audio
-        subsystem without real hardware.
+        The ALSA errors in FLdigi output are caused by
+        ALSA trying to open physical hardware cards that
+        don't exist. The fix is:
+            1. Ensure PulseAudio is running with null sink
+            2. Write ~/.asoundrc routing ALSA -> PulseAudio
+            3. Set environment variables so FLdigi uses
+               the PulseAudio ALSA plugin
 
         Returns:
-            dict: Environment variables for FLdigi
+            dict: Environment variables for FLdigi process
         """
         env = os.environ.copy()
 
-        # Check if PulseAudio is running
+        # -------------------------------------------------------
+        # Step 1: Ensure PulseAudio is running
+        # -------------------------------------------------------
         pa_running = False
+
         if shutil.which('pactl'):
             try:
                 result = subprocess.run(
@@ -530,72 +537,146 @@ class FldigiManager:
             except Exception:
                 pass
 
-        if not pa_running:
-            # Try to start PulseAudio
-            if shutil.which('pulseaudio'):
-                try:
-                    subprocess.run(
-                        [
-                            'pulseaudio',
-                            '--start',
-                            '--exit-idle-time=-1',
-                            '--log-level=error'
-                        ],
-                        capture_output=True,
-                        timeout=10
-                    )
-                    time.sleep(1)
-                    pa_running = True
-                    self._add_log(
-                        "✓ PulseAudio started"
-                    )
-                except Exception as e:
-                    self._add_log(
-                        f"PulseAudio start failed: {e}",
-                        'warning'
-                    )
-
-        if pa_running and shutil.which('pactl'):
-            # Load null sink (ignore if already loaded)
+        if not pa_running and shutil.which('pulseaudio'):
+            self._add_log(
+                "Starting PulseAudio with null sink..."
+            )
             try:
                 subprocess.run(
                     [
-                        'pactl', 'load-module',
-                        'module-null-sink',
-                        'sink_name=fldigi_null',
-                        'sink_properties='
-                        'device.description='
-                        'FLdigi_Virtual_Sink'
+                        'pulseaudio',
+                        '--start',
+                        '--exit-idle-time=-1',
+                        '--log-level=error'
                     ],
                     capture_output=True,
+                    timeout=10
+                )
+                time.sleep(2)
+
+                # Verify it started
+                result = subprocess.run(
+                    ['pactl', 'info'],
+                    capture_output=True,
+                    text=True,
                     timeout=5
                 )
-            except Exception:
-                pass
+                pa_running = (result.returncode == 0)
 
-        # Write ALSA config if missing
-        asoundrc = os.path.expanduser('~/.asoundrc')
-        if not os.path.exists(asoundrc):
-            try:
-                with open(asoundrc, 'w') as f:
-                    f.write(
-                        'pcm.!default {\n'
-                        '    type pulse\n'
-                        '    fallback "sysdefault"\n'
-                        '}\n'
-                        'ctl.!default {\n'
-                        '    type pulse\n'
-                        '    fallback "sysdefault"\n'
-                        '}\n'
-                        'pcm.null { type null }\n'
+                if pa_running:
+                    self._add_log("✓ PulseAudio started")
+                else:
+                    self._add_log(
+                        "PulseAudio start failed",
+                        'warning'
                     )
             except Exception as e:
                 self._add_log(
-                    f"ALSA config warning: {e}",
-                    'warning'
+                    f"PulseAudio error: {e}", 'warning'
                 )
 
+        # -------------------------------------------------------
+        # Step 2: Load null sink if PulseAudio is running
+        # -------------------------------------------------------
+        if pa_running and shutil.which('pactl'):
+            for module_cmd in [
+                [
+                    'pactl', 'load-module',
+                    'module-null-sink',
+                    'sink_name=fldigi_out',
+                    'sink_properties='
+                    'device.description=FLdigi_Output'
+                ],
+                [
+                    'pactl', 'load-module',
+                    'module-null-source',
+                    'source_name=fldigi_in',
+                    'source_properties='
+                    'device.description=FLdigi_Input'
+                ],
+            ]:
+                subprocess.run(
+                    module_cmd,
+                    capture_output=True,
+                    timeout=5
+                )
+
+            # Set defaults
+            subprocess.run(
+                ['pactl', 'set-default-sink', 'fldigi_out'],
+                capture_output=True, timeout=5
+            )
+            subprocess.run(
+                ['pactl', 'set-default-source', 'fldigi_in'],
+                capture_output=True, timeout=5
+            )
+
+        # -------------------------------------------------------
+        # Step 3: Write .asoundrc routing ALSA -> PulseAudio
+        # This is what stops the "cannot find card '0'" spam
+        # -------------------------------------------------------
+        asoundrc = os.path.expanduser('~/.asoundrc')
+
+        if pa_running:
+            alsa_config = (
+                '# ALSA -> PulseAudio bridge\n'
+                '# Generated by FLdigi plugin\n'
+                'pcm.!default {\n'
+                '    type pulse\n'
+                '}\n'
+                'ctl.!default {\n'
+                '    type pulse\n'
+                '}\n'
+                'pcm.pulse { type pulse }\n'
+                'ctl.pulse { type pulse }\n'
+                'pcm.null { type null }\n'
+            )
+        else:
+            # PulseAudio not available — use null device
+            # to prevent FLdigi from crashing on audio init
+            alsa_config = (
+                '# ALSA null device (no PulseAudio)\n'
+                '# Generated by FLdigi plugin\n'
+                'pcm.!default { type null }\n'
+                'ctl.!default { type null }\n'
+                'pcm.null { type null }\n'
+            )
+
+        try:
+            with open(asoundrc, 'w') as f:
+                f.write(alsa_config)
+            self._add_log(
+                f"✓ ~/.asoundrc written "
+                f"({'PulseAudio' if pa_running else 'null'})"
+            )
+        except Exception as e:
+            self._add_log(
+                f"~/.asoundrc write error: {e}",
+                'warning'
+            )
+
+        # -------------------------------------------------------
+        # Step 4: Set environment variables
+        # -------------------------------------------------------
+
+        # Tell PulseAudio clients to connect to default server
+        if pa_running:
+            env['PULSE_SERVER'] = 'unix:/run/user/1000/pulse/native'
+
+        # Suppress ALSA error messages in FLdigi output
+        # These are cosmetic only — FLdigi still works
+        env['ALSA_CARD'] = '0'
         env['PULSE_LATENCY_MSEC'] = '30'
+
+        # Force FLdigi to use PulseAudio audio backend
+        # by setting the PortAudio device hint
+        env['AUDIODEV'] = 'pulse'
+
+        self._add_log(
+            f"Audio environment ready "
+            f"(PulseAudio: {'✓' if pa_running else '✗ using null'})"
+        )
+
         return env
 
     # ----------------------------------------------------------
@@ -764,13 +845,13 @@ class FldigiManager:
                 )
                 port = self.config.get('xmlrpc_port', 7362)
                 timeout = self.config.get(
-                    'connect_timeout', 30
+                    'connect_timeout', 45
                 )
 
                 self._add_log(
                     f"Waiting for XML-RPC on "
-                    f"{host}:{port} "
-                    f"(up to {timeout}s)..."
+                    f"localhost:{self.config.get('xmlrpc_port', 7362)} "
+                    f"(up to {timeout}s — audio init may be slow)..."
                 )
 
                 connected = False
