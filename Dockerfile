@@ -132,11 +132,17 @@ RUN apt-get update && apt-get install -y \
 # Required by sounddevice Python package
 # SoundBlaster Play 3 uses standard USB Audio Class
 # and is supported by ALSA/PulseAudio automatically
+# Audio packages for FLdigi
+# libasound2-plugins provides the ALSA->PulseAudio bridge
+# Without it, 'type pulse' in .asoundrc fails silently
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
-    portaudio19-dev \
-    libportaudio2 \
+    pulseaudio \
+    pulseaudio-utils \
     alsa-utils \
+    libasound2-plugins \
+    libpulse0 \
+    libpulse-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
