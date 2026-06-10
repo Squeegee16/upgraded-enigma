@@ -353,84 +353,179 @@ else
     echo "    (It may still be starting — this is normal)"
     echo "    The plugin will retry when the page loads"
 fi
+
 # =================================================================
-# Start PulseAudio with a null sink for FLdigi audio
-# FLdigi requires an audio device to start. Without a real
-# sound card in Docker we create a virtual null sink.
-# This allows FLdigi to initialise and XML-RPC to start.
+# [6c/7] Starting PulseAudio with null sink for FLdigi
+#
+# FLdigi requires an audio device to initialise.
+# PulseAudio with a null sink provides a virtual audio
+# device that satisfies FLdigi without real hardware.
+#
+# The null sink accepts all audio output without
+# actually playing anything — perfect for Docker.
 # =================================================================
 echo -e "\n${YELLOW}[6f/7] Starting PulseAudio virtual audio...${NC}"
 
 # Kill any stale PulseAudio instance
 pulseaudio --kill 2>/dev/null || true
+pkill -x pulseaudio 2>/dev/null || true
+sleep 0.5
+
+# Remove stale PulseAudio socket files
 rm -f /run/user/1000/pulse/pid 2>/dev/null || true
 rm -f /tmp/pulse-* 2>/dev/null || true
 
-# Start PulseAudio as a daemon with null output
-# --system=false  run as user daemon (not system-wide)
-# --exit-idle-time=-1  never exit due to inactivity
-# --log-level=error  suppress verbose ALSA warnings
 if command -v pulseaudio >/dev/null 2>&1; then
+
+    # Write PulseAudio config that loads null sink on start
+    mkdir -p /home/hamradio/.config/pulse
+
+    cat > /home/hamradio/.config/pulse/default.pa << 'PA_CONFIG'
+# PulseAudio config for FLdigi in Docker
+# Provides virtual audio without real hardware
+
+# Load basic modules
+load-module module-native-protocol-unix
+load-module module-always-sink
+
+# Virtual null output sink (FLdigi sends audio here)
+load-module module-null-sink \
+    sink_name=fldigi_out \
+    sink_properties=device.description="FLdigi_Output"
+
+# Virtual null input source (FLdigi reads from here)
+load-module module-null-source \
+    source_name=fldigi_in \
+    source_properties=device.description="FLdigi_Input"
+
+# Set as defaults
+set-default-sink fldigi_out
+set-default-source fldigi_in
+PA_CONFIG
+
+    cat > /home/hamradio/.config/pulse/client.conf << 'PA_CLIENT'
+# Prevent PulseAudio from auto-spawning when not running
+autospawn = yes
+daemon-binary = /usr/bin/pulseaudio
+PA_CLIENT
+
+    # Start PulseAudio daemon
     pulseaudio \
         --start \
         --log-target=syslog \
         --log-level=error \
         --exit-idle-time=-1 \
+        --disallow-exit \
         2>/dev/null
 
-    # Wait for PulseAudio to start
-    sleep 1
+    # Wait for PulseAudio to be ready
+    PA_READY=false
+    for i in 1 2 3 4 5 6 7 8; do
+        sleep 1
+        if pactl info >/dev/null 2>&1; then
+            PA_READY=true
+            break
+        fi
+    done
 
-    # Load the null sink module
-    # This creates a virtual audio device that accepts
-    # audio data without actually playing it
-    pactl load-module module-null-sink \
-        sink_name=fldigi_null \
-        sink_properties=device.description="FLdigi_Null_Sink" \
-        2>/dev/null && \
-        echo -e "${GREEN} ✓ PulseAudio null sink created${NC}" || \
-        echo -e "${YELLOW}  ⚠ PulseAudio null sink failed${NC}"
+    if [ "$PA_READY" = "true" ]; then
+        echo -e "${GREEN}  ✓ PulseAudio started${NC}"
 
-    # Set the null sink as default
-    pactl set-default-sink fldigi_null 2>/dev/null || true
+        # Load null sink if not already loaded by config
+        pactl load-module module-null-sink \
+            sink_name=fldigi_out \
+            sink_properties=device.description="FLdigi_Output" \
+            2>/dev/null || true
 
-    echo -e "${GREEN} ✓ PulseAudio started${NC}"
-else
-    echo -e "${YELLOW}  ⚠ PulseAudio not available${NC}"
-    echo "  FLdigi audio will be limited"
-fi
+        pactl load-module module-null-source \
+            source_name=fldigi_in \
+            source_properties=device.description="FLdigi_Input" \
+            2>/dev/null || true
 
-# Create ALSA config to redirect to PulseAudio
-# This ensures ALSA applications (like FLdigi) use
-# PulseAudio as their backend automatically
-cat > /home/hamradio/.asoundrc << 'ASOUNDRC'
-# ALSA configuration redirecting to PulseAudio
-# This allows FLdigi to find an audio device via ALSA
-# even when no real hardware is present
+        # Set defaults
+        pactl set-default-sink fldigi_out 2>/dev/null || true
+        pactl set-default-source fldigi_in 2>/dev/null || true
 
+        # Show loaded sinks for verification
+        echo "  Audio sinks:"
+        pactl list sinks short 2>/dev/null | \
+            awk '{print "    " $0}' || true
+
+    else
+        echo -e "${YELLOW}  ⚠ PulseAudio failed to start${NC}"
+        echo "  FLdigi may have audio initialisation errors"
+        echo "  (non-fatal — FLdigi will still run)"
+    fi
+
+    # Write ALSA config that routes to PulseAudio
+    # This is the KEY fix — tells ALSA to use PulseAudio
+    # as its backend so FLdigi finds 'card 0'
+    cat > /home/hamradio/.asoundrc << 'ALSA_CONFIG'
+# ALSA configuration for Docker
+# Routes all ALSA audio through PulseAudio
+# This prevents the "cannot find card '0'" errors
+
+# Default PCM device: PulseAudio
 pcm.!default {
     type pulse
-    fallback "sysdefault"
     hint {
         show on
-        description "Default ALSA Output (PulseAudio)"
+        description "Default (PulseAudio)"
     }
 }
 
+# Default CTL device: PulseAudio
 ctl.!default {
     type pulse
-    fallback "sysdefault"
 }
 
-# Null device fallback if PulseAudio is not available
+# Explicit PulseAudio device
+pcm.pulse {
+    type pulse
+}
+ctl.pulse {
+    type pulse
+}
+
+# Null device fallback (if PulseAudio unavailable)
 pcm.null {
     type null
 }
-ASOUNDRC
+ctl.null {
+    type null
+}
+ALSA_CONFIG
 
-chmod 644 /home/hamradio/.asoundrc
-echo -e "${GREEN}  ✓ ALSA configured for PulseAudio${NC}"
+    echo -e "${GREEN}  ✓ ALSA configured for PulseAudio${NC}"
+    echo "  ~/.asoundrc written"
 
+else
+    echo -e "${YELLOW}  ⚠ PulseAudio not installed${NC}"
+    echo "  Add to Dockerfile:"
+    echo "    apt-get install -y pulseaudio pulseaudio-utils"
+
+    # Write minimal ALSA config with null device
+    # so FLdigi does not crash
+    cat > /home/hamradio/.asoundrc << 'ALSA_NULL'
+# Minimal ALSA config — no PulseAudio available
+# Uses null device so FLdigi does not crash on audio init
+pcm.!default {
+    type null
+}
+ctl.!default {
+    type null
+}
+pcm.null { type null }
+ALSA_NULL
+
+    echo "  ~/.asoundrc (null) written"
+fi
+
+# Suppress ALSA error spam by setting ALSA_CARD
+# This tells ALSA which card to default to
+export ALSA_CARD=0
+export ALSA_PCM_CARD=0
+export ALSA_CTL_CARD=0
 
 # =================================================================
 # [6g/7] Verify Qt xcb plugin is loadable
