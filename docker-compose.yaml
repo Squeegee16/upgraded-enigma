@@ -92,7 +92,7 @@ services:
       - VALIDATE_CALLSIGNS=${VALIDATE_CALLSIGNS:-false}
       - TZ=${TZ:-UTC}
       - PLUGIN_SKIP_PIP_INSTALL=true
-      - OPENWEBRX_URL=http://openwebrx:8073
+      #- OPENWEBRX_URL=http://openwebrx:8073
       # USB Sound Card: Creative SoundBlaster Play 3
       # Device is auto-detected by the entrypoint script.
       # Override here if auto-detection picks wrong card:
@@ -129,8 +129,8 @@ services:
     networks:
       - hamradio_net
 
-    depends_on:
-      - openwebrx
+  #  depends_on:
+  #    - openwebrx
 
     deploy:
       resources:
@@ -171,47 +171,47 @@ services:
   # http://openwebrx:8073 on the internal Docker network.
   # Web interface exposed on host port 8073.
   # ==========================================================
-  openwebrx:
-    image: jketterl/openwebrx:stable
-    container_name: hamradio_openwebrx
-    restart: unless-stopped
-    ports:
-      - "8073:8073"
-
-    volumes:
-      - openwebrx_data:/var/lib/openwebrx
-      - /var/lib/openwebrx/:/var/lib/openwebrx/ # settings
+#  openwebrx:
+#    image: jketterl/openwebrx:stable
+#    container_name: hamradio_openwebrx
+#    restart: unless-stopped
+#    ports:
+#      - "8073:8073"
+#
+#    volumes:
+#      - openwebrx_data:/var/lib/openwebrx
+#      - /var/lib/openwebrx/:/var/lib/openwebrx/ # settings
     # RTL-SDR USB device passthrough.
     # The RTL-SDR is assigned to THIS container.
     # Do NOT also assign it to the app service above.
     # Uncomment when RTL-SDR dongle is connected.
     #
-    devices:
-      - /dev/bus/usb:/dev/bus/usb
+#    devices:
+#      - /dev/bus/usb:/dev/bus/usb
       # GPS on USB serial — uncomment when connected
-      - /dev/ttyUSB0:/dev/ttyUSB0
+#      - /dev/ttyUSB0:/dev/ttyUSB0
       # If GPS is on Raspberry Pi hardware UART:
       #- /dev/ttyAMA0:/dev/ttyAMA0
-    privileged: true
+#    privileged: true
 
-    networks:
-      - hamradio_net
+#    networks:
+#      - hamradio_net
 
-    cap_add:
-      - SYS_NICE
+#    cap_add:
+#      - SYS_NICE
 
-    environment:
-      - TZ=${TZ:-UTC}
-      - OPENWEBRX_ADMIN_USER=VE1WTF
-      - OPENWEBRX_ADMIN_PASSWORD=Password1!
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-    labels:
-      - "com.hamradio.service=openwebrx"
+#    environment:
+#      - TZ=${TZ:-UTC}
+#      - OPENWEBRX_ADMIN_USER=VE1WTF
+#      - OPENWEBRX_ADMIN_PASSWORD=Password1!
+#    logging:
+#      driver: "json-file"
+#      options:
+#        max-size: "10m"
+#        max-file: "3"
+#
+#    labels:
+#      - "com.hamradio.service=openwebrx"
 
   # ==========================================================
   # Database Backup Service
