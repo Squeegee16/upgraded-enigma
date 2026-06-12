@@ -1,0 +1,496 @@
+{% extends "base.html" %}
+
+{% block title %}OpenWebRX Contacts - Ham Radio App{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between
+            align-items-center mb-4">
+    <h2>
+        <i class="fas fa-list me-2"></i>
+        Signal Spots &amp; Contacts
+    </h2>
+    <div class="btn-group">
+        <button class="btn btn-outline-danger btn-sm"
+                onclick="clearSpots()">
+            <i class="fas fa-trash me-1"></i>
+            Clear Spots
+        </button>
+        <a href="{{ url_for('OpenWebRX.index') }}"
+           class="btn btn-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i>
+            Back
+        </a>
+    </div>
+</div>
+
+{# Mode filter buttons #}
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <div class="d-flex align-items-center
+                    gap-2 flex-wrap">
+            <span class="fw-bold small">Filter:</span>
+            <a href="{{ url_for(
+                   'OpenWebRX.contacts') }}"
+               class="btn btn-sm
+               {% if not mode_filter %}
+                   btn-primary
+               {% else %}
+                   btn-outline-primary
+               {% endif %}">
+                All
+            </a>
+            {% for m in ['FT8', 'FT4', 'WSPR',
+                         'JT65', 'APRS', 'PSK31'] %}
+            <a href="{{ url_for(
+                   'OpenWebRX.contacts', mode=m) }}"
+               class="btn btn-sm
+               {% if mode_filter == m %}
+                   btn-primary
+               {% else %}
+                   btn-outline-primary
+               {% endif %}">
+                {{ m }}
+            </a>
+            {% endfor %}
+
+            <div class="ms-auto">
+                <span class="badge bg-secondary">
+                    {{ spots|length }} spots
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    {# Spots table #}
+    <div class="col-md-8 mb-4">
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h6 class="mb-0">
+                    <i class="fas fa-signal me-1"></i>
+                    Received Signal Spots
+                </h6>
+            </div>
+            <div class="card-body p-0">
+                {% if spots %}
+                <div class="table-responsive"
+                     style="max-height: 600px;
+                            overflow-y: auto;">
+                    <table class="table table-dark
+                                  table-sm
+                                  table-hover mb-0">
+                        <thead class="sticky-top
+                                      bg-dark">
+                            <tr>
+                                <th>Time</th>
+                                <th>Callsign</th>
+                                <th>Mode</th>
+                                <th>Freq (MHz)</th>
+                                <th>SNR</th>
+                                <th>Grid</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for spot in spots %}
+                            <tr>
+                                <td>
+                                    <small class="text-muted">
+                                        {{ spot.timestamp[11:19]
+                                           if spot.timestamp
+                                           else '' }}
+                                    </small>
+                                </td>
+                                <td>
+                                    <strong class="text-info">
+                                        {{ spot.get(
+                                            'callsign',
+                                            '?') }}
+                                    </strong>
+                                </td>
+                                <td>
+                                    <span class="badge
+                                                 bg-primary
+                                                 mode-badge">
+                                        {{ spot.get(
+                                            'mode', '?') }}
+                                    </span>
+                                </td>
+                                <td class="font-monospace
+                                           small">
+                                    {% if spot.get(
+                                        'frequency_mhz') %}
+                                    {{ "%.4f"|format(
+                                       spot.frequency_mhz
+                                       ) }}
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if spot.get('snr')
+                                       is not none %}
+                                    <span class="badge
+                                        {% set s = spot.snr|float %}
+                                        {% if s > -5 %}
+                                            bg-success
+                                        {% elif s > -15 %}
+                                            bg-warning text-dark
+                                        {% else %}
+                                            bg-secondary
+                                        {% endif %}">
+                                        {{ spot.snr }}dB
+                                    </span>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small>
+                                        {{ spot.get(
+                                            'grid', '') }}
+                                    </small>
+                                </td>
+                                <td>
+                                    {% if spot.get(
+                                        'callsign') %}
+                                    <button
+                                        class="btn btn-xs
+                                               btn-success"
+                                        onclick="logSpot(
+                                            '{{ spot.get('callsign','') }}',
+                                            '{{ spot.get('mode','FT8') }}',
+                                            {{ spot.get('frequency_mhz', 'null') }},
+                                            '{{ spot.get('snr','') }}',
+                                            '{{ spot.get('grid','') }}'
+                                        )"
+                                        title="Log to logbook">
+                                        <i class="fas fa-book"></i>
+                                        Log
+                                    </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted
+                            py-5">
+                    <i class="fas fa-satellite fa-3x
+                              mb-3"></i>
+                    <h5>No spots collected</h5>
+                    <p>
+                        {% if status.get('available') %}
+                        OpenWebRX is online but no spots
+                        have been decoded yet.
+                        Try tuning to an FT8 frequency
+                        (e.g. 14.074 MHz).
+                        {% else %}
+                        Start OpenWebRX to receive spots.
+                        {% endif %}
+                    </p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# Logged contacts sidebar #}
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header bg-success
+                        text-white">
+                <h6 class="mb-0">
+                    <i class="fas fa-book me-1"></i>
+                    Recently Logged
+                </h6>
+            </div>
+            <div class="card-body p-0">
+                {% if logged_contacts %}
+                <div style="max-height: 600px;
+                            overflow-y: auto;">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Callsign</th>
+                                <th>Mode</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in
+                               logged_contacts %}
+                            <tr>
+                                <td>
+                                    <strong>
+                                        {{ c.contact_callsign }}
+                                    </strong>
+                                </td>
+                                <td>
+                                    <span class="badge
+                                                 bg-primary
+                                                 small">
+                                        {{ c.mode }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <small class="text-muted">
+                                        {{ c.timestamp
+                                           .strftime(
+                                               '%H:%M') }}
+                                    </small>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted
+                            py-4">
+                    <small>No contacts logged yet</small>
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-footer">
+                <a href="{{ url_for('logbook.index') }}"
+                   class="btn btn-outline-success
+                          btn-sm w-100">
+                    <i class="fas fa-book me-1"></i>
+                    Full Logbook
+                </a>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{# Log Contact Modal #}
+<div class="modal fade" id="logSpotModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success
+                        text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-book me-1"></i>
+                    Log Contact
+                </h5>
+                <button type="button"
+                        class="btn-close btn-close-white"
+                        data-bs-dismiss="modal">
+                </button>
+            </div>
+            <div class="modal-body">
+                {{ log_form.hidden_tag() }}
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ log_form.callsign.label(
+                           class="form-label") }}
+                        {{ log_form.callsign(
+                           class="form-control",
+                           id="slog-callsign") }}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ log_form.mode.label(
+                           class="form-label") }}
+                        {{ log_form.mode(
+                           class="form-select",
+                           id="slog-mode") }}
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ log_form.frequency.label(
+                           class="form-label") }}
+                        {{ log_form.frequency(
+                           class="form-control",
+                           id="slog-freq") }}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ log_form.rst_rcvd.label(
+                           class="form-label") }}
+                        {{ log_form.rst_rcvd(
+                           class="form-control",
+                           id="slog-snr") }}
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ log_form.grid.label(
+                           class="form-label") }}
+                        {{ log_form.grid(
+                           class="form-control",
+                           id="slog-grid") }}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ log_form.band.label(
+                           class="form-label") }}
+                        {{ log_form.band(
+                           class="form-select",
+                           id="slog-band") }}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    {{ log_form.notes.label(
+                       class="form-label") }}
+                    {{ log_form.notes(
+                       class="form-control",
+                       id="slog-notes",
+                       rows="2") }}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button"
+                        class="btn btn-secondary"
+                        data-bs-dismiss="modal">
+                    Cancel
+                </button>
+                <button type="button"
+                        class="btn btn-success"
+                        onclick="submitSpotLog()">
+                    <i class="fas fa-save me-1"></i>
+                    Log Contact
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Toast #}
+<div class="position-fixed bottom-0 end-0 p-3"
+     style="z-index:11">
+    <div id="contacts-toast"
+         class="toast align-items-center text-white"
+         role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toast-msg">
+                Done
+            </div>
+            <button type="button"
+                    class="btn-close btn-close-white
+                           me-2 m-auto"
+                    data-bs-dismiss="toast">
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function showToast(msg, type) {
+    const el = document.getElementById(
+        'contacts-toast'
+    );
+    document.getElementById('toast-msg').textContent = msg;
+    el.className = (
+        'toast align-items-center text-white bg-' + type
+    );
+    new bootstrap.Toast(el, {delay: 4000}).show();
+}
+
+function getCsrfToken() {
+    const el = document.querySelector(
+        'input[name=csrf_token]'
+    );
+    return el ? el.value : '';
+}
+
+function clearSpots() {
+    if (!confirm('Clear all spots from buffer?')) return;
+    fetch(
+        '{{ url_for("OpenWebRX.api_clear_spots") }}',
+        {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken()
+            }
+        }
+    ).then(r => r.json())
+     .then(data => {
+        showToast('Spots cleared', 'info');
+        setTimeout(() => location.reload(), 500);
+    });
+}
+
+function logSpot(callsign, mode, freqMhz, snr, grid) {
+    document.getElementById(
+        'slog-callsign'
+    ).value = callsign || '';
+    document.getElementById(
+        'slog-mode'
+    ).value = mode || 'FT8';
+    document.getElementById(
+        'slog-freq'
+    ).value = (
+        freqMhz && freqMhz !== 'null'
+            ? parseFloat(freqMhz).toFixed(4)
+            : ''
+    );
+    document.getElementById(
+        'slog-snr'
+    ).value = snr || '';
+    document.getElementById(
+        'slog-grid'
+    ).value = grid || '';
+    document.getElementById(
+        'slog-notes'
+    ).value = 'Heard via OpenWebRX';
+
+    new bootstrap.Modal(
+        document.getElementById('logSpotModal')
+    ).show();
+}
+
+function submitSpotLog() {
+    const data = {
+        callsign: document.getElementById(
+            'slog-callsign'
+        ).value.trim().toUpperCase(),
+        mode: document.getElementById('slog-mode').value,
+        frequency: parseFloat(
+            document.getElementById('slog-freq').value
+        ) || null,
+        snr: document.getElementById('slog-snr').value,
+        grid: document.getElementById('slog-grid').value,
+        band: document.getElementById(
+            'slog-band'
+        ).value || null,
+        notes: document.getElementById('slog-notes').value,
+    };
+
+    if (!data.callsign) {
+        showToast('Callsign required', 'warning');
+        return;
+    }
+
+    fetch(
+        '{{ url_for("OpenWebRX.api_log_contact") }}',
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify(data)
+        }
+    ).then(r => r.json())
+     .then(result => {
+        if (result.success) {
+            bootstrap.Modal.getInstance(
+                document.getElementById('logSpotModal')
+            ).hide();
+            showToast(result.message, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(
+                'Failed: ' + result.error, 'danger'
+            );
+        }
+    });
+}
+</script>
+{% endblock %}
