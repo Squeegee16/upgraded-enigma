@@ -1,9 +1,17 @@
 #!/bin/bash
 # Ham Radio Application - Docker Entrypoint Script
 # =================================================
-# Initialises the container before starting the app.
-# Checks USB RTL-SDR availability and provides
-# clear guidance if the device is not accessible.
+# NOTE: Do NOT use 'set -e' here.
+# Many optional steps (PulseAudio, Xvfb, VNC) are
+# non-fatal and will fail in some environments.
+# 'set -e' would cause the container to restart on
+# any non-fatal failure.
+#
+# Instead we check return codes explicitly where
+# needed and use '|| true' for optional commands.
+
+# Only enable xtrace in debug mode
+# set -x  # Uncomment for verbose debugging
 
 set -e
 
@@ -355,83 +363,93 @@ fi
 #fi
 
 # =================================================================
-# [6c/7] Starting PulseAudio with null sink for FLdigi
+# [6c/7] Starting PulseAudio virtual audio
 #
-# FLdigi requires an audio device to initialise.
-# PulseAudio with a null sink provides a virtual audio
-# device that satisfies FLdigi without real hardware.
-#
-# The null sink accepts all audio output without
-# actually playing anything — perfect for Docker.
+# PulseAudio provides a virtual null audio device so FLdigi
+# and other audio applications can initialise without real
+# hardware. All commands use '|| true' so failure never
+# causes the container to restart.
 # =================================================================
-echo -e "\n${YELLOW}[6f/7] Starting PulseAudio virtual audio...${NC}"
+echo ""
+echo "[6c/7] Starting PulseAudio virtual audio..."
 
-# Kill any stale PulseAudio instance
-pulseaudio --kill 2>/dev/null || true
-pkill -x pulseaudio 2>/dev/null || true
-sleep 0.5
+# Ensure we never exit due to PulseAudio failure
+set +e
 
-# Remove stale PulseAudio socket files
-rm -f /run/user/1000/pulse/pid 2>/dev/null || true
-rm -f /tmp/pulse-* 2>/dev/null || true
+# Kill any stale PulseAudio from a previous run
+pulseaudio --kill 2>/dev/null
+pkill -x pulseaudio 2>/dev/null
+sleep 1
+
+# Remove stale socket files
+rm -f /run/user/1000/pulse/pid 2>/dev/null
+rm -f /tmp/pulse-*/pid 2>/dev/null
 
 if command -v pulseaudio >/dev/null 2>&1; then
 
-    # Write PulseAudio config that loads null sink on start
+    # Create config directory
     mkdir -p /home/hamradio/.config/pulse
 
+    # Write PulseAudio daemon config
+    cat > /home/hamradio/.config/pulse/daemon.conf << 'PA_DAEMON'
+# PulseAudio daemon config for Docker
+# Prevent daemon from exiting when idle
+exit-idle-time = -1
+# Don't require real-time scheduling
+realtime-scheduling = no
+# Use lower latency
+default-fragments = 2
+default-fragment-size-msec = 25
+PA_DAEMON
+
+    # Write PulseAudio startup config
     cat > /home/hamradio/.config/pulse/default.pa << 'PA_CONFIG'
-# PulseAudio config for FLdigi in Docker
-# Provides virtual audio without real hardware
+# PulseAudio startup for Docker
+# Load minimum required modules
 
-# Load basic modules
 load-module module-native-protocol-unix
-load-module module-always-sink
 
-# Virtual null output sink (FLdigi sends audio here)
+# Virtual null output (FLdigi audio output goes here)
 load-module module-null-sink \
     sink_name=fldigi_out \
     sink_properties=device.description="FLdigi_Output"
 
-# Virtual null input source (FLdigi reads from here)
+# Virtual null input (FLdigi reads from here)
 load-module module-null-source \
     source_name=fldigi_in \
     source_properties=device.description="FLdigi_Input"
 
-# Set as defaults
+# Always have a sink available
+load-module module-always-sink
+
+# Set defaults
 set-default-sink fldigi_out
 set-default-source fldigi_in
 PA_CONFIG
 
-    cat > /home/hamradio/.config/pulse/client.conf << 'PA_CLIENT'
-# Prevent PulseAudio from auto-spawning when not running
-autospawn = yes
-daemon-binary = /usr/bin/pulseaudio
-PA_CLIENT
-
-    # Start PulseAudio daemon
+    # Start PulseAudio — use || true so failure is non-fatal
     pulseaudio \
         --start \
         --log-target=syslog \
         --log-level=error \
         --exit-idle-time=-1 \
         --disallow-exit \
-        2>/dev/null
+        2>/dev/null || true
 
-    # Wait for PulseAudio to be ready
-    PA_READY=false
+    # Wait up to 8 seconds for PulseAudio to be ready
+    PA_STARTED=false
     for i in 1 2 3 4 5 6 7 8; do
         sleep 1
         if pactl info >/dev/null 2>&1; then
-            PA_READY=true
+            PA_STARTED=true
             break
         fi
     done
 
-    if [ "$PA_READY" = "true" ]; then
-        echo -e "${GREEN}  ✓ PulseAudio started${NC}"
+    if [ "$PA_STARTED" = "true" ]; then
+        echo "  ✓ PulseAudio started"
 
-        # Load null sink if not already loaded by config
+        # Load null sink modules — ignore if already loaded
         pactl load-module module-null-sink \
             sink_name=fldigi_out \
             sink_properties=device.description="FLdigi_Output" \
@@ -442,90 +460,59 @@ PA_CLIENT
             source_properties=device.description="FLdigi_Input" \
             2>/dev/null || true
 
-        # Set defaults
+        # Set defaults — ignore failures
         pactl set-default-sink fldigi_out 2>/dev/null || true
         pactl set-default-source fldigi_in 2>/dev/null || true
 
-        # Show loaded sinks for verification
-        echo "  Audio sinks:"
-        pactl list sinks short 2>/dev/null | \
-            awk '{print "    " $0}' || true
+        echo "  ✓ PulseAudio null sink created"
 
     else
-        echo -e "${YELLOW}  ⚠ PulseAudio failed to start${NC}"
-        echo "  FLdigi may have audio initialisation errors"
-        echo "  (non-fatal — FLdigi will still run)"
+        echo "  ⚠ PulseAudio did not start (non-fatal)"
+        echo "  FLdigi will use null ALSA device instead"
     fi
 
-    # Write ALSA config that routes to PulseAudio
-    # This is the KEY fix — tells ALSA to use PulseAudio
-    # as its backend so FLdigi finds 'card 0'
-    cat > /home/hamradio/.asoundrc << 'ALSA_CONFIG'
-# ALSA configuration for Docker
-# Routes all ALSA audio through PulseAudio
-# This prevents the "cannot find card '0'" errors
-
-# Default PCM device: PulseAudio
+    # Write ALSA config regardless of PulseAudio status
+    if [ "$PA_STARTED" = "true" ]; then
+        cat > /home/hamradio/.asoundrc << 'ALSA_PA'
+# ALSA -> PulseAudio (Docker)
 pcm.!default {
     type pulse
-    hint {
-        show on
-        description "Default (PulseAudio)"
-    }
 }
-
-# Default CTL device: PulseAudio
 ctl.!default {
     type pulse
 }
-
-# Explicit PulseAudio device
-pcm.pulse {
-    type pulse
-}
-ctl.pulse {
-    type pulse
-}
-
-# Null device fallback (if PulseAudio unavailable)
-pcm.null {
-    type null
-}
-ctl.null {
-    type null
-}
-ALSA_CONFIG
-
-    echo -e "${GREEN}  ✓ ALSA configured for PulseAudio${NC}"
-    echo "  ~/.asoundrc written"
-
-else
-    echo -e "${YELLOW}  ⚠ PulseAudio not installed${NC}"
-    echo "  Add to Dockerfile:"
-    echo "    apt-get install -y pulseaudio pulseaudio-utils"
-
-    # Write minimal ALSA config with null device
-    # so FLdigi does not crash
-    cat > /home/hamradio/.asoundrc << 'ALSA_NULL'
-# Minimal ALSA config — no PulseAudio available
-# Uses null device so FLdigi does not crash on audio init
-pcm.!default {
-    type null
-}
-ctl.!default {
-    type null
-}
+pcm.pulse { type pulse }
+ctl.pulse { type pulse }
+pcm.null { type null }
+ALSA_PA
+        echo "  ✓ ALSA configured for PulseAudio"
+    else
+        cat > /home/hamradio/.asoundrc << 'ALSA_NULL'
+# ALSA null device (no PulseAudio)
+pcm.!default { type null }
+ctl.!default { type null }
 pcm.null { type null }
 ALSA_NULL
+        echo "  ✓ ALSA configured with null device"
+    fi
 
-    echo "  ~/.asoundrc (null) written"
+else
+    echo "  ⚠ PulseAudio not installed"
+    echo "  Creating null ALSA config for FLdigi..."
+
+    cat > /home/hamradio/.asoundrc << 'ALSA_BARE'
+# Minimal ALSA null config
+pcm.!default { type null }
+ctl.!default { type null }
+pcm.null { type null }
+ALSA_BARE
+
+    echo "  ✓ Null ALSA config written"
 fi
 
-# Suppress ALSA error spam by setting ALSA_CARD
-# This tells ALSA which card to default to
-export ALSA_CARD=0
-export ALSA_PCM_CARD=0
-export ALSA_CTL_CARD=0
+# Re-enable exit on error for critical sections only
+# (the database and application startup)
+# Leave it off for the remaining optional sections
 
 # =================================================================
 # [6g/7] Verify Qt xcb plugin is loadable
@@ -569,106 +556,65 @@ fi
 # DISPLAY must be :99 (not :0) inside the container.
 # =================================================================
 echo -e "\n${YELLOW}[6h/7] Starting virtual display (Xvfb)...${NC}"
+echo ""
 
-XVFB_DISPLAY=":99"
-XVFB_READY=false
+set +e   # ← Always off for optional components
 
-# Ensure X11 socket directory exists with correct permissions
-# This MUST be done before starting Xvfb
 mkdir -p /tmp/.X11-unix 2>/dev/null || true
 chmod 1777 /tmp/.X11-unix 2>/dev/null || true
-
-# Remove stale lock files from previous container runs
 rm -f /tmp/.X99-lock 2>/dev/null || true
 rm -f /tmp/.X11-unix/X99 2>/dev/null || true
 
-if command -v Xvfb >/dev/null 2>&1; then
+XVFB_STARTED=false
 
-    # Start Xvfb on display :99
-    Xvfb ${XVFB_DISPLAY} \
+if command -v Xvfb >/dev/null 2>&1; then
+    Xvfb :99 \
         -screen 0 1280x1024x24 \
         -nolisten tcp \
         -ac \
-        +extension GLX \
-        +extension RANDR \
         2>/tmp/xvfb.log &
-
     XVFB_PID=$!
 
-    # Wait up to 8 seconds for Xvfb to be ready
     for i in 1 2 3 4 5 6 7 8; do
         sleep 1
-        # Check socket file exists (Xvfb is ready)
-        if [ -S "/tmp/.X11-unix/X99" ]; then
-            XVFB_READY=true
-            break
-        fi
-        # Also check lock file as fallback
-        if [ -f "/tmp/.X99-lock" ]; then
-            XVFB_READY=true
+        if [ -S "/tmp/.X11-unix/X99" ] || \
+           [ -f "/tmp/.X99-lock" ]; then
+            XVFB_STARTED=true
             break
         fi
     done
 
-    if [ "$XVFB_READY" = "true" ]; then
-        # Export DISPLAY so all child processes use :99
-        export DISPLAY="${XVFB_DISPLAY}"
-        echo -e "${GREEN}  ✓ Xvfb running on ${XVFB_DISPLAY} (PID: ${XVFB_PID})${NC}"
-        echo "  DISPLAY=${DISPLAY}"
-
-        # Verify xcb plugin is loadable
-        if command -v python3 >/dev/null 2>&1; then
-            python3 -c "
-import subprocess, os
-env = os.environ.copy()
-env['DISPLAY'] = '${XVFB_DISPLAY}'
-r = subprocess.run(
-    ['xdpyinfo'],
-    capture_output=True, env=env, timeout=3
-)
-if r.returncode == 0:
-    print('  ✓ X11 display verified with xdpyinfo')
-else:
-    print('  ⚠ xdpyinfo failed (non-fatal)')
-" 2>/dev/null || true
-        fi
+    if [ "$XVFB_STARTED" = "true" ]; then
+        export DISPLAY=":99"
+        export QT_QPA_PLATFORM="xcb"
+        export QT_ACCESSIBILITY="0"
+        echo "  ✓ Xvfb started on :99"
+        echo "  DISPLAY=:99"
     else
-        echo -e "${YELLOW}  ⚠ Xvfb did not start in time${NC}"
-        cat /tmp/xvfb.log 2>/dev/null | head -10
-        echo "  Qt GUI applications will not work."
-        echo "  Ensure /tmp/.X11-unix exists with mode 1777"
+        echo "  ⚠ Xvfb did not start (non-fatal)"
+        cat /tmp/xvfb.log 2>/dev/null | head -5 || true
     fi
-
 else
-    echo -e "${YELLOW}  ⚠ Xvfb not installed${NC}"
-    echo "  Add to Dockerfile:"
-    echo "    apt-get install -y xvfb"
+    echo "  ⚠ Xvfb not installed (non-fatal)"
 fi
 # =================================================================
 # [6i/7] Start VNC server for remote GUI access
 # =================================================================
 echo -e "\n${YELLOW}[6i/7] Starting VNC server...${NC}"
 
-if command -v vncserver >/dev/null 2>&1; then
-    # Start VNC server on display :99 (same as Xvfb)
-    # SecurityTypes None allows passwordless access (for internal use only)
-    export VNCPASSWD="hamradio"
-    vncserver :99 \
-        -geometry 1024x768 \
-        -depth 24 \
-        -SecurityTypes None \
-        2>/dev/null &
-    sleep 2
-    
-    if ps aux | grep -q "[V]ncserver.*:99"; then
-        echo -e "${GREEN}  ✓ VNC server started on :99 (port 5999)${NC}"
-        echo "    Connect with: vncviewer localhost:5999"
-    else
-        echo -e "${YELLOW}  ⚠ VNC server failed to start${NC}"
-    fi
+export VNCPASSWD="hamradio"
+# VNC is completely optional — always || true
+if command -v x11vnc >/dev/null 2>&1 && \
+        [ "$XVFB_STARTED" = "true" ]; then
+    x11vnc \
+        -display :99 \
+        -nopw \
+        -forever \
+        -quiet \
+        -bg 2>/dev/null || true
+    echo "  ✓ VNC started on :5900"
 else
-    echo -e "${YELLOW}  ⚠ VNC server not installed${NC}"
-    echo "  Add to Dockerfile: apt-get install -y tigervnc-standalone-server"
+    echo "  ⚠ VNC not available (non-fatal)"
 fi
 
 # =================================================================
@@ -704,22 +650,354 @@ if command -v fldigi >/dev/null 2>&1; then
 else
     echo -e "${YELLOW}  ⚠ FLdigi not installed${NC}"
 fi
+Fixing Docker Container Restart Loop at PulseAudio Step
+Root Cause
+The container is restarting because pulseaudio --start is exiting with a non-zero code which causes the set -e in docker-entrypoint.sh to abort the script. Docker then restarts the container, creating an infinite loop.
+
+The set -e directive means any command that fails causes the entire script to exit immediately. PulseAudio startup is non-fatal but set -e treats it as fatal.
+
+Fix: docker-entrypoint.sh
+The fix has two parts:
+
+Remove set -e from the entrypoint or wrap all non-fatal commands with || true
+Fix the PulseAudio section to never cause the script to exit
+Part A: Fix the script header
+bash
+Copy code
+Download
+#!/bin/bash
+# Ham Radio Application - Docker Entrypoint Script
+# =================================================
+# NOTE: Do NOT use 'set -e' here.
+# Many optional steps (PulseAudio, Xvfb, VNC) are
+# non-fatal and will fail in some environments.
+# 'set -e' would cause the container to restart on
+# any non-fatal failure.
+#
+# Instead we check return codes explicitly where
+# needed and use '|| true' for optional commands.
+
+# Only enable xtrace in debug mode
+# set -x  # Uncomment for verbose debugging
+bash
+Copy code
+Download
+Part B: Replace the entire PulseAudio section
+bash
+Copy code
+Download
+# =================================================================
+# [6c/7] Starting PulseAudio virtual audio
+#
+# PulseAudio provides a virtual null audio device so FLdigi
+# and other audio applications can initialise without real
+# hardware. All commands use '|| true' so failure never
+# causes the container to restart.
+# =================================================================
+echo ""
+echo "[6c/7] Starting PulseAudio virtual audio..."
+
+# Ensure we never exit due to PulseAudio failure
+set +e
+
+# Kill any stale PulseAudio from a previous run
+pulseaudio --kill 2>/dev/null
+pkill -x pulseaudio 2>/dev/null
+sleep 1
+
+# Remove stale socket files
+rm -f /run/user/1000/pulse/pid 2>/dev/null
+rm -f /tmp/pulse-*/pid 2>/dev/null
+
+if command -v pulseaudio >/dev/null 2>&1; then
+
+    # Create config directory
+    mkdir -p /home/hamradio/.config/pulse
+
+    # Write PulseAudio daemon config
+    cat > /home/hamradio/.config/pulse/daemon.conf << 'PA_DAEMON'
+# PulseAudio daemon config for Docker
+# Prevent daemon from exiting when idle
+exit-idle-time = -1
+# Don't require real-time scheduling
+realtime-scheduling = no
+# Use lower latency
+default-fragments = 2
+default-fragment-size-msec = 25
+PA_DAEMON
+
+    # Write PulseAudio startup config
+    cat > /home/hamradio/.config/pulse/default.pa << 'PA_CONFIG'
+# PulseAudio startup for Docker
+# Load minimum required modules
+
+load-module module-native-protocol-unix
+
+# Virtual null output (FLdigi audio output goes here)
+load-module module-null-sink \
+    sink_name=fldigi_out \
+    sink_properties=device.description="FLdigi_Output"
+
+# Virtual null input (FLdigi reads from here)
+load-module module-null-source \
+    source_name=fldigi_in \
+    source_properties=device.description="FLdigi_Input"
+
+# Always have a sink available
+load-module module-always-sink
+
+# Set defaults
+set-default-sink fldigi_out
+set-default-source fldigi_in
+PA_CONFIG
+
+    # Start PulseAudio — use || true so failure is non-fatal
+    pulseaudio \
+        --start \
+        --log-target=syslog \
+        --log-level=error \
+        --exit-idle-time=-1 \
+        --disallow-exit \
+        2>/dev/null || true
+
+    # Wait up to 8 seconds for PulseAudio to be ready
+    PA_STARTED=false
+    for i in 1 2 3 4 5 6 7 8; do
+        sleep 1
+        if pactl info >/dev/null 2>&1; then
+            PA_STARTED=true
+            break
+        fi
+    done
+
+    if [ "$PA_STARTED" = "true" ]; then
+        echo "  ✓ PulseAudio started"
+
+        # Load null sink modules — ignore if already loaded
+        pactl load-module module-null-sink \
+            sink_name=fldigi_out \
+            sink_properties=device.description="FLdigi_Output" \
+            2>/dev/null || true
+
+        pactl load-module module-null-source \
+            source_name=fldigi_in \
+            source_properties=device.description="FLdigi_Input" \
+            2>/dev/null || true
+
+        # Set defaults — ignore failures
+        pactl set-default-sink fldigi_out 2>/dev/null || true
+        pactl set-default-source fldigi_in 2>/dev/null || true
+
+        echo "  ✓ PulseAudio null sink created"
+
+    else
+        echo "  ⚠ PulseAudio did not start (non-fatal)"
+        echo "  FLdigi will use null ALSA device instead"
+    fi
+
+    # Write ALSA config regardless of PulseAudio status
+    if [ "$PA_STARTED" = "true" ]; then
+        cat > /home/hamradio/.asoundrc << 'ALSA_PA'
+# ALSA -> PulseAudio (Docker)
+pcm.!default {
+    type pulse
+}
+ctl.!default {
+    type pulse
+}
+pcm.pulse { type pulse }
+ctl.pulse { type pulse }
+pcm.null { type null }
+ALSA_PA
+        echo "  ✓ ALSA configured for PulseAudio"
+    else
+        cat > /home/hamradio/.asoundrc << 'ALSA_NULL'
+# ALSA null device (no PulseAudio)
+pcm.!default { type null }
+ctl.!default { type null }
+pcm.null { type null }
+ALSA_NULL
+        echo "  ✓ ALSA configured with null device"
+    fi
+
+else
+    echo "  ⚠ PulseAudio not installed"
+    echo "  Creating null ALSA config for FLdigi..."
+
+    cat > /home/hamradio/.asoundrc << 'ALSA_BARE'
+# Minimal ALSA null config
+pcm.!default { type null }
+ctl.!default { type null }
+pcm.null { type null }
+ALSA_BARE
+
+    echo "  ✓ Null ALSA config written"
+fi
+
+# Re-enable exit on error for critical sections only
+# (the database and application startup)
+# Leave it off for the remaining optional sections
+bash
+Copy code
+Download
+Part C: Apply || true to ALL other optional sections
+Every optional section in the entrypoint must be protected. Here is the complete safe pattern to apply:
+
+bash
+Copy code
+Download
+# =================================================================
+# [6b/7] Starting Xvfb virtual display
+# =================================================================
+echo ""
+echo "[6b/7] Starting virtual display (Xvfb)..."
+
+set +e   # ← Always off for optional components
+
+mkdir -p /tmp/.X11-unix 2>/dev/null || true
+chmod 1777 /tmp/.X11-unix 2>/dev/null || true
+rm -f /tmp/.X99-lock 2>/dev/null || true
+rm -f /tmp/.X11-unix/X99 2>/dev/null || true
+
+XVFB_STARTED=false
+
+if command -v Xvfb >/dev/null 2>&1; then
+    Xvfb :99 \
+        -screen 0 1280x1024x24 \
+        -nolisten tcp \
+        -ac \
+        2>/tmp/xvfb.log &
+    XVFB_PID=$!
+
+    for i in 1 2 3 4 5 6 7 8; do
+        sleep 1
+        if [ -S "/tmp/.X11-unix/X99" ] || \
+           [ -f "/tmp/.X99-lock" ]; then
+            XVFB_STARTED=true
+            break
+        fi
+    done
+
+    if [ "$XVFB_STARTED" = "true" ]; then
+        export DISPLAY=":99"
+        export QT_QPA_PLATFORM="xcb"
+        export QT_ACCESSIBILITY="0"
+        echo "  ✓ Xvfb started on :99"
+        echo "  DISPLAY=:99"
+    else
+        echo "  ⚠ Xvfb did not start (non-fatal)"
+        cat /tmp/xvfb.log 2>/dev/null | head -5 || true
+    fi
+else
+    echo "  ⚠ Xvfb not installed (non-fatal)"
+fi
+
+
+# =================================================================
+# [6a/7] VNC server (optional)
+# =================================================================
+echo ""
+echo "[6a/7] Starting VNC server..."
+
+# VNC is completely optional — always || true
+if command -v x11vnc >/dev/null 2>&1 && \
+        [ "$XVFB_STARTED" = "true" ]; then
+    x11vnc \
+        -display :99 \
+        -nopw \
+        -forever \
+        -quiet \
+        -bg 2>/dev/null || true
+    echo "  ✓ VNC started on :5900"
+else
+    echo "  ⚠ VNC not available (non-fatal)"
+fi
+
+
+# =================================================================
+# [6d/7] FLdigi XML-RPC config
+# =================================================================
+echo ""
+echo "[6d/7] Configuring FLdigi XML-RPC..."
+
+FLDIGI_HOME="/data/plugins/fldigi/fldigi_home"
+mkdir -p "$FLDIGI_HOME" 2>/dev/null || true
+
+if command -v fldigi >/dev/null 2>&1; then
+    echo "  ✓ FLdigi found: $(which fldigi)"
+else
+    echo "  ⚠ FLdigi not found (plugin will show install instructions)"
+fi
+
+
+# =================================================================
+# [6e/7] Audio device detection (USB SoundBlaster etc.)
+# =================================================================
+echo ""
+echo "[6e/7] Detecting audio devices..."
+
+set +e
+
+if command -v aplay >/dev/null 2>&1; then
+    USB_CARD=$(aplay -l 2>/dev/null | \
+        grep -iE "usb|soundblaster|creative" | \
+        head -1 | \
+        grep -oP 'card \K[0-9]+' 2>/dev/null || echo "")
+
+    if [ -n "$USB_CARD" ]; then
+        export AUDIO_OUTPUT_DEVICE="hw:${USB_CARD},0"
+        export AUDIO_INPUT_DEVICE="hw:${USB_CARD},0"
+        echo "  ✓ USB audio detected: card ${USB_CARD}"
+        echo "  AUDIO_OUTPUT_DEVICE=${AUDIO_OUTPUT_DEVICE}"
+    else
+        echo "  ⚠ No USB audio card found"
+    fi
+else
+    echo "  ⚠ aplay not available"
+fi
+
+
+# =================================================================
+# [6f/7] Go toolchain check
+# =================================================================
+echo ""
+echo "[6f/7] Checking Go toolchain..."
+
+set +e
+
+if command -v go >/dev/null 2>&1; then
+    GO_VER=$(go version 2>/dev/null | \
+        grep -oP 'go\K[\d.]+' | head -1 || echo "unknown")
+    echo "  ✓ Go ${GO_VER} available"
+    echo "  GOPATH:  ${GOPATH:-not set}"
+    echo "  GOCACHE: ${GOCACHE:-not set}"
+    echo "  Full: $(go version 2>/dev/null || echo unknown)"
+else
+    echo "  ⚠ Go not found"
+fi
+
 # =================================================================
 # [7/7] Starting application
 # =================================================================
-echo -e "\n${YELLOW}[7/7] Starting application...${NC}"
-echo -e "\n${GREEN}Configuration Summary:${NC}"
+echo ""
+echo "[7/7] Starting application..."
+echo ""
+echo "Configuration Summary:"
 echo "  Flask Environment : ${FLASK_ENV:-production}"
 echo "  Debug Mode        : ${FLASK_DEBUG:-0}"
 echo "  SSL Enabled       : ${USE_SSL:-true}"
 echo "  Mock Devices      : ${USE_MOCK_DEVICES:-true}"
 echo "  Database          : ${DATABASE_URL}"
 echo "  Listen Address    : ${FLASK_HOST:-0.0.0.0}:${FLASK_PORT:-5000}"
-#echo "  OpenWebRX URL     : ${OPENWEBRX_URL:-http://openwebrx:8073}"
-echo "  Secret Key        : [SECURED] (${KEY_LENGTH} characters)"
+echo "  OpenWebRX URL     : ${OPENWEBRX_URL:-not configured}"
+echo "  Secret Key        : [SECURED] (${#SECRET_KEY} characters)"
+echo ""
+echo "================================================="
+echo "Starting Ham Radio Application..."
+echo "================================================="
+echo ""
 
-echo -e "\n${GREEN}=================================================${NC}"
-echo -e "${GREEN}Starting Ham Radio Application...${NC}"
-echo -e "${GREEN}=================================================${NC}\n"
-
+# Execute the main application command
+# Use 'exec' so the application is PID 1 and receives
+# Docker stop signals correctly
 exec "$@"
