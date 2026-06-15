@@ -332,27 +332,27 @@ fi
 # ---------------------------------------------------------------
 # [6e/7] OpenWebRX sidecar availability check
 # ---------------------------------------------------------------
-echo -e "\n${BLUE}[6e/7]--- Check OpenWebRX Sidecar ---${NC}"
-OWRX_URL="${OPENWEBRX_URL:-http://0.0.0.0:8073}"
-echo "  OpenWebRX URL: $OWRX_URL"
+#echo -e "\n${BLUE}[6e/7]--- Check OpenWebRX Sidecar ---${NC}"
+#OWRX_URL="${OPENWEBRX_URL:-http://0.0.0.0:8073}"
+#echo "  OpenWebRX URL: $OWRX_URL"
 
 # Non-fatal — openwebrx may still be starting
-OWRX_CHECK=$(python3 -c "
-import urllib.request, sys
-try:
-    r = urllib.request.urlopen('${OWRX_URL}', timeout=3)
-    print('reachable:' + str(r.status))
-except Exception as e:
-    print('unreachable:' + str(e))
-" 2>/dev/null || echo "unreachable:check failed")
+#OWRX_CHECK=$(python3 -c "
+#import urllib.request, sys
+#try:
+#    r = urllib.request.urlopen('${OWRX_URL}', timeout=3)
+#    print('reachable:' + str(r.status))
+#except Exception as e:
+#    print('unreachable:' + str(e))
+#" 2>/dev/null || echo "unreachable:check failed")
 
-if echo "$OWRX_CHECK" | grep -q "^reachable:"; then
-    echo -e "${GREEN}  ✓ OpenWebRX is reachable${NC}"
-else
-    echo -e "${YELLOW}  ⚠ OpenWebRX not yet reachable${NC}"
-    echo "    (It may still be starting — this is normal)"
-    echo "    The plugin will retry when the page loads"
-fi
+#if echo "$OWRX_CHECK" | grep -q "^reachable:"; then
+#    echo -e "${GREEN}  ✓ OpenWebRX is reachable${NC}"
+#else
+#    echo -e "${YELLOW}  ⚠ OpenWebRX not yet reachable${NC}"
+#    echo "    (It may still be starting — this is normal)"
+#    echo "    The plugin will retry when the page loads"
+#fi
 
 # =================================================================
 # [6c/7] Starting PulseAudio with null sink for FLdigi
@@ -715,7 +715,7 @@ echo "  SSL Enabled       : ${USE_SSL:-true}"
 echo "  Mock Devices      : ${USE_MOCK_DEVICES:-true}"
 echo "  Database          : ${DATABASE_URL}"
 echo "  Listen Address    : ${FLASK_HOST:-0.0.0.0}:${FLASK_PORT:-5000}"
-echo "  OpenWebRX URL     : ${OPENWEBRX_URL:-http://openwebrx:8073}"
+#echo "  OpenWebRX URL     : ${OPENWEBRX_URL:-http://openwebrx:8073}"
 echo "  Secret Key        : [SECURED] (${KEY_LENGTH} characters)"
 
 echo -e "\n${GREEN}=================================================${NC}"
