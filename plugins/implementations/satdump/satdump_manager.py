@@ -353,98 +353,70 @@ class SatDumpManager:
             except Exception as e:
                 return False, f"[SatDump][init] Stop error: {str(e)}"
 
-    def start_pipeline(self, pipeline_name,
-                       frequency_override=None,
-                       sdr_override=None,
-                       output_subdir=None,
-                       extra_args_str=None):
+    def _parse_pipeline_file(self, filepath):
         """
-        Start a SatDump processing pipeline.
+        Parse a SatDump pipeline JSON file.
 
-        Launches satdump CLI with the specified pipeline
-        for live reception from an SDR device.
-
-        Args:
-            pipeline_name: Name of pipeline to run
-            frequency_override: Frequency in MHz (optional)
-            sdr_override: SDR source override
-            output_subdir: Optional output subdirectory
-            extra_args_str: Additional CLI arguments string
-
-        Returns:
-            tuple: (success, message)
+        SatDump uses JSON5-like format with // comments.
+        Python's json module cannot parse comments so
+        we strip them before parsing.
         """
-        # Check if pipeline already running
-        if pipeline_name in self._pipeline_processes:
-            proc = self._pipeline_processes[pipeline_name]
-            if proc.poll() is None:
-                return False, f"[SatDump][init] Pipeline {pipeline_name} already running"
-
-        # Build output directory
-        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-        out_dir_name = output_subdir or f"{timestamp}_{pipeline_name}"
-        output_dir = os.path.join(
-            self.config.get('output_dir', self.output_dir),
-            out_dir_name
-        )
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Convert frequency
-        freq_hz = None
-        if frequency_override:
-            freq_hz = frequency_override * 1e6
-
-        # Parse extra args
-        extra_args = []
-        if extra_args_str:
-            extra_args = extra_args_str.split()
-
-        # Build command
-        cmd = self.pipeline_manager.build_command(
-            pipeline_name=pipeline_name,
-            output_dir=output_dir,
-            source_override=sdr_override or None,
-            frequency_override=freq_hz,
-            extra_args=extra_args if extra_args else None
-        )
-
-        if not cmd:
-            return False, "[SatDump][init] Failed to build pipeline command"
-
+        import re
+        loaded = 0
         try:
-            self._add_log(
-                f"Starting pipeline: {pipeline_name}"
-            )
-            self._add_log(f"Command: {' '.join(cmd)}")
-            self._add_log(f"Output: {output_dir}")
+            with open(filepath, 'r',
+                      errors='replace') as f:
+                content = f.read()
 
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True
+            # Remove single-line comments (// ...)
+            content = re.sub(
+                r'//[^\n]*', '', content
             )
 
-            self._pipeline_processes[pipeline_name] = proc
-            self._status['active_pipelines'].append(
-                pipeline_name
+            # Remove trailing commas before } or ]
+            content = re.sub(
+                r',\s*([}\]])', r'\1', content
             )
 
-            # Monitor pipeline output
-            self._monitor_pipeline(pipeline_name, proc)
+            data = json.loads(content)
 
-            return True, (
-                f"Pipeline '{pipeline_name}' started "
-                f"(PID: {proc.pid})"
-            )
+            if isinstance(data, dict):
+                pipelines = [data]
+            elif isinstance(data, list):
+                pipelines = data
+            else:
+                return 0
 
-        except Exception as e:
-            error = str(e)
-            self._add_log(
-                f"[SatDump][init] Pipeline start error: {error}", 'error'
-            )
-            return False, error
+            for pipeline in pipelines:
+                name = pipeline.get('name', '')
+                pipeline_id = pipeline.get('id', '')
+                if name and pipeline_id:
+                    self._dynamic_pipelines[name] = {
+                        'id': pipeline_id,
+                        'frequency': pipeline.get(
+                            'frequency', 137e6
+                        ),
+                        'samplerate': pipeline.get(
+                            'samplerate', 2.048e6
+                        ),
+                        'satellite': pipeline.get(
+                            'name', 'Unknown'
+                        ),
+                        'description': pipeline.get(
+                            'description', ''
+                        ),
+                        'products': [],
+                        'source_type': 'rtlsdr',
+                        'from_satdump': True
+                    }
+                    loaded += 1
 
+        except Exception:
+            # Silent — malformed pipeline files are common
+            pass
+
+        return loaded
+        
     def stop_pipeline(self, pipeline_name):
         """
         Stop a running pipeline.
