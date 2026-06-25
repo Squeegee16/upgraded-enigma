@@ -169,6 +169,23 @@ RUN apt-get update && apt-get install -y \
     libpulse0 \
     libpulse-dev \
     && rm -rf /var/lib/apt/lists/*
+# ============================================================
+# Install Rust for building graywolf-modem
+#
+# graywolf-modem is a Rust binary required by the GrayWolf
+# Winlink plugin. Installed system-wide then copied to the
+# hamradio user home directory.
+# ============================================================
+RUN set -eux; \
+    echo "[BUILDER] === Installing Rust ==="; \
+    curl --proto '=https' --tlsv1.2 \
+        -sSf https://sh.rustup.rs \
+        | sh -s -- -y \
+            --no-modify-path \
+            --default-toolchain stable; \
+    /root/.cargo/bin/rustup --version; \
+    /root/.cargo/bin/cargo --version; \
+    echo "[BUILDER] === Rust installed ==="
 
 # ============================================================
 # Package Group 2: USB and device support
@@ -488,24 +505,6 @@ RUN set -eux; \
     echo "[BUILDER] === Go ${GO_VERSION} installed ==="
 
 # ============================================================
-# Install Rust for building graywolf-modem
-#
-# graywolf-modem is a Rust binary required by the GrayWolf
-# Winlink plugin. Installed system-wide then copied to the
-# hamradio user home directory.
-# ============================================================
-RUN set -eux; \
-    echo "[BUILDER] === Installing Rust ==="; \
-    curl --proto '=https' --tlsv1.2 \
-        -sSf https://sh.rustup.rs \
-        | sh -s -- -y \
-            --no-modify-path \
-            --default-toolchain stable; \
-    /root/.cargo/bin/rustup --version; \
-    /root/.cargo/bin/cargo --version; \
-    echo "[BUILDER] === Rust installed ==="
-
-# ============================================================
 # Install qsstv
 # ============================================================
 RUN apt-get update && \
@@ -625,6 +624,8 @@ RUN apt-get update && \
 # Install Pat for winlink
 # ============================================================
 RUN /usr/local/go/bin/go install github.com/la5nta/pat@latest
+
+RUN apt-get install -y ax25-tools ax25-apps
 
 # ============================================================
 # Install op25 P25 decoder dependencies
