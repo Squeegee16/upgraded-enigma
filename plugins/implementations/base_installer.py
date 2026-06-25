@@ -95,62 +95,104 @@ class BaseInstaller:
 
     def pip_install(self, package):
         """
-        Install a Python package if not already available.
+        Check if a package is available and importable.
 
-        In Docker environments this method only checks
-        whether the package is importable. If it is not
-        importable in Docker, a warning is logged
-        directing the operator to add it to requirements.txt
-        and rebuild the image.
-
-        Outside Docker, pip install is attempted normally.
+        In Docker environments checks whether the package
+        actually imports (including native .so libraries)
+        rather than just whether the .py files exist.
 
         Args:
-            package: Package name string, may include
-                     version specifier (e.g. 'requests==2.31')
+            package: Package name
 
         Returns:
-            bool: True if package is available or
-                  installation succeeded
+            bool: True if package imports successfully
         """
-        # Normalise package name for import checking
-        # Strip version specifiers: requests==2.31 -> requests
-        import_name = package \
-            .split('==')[0] \
-            .split('>=')[0] \
-            .split('<=')[0] \
-            .split('[')[0] \
+        # Normalise package name for import
+        import_name = (
+            package
+            .split('==')[0]
+            .split('>=')[0]
+            .split('<=')[0]
+            .split('[')[0]
             .strip()
+        )
 
-        # Some packages have different import names
+        # Package name -> import name mapping
         import_name_map = {
-            'pillow': 'PIL',
-            'Pillow': 'PIL',
-            'pyopenssl': 'OpenSSL',
-            'PyOpenSSL': 'OpenSSL',
-            'python-dotenv': 'dotenv',
-            'scikit-learn': 'sklearn',
+            'pillow':      'PIL',
+            'Pillow':      'PIL',
+            'pyopenssl':   'OpenSSL',
+            'PyOpenSSL':   'OpenSSL',
+            'pyrtlsdr':    'rtlsdr',
+            'scikit-learn':'sklearn',
             'beautifulsoup4': 'bs4',
         }
         actual_import = import_name_map.get(
             import_name, import_name
         )
 
-        # Check if already importable
+        # Actually try to import the module
         if self._is_importable(actual_import):
             return True
 
-        # Docker environment: skip install, log guidance
+        # Not importable — check why
         if self.in_docker:
-            print(
-                f"[{self.__class__.__name__}] "
-                f"INFO: {package} not in Docker image. "
-                f"Add to requirements.txt and rebuild."
-            )
-            # Return True so plugin loading is not blocked
-            return True
+            # Check if .py files exist (partial install)
+            import importlib.util
+            try:
+                spec = importlib.util.find_spec(
+                    actual_import
+                )
+                if spec is not None:
+                    # Files exist but import fails
+                    # — likely missing native library
+                    print(
+                        f"[{self.__class__.__name__}] "
+                        f"WARNING: {package} is installed "
+                        f"but cannot be imported. "
+                        f"Native library (.so) may be "
+                        f"missing from the Docker image. "
+                        f"Check that system libraries are "
+                        f"installed in Stage 2 of the "
+                        f"Dockerfile."
+                    )
+                    # Examples for common packages
+                    native_libs = {
+                        'rtlsdr': (
+                            'librtlsdr0 '
+                            '(apt-get install librtlsdr0)'
+                        ),
+                        'sounddevice': (
+                            'libportaudio2 '
+                            '(apt-get install libportaudio2)'
+                        ),
+                        'PIL': (
+                            'libjpeg-dev libpng-dev '
+                            '(usually auto-installed)'
+                        ),
+                    }
+                    if actual_import in native_libs:
+                        print(
+                            f"[{self.__class__.__name__}] "
+                            f"For {package}, ensure: "
+                            f"{native_libs[actual_import]}"
+                        )
+                else:
+                    print(
+                        f"[{self.__class__.__name__}] "
+                        f"INFO: {package} not in "
+                        f"Docker image. "
+                        f"Add to requirements.txt "
+                        f"and rebuild."
+                    )
+            except Exception:
+                print(
+                    f"[{self.__class__.__name__}] "
+                    f"INFO: {package} not available."
+                )
+            return True  # Non-fatal in Docker
 
-        # Outside Docker: attempt pip install
+        # Outside Docker — attempt pip install
         try:
             result = subprocess.run(
                 [
@@ -163,36 +205,28 @@ class BaseInstaller:
             )
             print(
                 f"[{self.__class__.__name__}] "
-                f"✓ pip installed: {package}"
+                f"✓ Installed: {package}"
             )
             return True
 
         except subprocess.CalledProcessError as e:
-            stderr = e.stderr.decode(
-                'utf-8', errors='replace'
-            ) if e.stderr else ''
-
+            stderr = (
+                e.stderr.decode() if e.stderr else ''
+            )
             if 'Permission denied' in stderr:
                 print(
                     f"[{self.__class__.__name__}] "
-                    f"WARNING: Permission denied installing "
-                    f"{package}. Add to requirements.txt."
+                    f"WARNING: Permission denied "
+                    f"installing {package}. "
+                    f"Add to requirements.txt."
                 )
             else:
                 print(
                     f"[{self.__class__.__name__}] "
-                    f"WARNING: pip {package} failed: "
-                    f"{stderr[:100]}"
+                    f"WARNING: {package} install "
+                    f"failed: {stderr[:80]}"
                 )
             return False
-
-        except Exception as e:
-            print(
-                f"[{self.__class__.__name__}] "
-                f"WARNING: pip {package} error: {e}"
-            )
-            return False
-
     def _is_importable(self, module_name):
         """
         Check whether a Python module can be imported.
