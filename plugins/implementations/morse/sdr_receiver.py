@@ -48,16 +48,44 @@ from datetime import datetime
 # ---------------------------------------------------------------
 
 # pyrtlsdr (RTL-SDR Python bindings)
+# At the top of sdr_receiver.py
+
+# pyrtlsdr (RTL-SDR Python bindings)
+# Must catch both ImportError (package not installed) and
+# OSError/ctypes.CDLLError (package installed but
+# librtlsdr.so.0 shared library not found at runtime)
 try:
     import rtlsdr as _rtlsdr_module
+    # Verify it actually works by accessing an attribute
+    # This triggers the native library load
+    _ = _rtlsdr_module.RtlSdr
     RTLSDR_AVAILABLE = True
 except ImportError:
     RTLSDR_AVAILABLE = False
     _rtlsdr_module = None
     print(
-        "[Morse][SDR] pyrtlsdr not installed. "
-        "RTL-SDR receive unavailable. "
-        "Install: pip install pyrtlsdr"
+        "[Morse-SDR] pyrtlsdr not installed. "
+        "Add pyrtlsdr to requirements.txt"
+    )
+except OSError as e:
+    # Package installed but native library missing
+    RTLSDR_AVAILABLE = False
+    _rtlsdr_module = None
+    print(
+        f"[Morse-SDR] pyrtlsdr installed but "
+        f"librtlsdr.so not found: {e}"
+    )
+    print(
+        "[Morse-SDR] Fix: ensure librtlsdr0 is "
+        "installed in the Docker runtime stage. "
+        "In Dockerfile Stage 2: "
+        "apt-get install -y librtlsdr0"
+    )
+except Exception as e:
+    RTLSDR_AVAILABLE = False
+    _rtlsdr_module = None
+    print(
+        f"[Morse-SDR] pyrtlsdr load error: {e}"
     )
 
 # numpy (signal processing)
