@@ -625,7 +625,7 @@ RUN apt-get update && \
 # ============================================================
 RUN /usr/local/go/bin/go install github.com/la5nta/pat@latest
 
-RUN apt-get install -y ax25-tools ax25-apps
+#RUN apt-get install -y ax25-tools ax25-apps
 
 # ============================================================
 # Install op25 P25 decoder dependencies
