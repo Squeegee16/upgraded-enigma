@@ -1,0 +1,28 @@
+# Open a shell in the running container
+docker compose exec app bash
+
+# Check Go version
+go version
+
+# Try to clone and build manually with full output
+cd /tmp
+git clone --depth 1 https://github.com/chrissnell/graywolf gw_test
+cd gw_test
+
+# Show what Go version is required
+head -5 go.mod
+
+# Try building with verbose output
+go build -v ./... 2>&1
+
+# If 'no Go files' error, check what's in the repo
+find . -name "*.go" | head -20
+find . -name "go.mod"
+
+# Check the main package location
+ls cmd/
+ls cmd/graywolf/ 2>/dev/null || echo "no cmd/graywolf"
+
+# Cleanup
+cd /
+rm -rf /tmp/gw_test
