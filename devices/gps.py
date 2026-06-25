@@ -124,11 +124,9 @@ class BaseGPSDevice(ABC):
             'source': source,
         }
 
-
 # ------------------------------------------------------------------
 # UART Serial GPS
 # ------------------------------------------------------------------
-
 class UARTGPSDevice(BaseGPSDevice):
     """
     GPS receiver connected via UART serial interface.
@@ -572,11 +570,9 @@ def get_position(self):
 
         print("[GPS-UART] Reader thread stopped")
     
-
 # ------------------------------------------------------------------
 # gpsd-based GPS
 # ------------------------------------------------------------------
-
 class GPSDDevice(BaseGPSDevice):
     """
     GPS via the gpsd system daemon.
@@ -725,11 +721,9 @@ class GPSDDevice(BaseGPSDevice):
 
             time.sleep(1)
 
-
 # ------------------------------------------------------------------
 # Mock GPS
 # ------------------------------------------------------------------
-
 class MockGPSDevice(BaseGPSDevice):
     """
     Simulated GPS device for development and testing.
@@ -739,7 +733,6 @@ class MockGPSDevice(BaseGPSDevice):
 
     Demonstrates all GPS features without hardware.
     """
-
     # Ottawa, ON - near FN25 grid square
     BASE_LAT = 45.4215
     BASE_LON = -75.6972
@@ -865,11 +858,9 @@ class MockGPSDevice(BaseGPSDevice):
             'last_update': now.isoformat(),
         }
 
-
 # ------------------------------------------------------------------
 # GPS Device Factory
 # ------------------------------------------------------------------
-
 def get_gps_device(config):
     """
     Factory function that creates the appropriate GPS
