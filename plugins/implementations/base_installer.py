@@ -227,25 +227,59 @@ class BaseInstaller:
                     f"failed: {stderr[:80]}"
                 )
             return False
+            
     def _is_importable(self, module_name):
         """
-        Check whether a Python module can be imported.
+        Check whether a Python module can be imported
+        AND all its native dependencies are loadable.
 
-        Uses importlib.util.find_spec() which does not
-        actually execute the module.
+        Uses a subprocess to actually import the module
+        rather than just checking if the .py files exist.
+        This correctly detects when a package is installed
+        but its native .so library is missing.
+
+        For example, pyrtlsdr passes find_spec() but
+        fails at actual import if librtlsdr.so.0 is
+        not installed in the runtime environment.
 
         Args:
-            module_name: Module name to check
+            module_name: Module name to test
+                         (e.g. 'rtlsdr', 'numpy')
 
         Returns:
-            bool: True if module is importable
+            bool: True only if module imports successfully
         """
-        import importlib.util
+        import subprocess as _sp
+        import sys as _sys
+
         try:
-            spec = importlib.util.find_spec(module_name)
-            return spec is not None
-        except (ModuleNotFoundError, ValueError):
-            return False
+            # Use a subprocess so import errors don't
+            # affect the main process
+            result = _sp.run(
+                [
+                    _sys.executable,
+                    '-c',
+                    f'import {module_name}; print("ok")'
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            return (
+                result.returncode == 0 and
+                'ok' in result.stdout
+            )
+
+        except Exception:
+            # Fall back to find_spec if subprocess fails
+            import importlib.util
+            try:
+                spec = importlib.util.find_spec(
+                    module_name
+                )
+                return spec is not None
+            except (ModuleNotFoundError, ValueError):
+                return False
 
     def install_python_packages(self, packages):
         """
