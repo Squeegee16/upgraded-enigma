@@ -318,32 +318,31 @@ class UARTGPSDevice(BaseGPSDevice):
         except Exception:
             return False
 
-    def get_position(self):
+def get_position(self):
         """
-        Get the latest GPS position.
+        Get the latest GPS position from cache.
 
-        Returns the most recent valid position from the
-        background reader thread. Computes or updates
-        the Maidenhead grid square whenever coordinates
-        are available, with or without a full fix.
+        Returns the most recently parsed NMEA state
+        WITHOUT waiting for new serial data.
+        This makes the method instant and non-blocking.
 
         Returns:
-            dict: Position data
-            None: If no data available yet
+            dict: Position data or None if no data yet
         """
+        if self.use_mock:
+            return self.device.get_position()
+
+        # Return cached state immediately — never block
         with self._state_lock:
             if self._gps_state is None:
                 return None
-
             state = dict(self._gps_state)
 
-        # Build standardised position dict
+        # Build position from cached state
         lat = state.get('latitude')
         lon = state.get('longitude')
         has_fix = state.get('has_fix', False)
 
-        # Calculate grid square if we have coordinates
-        # (even partial data is useful for display)
         grid_6 = ''
         grid_4 = ''
         if lat is not None and lon is not None:
@@ -354,10 +353,8 @@ class UARTGPSDevice(BaseGPSDevice):
                 grid_4 = self._grid_calc.from_latlon(
                     lat, lon, precision=4
                 )
-            except Exception as e:
-                print(
-                    f"[GPS-UART] Grid calc error: {e}"
-                )
+            except Exception:
+                pass
 
         return {
             'latitude': lat,
@@ -378,11 +375,7 @@ class UARTGPSDevice(BaseGPSDevice):
             'vdop': state.get('vdop'),
             'pdop': state.get('pdop'),
             'speed_kmh': state.get('speed_kmh'),
-            'speed_knots': state.get('speed_knots'),
             'track_true': state.get('track_true'),
-            'magnetic_variation': state.get(
-                'magnetic_variation'
-            ),
             'has_fix': has_fix,
             'fix_quality': state.get('fix_quality', 0),
             'fix_type': state.get('fix_type', 1),
@@ -392,7 +385,6 @@ class UARTGPSDevice(BaseGPSDevice):
             'source': 'uart',
             'port': self.port,
             'baudrate': self.baudrate,
-            'stats': dict(self._stats),
             'last_update': state.get('last_update'),
         }
 
