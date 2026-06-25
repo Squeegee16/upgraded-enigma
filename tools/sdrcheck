@@ -1,0 +1,17 @@
+# Open shell in container
+docker compose exec app bash
+
+# Check if pyrtlsdr Python package is installed
+python3 -c "import importlib.util; print(importlib.util.find_spec('rtlsdr'))"
+# If this shows a path, the package is installed
+
+# Try actually importing it
+python3 -c "import rtlsdr; print('OK')"
+# If this fails with 'librtlsdr.so.0: cannot open shared object file'
+# then the runtime library is missing
+
+# Check for runtime library
+ldconfig -p | grep rtlsdr
+find /usr -name "librtlsdr*" 2>/dev/null
+find /usr/local -name "librtlsdr*" 2>/dev/null
+
