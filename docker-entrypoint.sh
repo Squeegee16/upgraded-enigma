@@ -135,9 +135,9 @@ fi
 echo ""
 
 # =================================================================
-# [5/7] Database check
+# [5a/7] Database check
 # =================================================================
-echo -e "${YELLOW}[5/7] Initializing database...${NC}"
+echo -e "${YELLOW}[5a/7] Initializing database...${NC}"
 
 DB_PATH=$(echo "${DATABASE_URL:-}" | sed 's|sqlite:///||')
 if [ -n "$DB_PATH" ]; then
@@ -154,11 +154,44 @@ if [ -n "$DB_PATH" ]; then
     fi
 fi
 echo ""
+# =================================================================
+# [5b/7] RTL-SDR Python binding check
+# =================================================================
+echo -e "${BLUE}[5b/7]--- pyrtlsdr Check ---${NC}"
 
+python3 -c "
+import sys
+
+# Test 1: Can we find the package?
+import importlib.util
+spec = importlib.util.find_spec('rtlsdr')
+if spec:
+    print('  pyrtlsdr package files: FOUND at', spec.origin)
+else:
+    print('  pyrtlsdr package files: NOT FOUND')
+    print('  Add pyrtlsdr to requirements.txt')
+    sys.exit(0)
+
+# Test 2: Does it actually import?
+try:
+    import rtlsdr
+    print('  pyrtlsdr import: OK')
+    print('  RTL-SDR receive: ENABLED')
+except OSError as e:
+    print('  pyrtlsdr import: FAILED (native lib missing)')
+    print('  Error:', str(e))
+    print('  Fix: Add to Dockerfile Stage 2:')
+    print('    apt-get install -y librtlsdr0')
+    print('  OR ensure RTL-SDR source build ran ldconfig')
+except ImportError as e:
+    print('  pyrtlsdr import: FAILED')
+    print('  Error:', str(e))
+" 2>/dev/null || true
+echo ""
 # =================================================================
-# [5b/7] RTL-SDR detection
+# [5c/7] RTL-SDR detection
 # =================================================================
-echo -e "${BLUE}--- RTL-SDR Status ---${NC}"
+echo -e "${BLUE}[5c/7]--- RTL-SDR Status ---${NC}"
 
 if [ -d "/dev/bus/usb" ]; then
     echo -e "${GREEN}✓ /dev/bus/usb accessible${NC}"
