@@ -46,6 +46,7 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     libssl-dev \
     python3-dev \
+    librtlsdr-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
