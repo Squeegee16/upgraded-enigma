@@ -74,10 +74,36 @@ LABEL maintainer="Ham Rad App Team"
 LABEL description="[BUILDER] Ham Radio Operator Web Application"
 LABEL version="0.2.0"
 
+# ============================================================
+# Install runtime system dependencies
+# IMPORTANT: librtlsdr0 is the RUNTIME shared library
+# needed by pyrtlsdr Python package.
+# librtlsdr-dev (in Stage 1) provides headers for building.
+# librtlsdr0 (here in Stage 2) provides the .so for running.
+# Both are needed in their respective stages.
+# ============================================================
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    wget \
+    curl \
+    git \
+    # ... your other packages ... \
+    # RTL-SDR runtime library — required by pyrtlsdr
+    # WITHOUT this, 'import rtlsdr' fails even if
+    # pyrtlsdr is in requirements.txt
+    librtlsdr0 \
+    librtlsdr-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# If you build RTL-SDR from source (preferred for ARM64),
+# the shared library is installed by 'make install' but
+# you must run ldconfig to update the library cache:
+# ldconfig is already called after the RTL-SDR source build
 # Go version to install from go.dev/dl/
 # Must be >= version required by any plugin go.mod
 # GrayWolf currently requires Go 1.26.x
 # Check https://go.dev/dl/ for the latest stable release
+
 ARG GO_VERSION=1.22.3
 
 # TARGETARCH is set automatically by Docker buildx to match
@@ -117,8 +143,6 @@ RUN apt-get update && apt-get install -y \
     libtool \
     swig \
     libpq-dev \
-    librtlsdr0 \
-    librtlsdr-dev \
     nano \
     libxcb-cursor0 \
     libxcb-icccm4 \
@@ -165,6 +189,29 @@ RUN apt-get update && apt-get install -y \
     librtlsdr-dev \
     librtlsdr0 \
     && rm -rf /var/lib/apt/lists/*
+# ============================================================
+# Build RTL-SDR from source
+#
+# Provides rtl_sdr, rtl_test, and other utilities for
+# RTL2832U-based SDR USB dongles.
+# ============================================================
+RUN set -eux; \
+    echo "[BUILDER] === Building RTL-SDR ==="; \
+    cd /tmp; \
+    git clone https://github.com/osmocom/rtl-sdr.git; \
+    cd rtl-sdr; \
+    mkdir build; \
+    cd build; \
+    cmake \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DINSTALL_UDEV_RULES=ON \
+        ..; \
+    make -j$(nproc); \
+    make install; \
+    ldconfig; \
+    cd /; \
+    rm -rf /tmp/rtl-sdr; \
+    echo "[BUILDER] === RTL-SDR build complete ==="
 
 # ============================================================
 # Package Group 3: X11 display support + VNC
@@ -370,31 +417,6 @@ RUN set -eux; \
     rm -rf /tmp/hamlib-4.7.0 /tmp/hamlib-4.7.0.tar.gz; \
     echo "[BUILDER] === Hamlib build complete ==="
 
-# ============================================================
-# Build RTL-SDR from source
-#
-# Provides rtl_sdr, rtl_test, and other utilities for
-# RTL2832U-based SDR USB dongles.
-# ============================================================
-RUN set -eux; \
-    echo "[BUILDER] === Building RTL-SDR ==="; \
-    cd /tmp; \
-    git clone \
-        --depth 1 \
-        https://github.com/osmocom/rtl-sdr.git; \
-    cd rtl-sdr; \
-    mkdir build; \
-    cd build; \
-    cmake \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DINSTALL_UDEV_RULES=ON \
-        ..; \
-    make -j$(nproc); \
-    make install; \
-    ldconfig; \
-    cd /; \
-    rm -rf /tmp/rtl-sdr; \
-    echo "[BUILDER] === RTL-SDR build complete ==="
 
 # ============================================================
 # Install Go from official distribution
