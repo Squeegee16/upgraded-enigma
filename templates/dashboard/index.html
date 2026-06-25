@@ -887,44 +887,72 @@ setInterval(updateDashClock, 1000);
 // ---------------------------------------------------------------
 // Device Status — with ownership display
 // ---------------------------------------------------------------
-function loadDeviceStatus() {
+/**
+ * Load device status with timeout.
+ * Uses AbortController to prevent browser blocking.
+ */
+async function loadDeviceStatus() {
     const card = document.getElementById('device-status');
+    if (!card) return;
 
-    $.ajax({
-        url: '{{ url_for("dashboard.get_devices") }}',
-        method: 'GET',
-        timeout: 8000,
-        success: function(data) {
-            if (!data || typeof data !== 'object') {
-                card.innerHTML = (
-                    '<p class="text-warning small">' +
-                    'Invalid response</p>'
-                );
-                return;
+    const controller = new AbortController();
+    const timeout = setTimeout(
+        () => controller.abort(), 6000
+    );
+
+    try {
+        const response = await fetch(
+            '{{ url_for("dashboard.get_devices") }}',
+            {
+                signal: controller.signal,
+                headers: {'Accept': 'application/json'}
             }
+        );
+        clearTimeout(timeout);
 
-            const icons = {
-                gps:   'satellite-dish',
-                radio: 'broadcast-tower',
-                sdr:   'signal'
-            };
+        if (!response.ok) {
+            throw new Error(
+                `HTTP ${response.status}`
+            );
+        }
 
-            let html = '<ul class="list-group list-group-flush">';
+        const data = await response.json();
 
-            Object.entries(data).forEach(function([key, device]) {
+        if (!data || typeof data !== 'object') {
+            card.innerHTML = (
+                '<p class="text-warning small">' +
+                'Invalid response</p>'
+            );
+            return;
+        }
+
+        const icons = {
+            gps:   'satellite-dish',
+            radio: 'broadcast-tower',
+            sdr:   'signal'
+        };
+
+        let html = (
+            '<ul class="list-group list-group-flush">'
+        );
+
+        Object.entries(data).forEach(
+            function([key, device]) {
                 const icon = icons[key] || 'microchip';
-                const name = device.name || key.toUpperCase();
-                const connected = device.connected === true;
-                const owner = device.owner || null;
-                const deviceAvailable = (
-                    device.device_available !== false
+                const name = device.name ||
+                    key.toUpperCase();
+                const connected = (
+                    device.connected === true
                 );
+                const available = (
+                    device.available !== false
+                );
+                const owner = device.owner || null;
 
-                // Status badge
                 let badgeClass, badgeText;
-                if (!device.available) {
+                if (!available) {
                     badgeClass = 'bg-secondary';
-                    badgeText = 'Not Available';
+                    badgeText = 'N/A';
                 } else if (connected) {
                     badgeClass = 'bg-success';
                     badgeText = 'Connected';
@@ -940,42 +968,44 @@ function loadDeviceStatus() {
                                     align-items-center">
                             <span class="small">
                                 <i class="fas fa-${icon}
-                                          me-2 text-muted"></i>
+                                          me-2 text-muted">
+                                </i>
                                 ${name}
                             </span>
-                            <span class="badge ${badgeClass}
+                            <span class="badge
+                                         ${badgeClass}
                                          small">
                                 ${badgeText}
                             </span>
                         </div>`;
 
-                // Show which plugin owns the device
                 if (owner) {
                     html += `
                         <div class="mt-1 d-flex
                                     justify-content-between
                                     align-items-center">
-                            <small class="text-warning ms-4">
+                            <small class="text-warning
+                                          ms-4">
                                 <i class="fas fa-plug
                                           me-1"></i>
-                                In use by:
+                                In use:
                                 <strong>${owner}</strong>
                             </small>
                             <button class="btn btn-xs
                                            btn-outline-danger"
-                                    style="font-size:0.65rem;
+                                    style="font-size:
+                                           0.65rem;
                                            padding:1px 5px"
                                     onclick="releaseDevice(
-                                        '${key}', '${owner}'
-                                    )"
-                                    title="Disconnect from ${owner}">
-                                <i class="fas fa-unlink"></i>
-                                Release
+                                        '${key}',
+                                        '${owner}'
+                                    )">
+                                <i class="fas fa-unlink">
+                                </i>
                             </button>
                         </div>`;
                 }
 
-                // Show device info if available
                 if (connected && device.info &&
                         typeof device.info === 'object') {
                     const infoStr = Object.values(
@@ -983,49 +1013,51 @@ function loadDeviceStatus() {
                     ).filter(Boolean).join(' | ');
                     if (infoStr) {
                         html += `
-                            <small class="text-muted ms-4
-                                          d-block">
+                            <small class="text-muted
+                                          ms-4 d-block">
                                 ${infoStr}
                             </small>`;
                     }
                 }
 
                 html += '</li>';
-            });
+            }
+        );
 
-            html += '</ul>';
+        html += '</ul>';
+        html += `
+            <div class="mt-2 text-end">
+                <button class="btn btn-outline-secondary
+                               btn-sm"
+                        onclick="loadDeviceStatus()">
+                    <i class="fas fa-sync me-1"></i>
+                    Refresh
+                </button>
+            </div>`;
 
-            html += `
-                <div class="mt-2 text-end">
-                    <button class="btn
-                                   btn-outline-secondary
-                                   btn-sm"
-                            onclick="loadDeviceStatus()">
-                        <i class="fas fa-sync me-1"></i>
-                        Refresh
-                    </button>
-                </div>`;
+        card.innerHTML = html;
 
-            card.innerHTML = html;
-        },
-        error: function(xhr, status) {
-            let msg = 'Device status unavailable';
-            if (status === 'timeout') msg = 'Timeout';
-            card.innerHTML = `
-                <div class="text-center py-2">
-                    <p class="text-muted small mb-2">
-                        ${msg}
-                    </p>
-                    <button class="btn
-                                   btn-outline-secondary
-                                   btn-sm"
-                            onclick="loadDeviceStatus()">
-                        <i class="fas fa-sync me-1"></i>
-                        Retry
-                    </button>
-                </div>`;
+    } catch (error) {
+        clearTimeout(timeout);
+
+        let msg = 'Device status unavailable';
+        if (error.name === 'AbortError') {
+            msg = 'Request timed out';
         }
-    });
+
+        card.innerHTML = `
+            <div class="text-center py-2">
+                <p class="text-muted small mb-2">
+                    ${msg}
+                </p>
+                <button class="btn btn-outline-secondary
+                               btn-sm"
+                        onclick="loadDeviceStatus()">
+                    <i class="fas fa-sync me-1"></i>
+                    Retry
+                </button>
+            </div>`;
+    }
 }
 
 /**
