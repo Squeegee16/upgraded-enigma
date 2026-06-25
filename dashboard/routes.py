@@ -276,20 +276,84 @@ def get_time():
 @dashboard_bp.route('/api/location')
 @login_required
 def get_location():
-    """Get GPS position."""
+    """
+    Get GPS position with strict timeout.
+
+    Uses a background thread with a timeout so the
+    HTTP response always returns within a few seconds,
+    even if the GPS is waiting for a fix or the serial
+    port is slow.
+
+    Returns:
+        JSON: GPS position data or error with timeout info
+    """
     from flask import current_app
-    try:
-        gps = current_app.extensions.get('gps_device')
-        if not gps:
-            return jsonify({'error': 'GPS not configured'}), 503
-        if not gps.is_connected():
-            return jsonify({'error': 'GPS not connected'}), 503
-        pos = gps.get_position()
-        if pos:
-            return jsonify(pos)
-        return jsonify({'error': 'No GPS fix'}), 503
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    import threading
+
+    gps = current_app.extensions.get('gps_device')
+
+    if not gps:
+        return jsonify({
+            'error': 'GPS not configured',
+            'has_fix': False
+        }), 503
+
+    if not gps.is_connected():
+        return jsonify({
+            'error': 'GPS not connected',
+            'has_fix': False,
+            'source': 'none'
+        }), 503
+
+    # Use threading to enforce a strict timeout.
+    # get_position() on a UART GPS can block waiting
+    # for a complete NMEA sentence — without a timeout
+    # this causes the browser to show "page unresponsive".
+    result = {'data': None, 'error': None}
+    timeout_seconds = 3.0
+
+    def fetch_position():
+        """Fetch position in background thread."""
+        try:
+            pos = gps.get_position()
+            result['data'] = pos
+        except Exception as e:
+            result['error'] = str(e)
+
+    thread = threading.Thread(
+        target=fetch_position,
+        daemon=True,
+        name='gps-position-fetch'
+    )
+    thread.start()
+    thread.join(timeout=timeout_seconds)
+
+    if thread.is_alive():
+        # GPS did not respond within timeout
+        return jsonify({
+            'error': (
+                f'GPS timeout after {timeout_seconds}s. '
+                'GPS may be acquiring fix or port is busy.'
+            ),
+            'has_fix': False,
+            'timed_out': True,
+            'source': getattr(gps, 'source', 'uart'),
+        }), 408  # 408 Request Timeout
+
+    if result['error']:
+        return jsonify({
+            'error': result['error'],
+            'has_fix': False
+        }), 500
+
+    pos = result['data']
+    if not pos:
+        return jsonify({
+            'error': 'No GPS data available yet',
+            'has_fix': False
+        })
+
+    return jsonify(pos)
 
 
 @dashboard_bp.route('/api/callsign_lookup/<callsign>')
@@ -361,88 +425,105 @@ def get_plugins():
         return jsonify({'plugins': loader.get_plugin_list()})
     except Exception as e:
         return jsonify({'plugins': [], 'error': str(e)})
+        
+
 @dashboard_bp.route('/api/gps_detail')
 @login_required
 def get_gps_detail():
     """
-    Detailed GPS status API endpoint.
-
-    Returns extended GPS data including:
-    - Full position with grid square
-    - Satellite information
-    - NMEA parser statistics
-    - Fix quality details
-    - UART port information
+    Get detailed GPS status with timeout.
 
     Returns:
-        JSON: Complete GPS status
+        JSON: Extended GPS data or error
     """
     from flask import current_app
+    import threading
 
     gps = current_app.extensions.get('gps_device')
 
     if not gps:
-        return jsonify({
-            'available': False,
-            'error': 'GPS device not configured'
-        })
+        return jsonify({'available': False,
+                        'error': 'GPS not configured'})
 
     if not gps.is_connected():
+        return jsonify({'available': True,
+                        'connected': False,
+                        'error': 'GPS not connected'})
+
+    result = {'data': None, 'error': None}
+    timeout_seconds = 3.0
+
+    def fetch():
+        try:
+            pos = gps.get_position()
+            result['data'] = pos
+        except Exception as e:
+            result['error'] = str(e)
+
+    thread = threading.Thread(
+        target=fetch,
+        daemon=True,
+        name='gps-detail-fetch'
+    )
+    thread.start()
+    thread.join(timeout=timeout_seconds)
+
+    if thread.is_alive():
         return jsonify({
             'available': True,
-            'connected': False,
-            'error': 'GPS not connected'
+            'connected': True,
+            'has_fix': False,
+            'timed_out': True,
+            'error': (
+                f'GPS timeout ({timeout_seconds}s). '
+                'Waiting for NMEA data.'
+            ),
+            'source': getattr(gps, 'source', 'uart'),
         })
 
-    try:
-        position = gps.get_position()
+    if result['error']:
+        return jsonify({
+            'available': True,
+            'connected': True,
+            'error': result['error']
+        }), 500
 
-        if not position:
-            return jsonify({
-                'available': True,
-                'connected': True,
-                'has_fix': False,
-                'source': getattr(gps, 'source', 'unknown'),
-                'error': 'No position data yet'
-            })
+    pos = result['data']
+    if not pos:
+        return jsonify({
+            'available': True,
+            'connected': True,
+            'has_fix': False,
+            'error': 'No position data yet'
+        })
 
-        # Add grid square precision variants if we have
-        # a valid position
-        if position.get('latitude') is not None:
+    # Add grid precision variants
+    if pos.get('latitude') is not None:
+        try:
             from devices.grid_square import (
                 GridSquareCalculator
             )
             calc = GridSquareCalculator()
-            lat = position['latitude']
-            lon = position['longitude']
+            lat = pos['latitude']
+            lon = pos['longitude']
+            pos['grid_2'] = calc.from_latlon(
+                lat, lon, precision=2
+            )
+            pos['grid_4'] = calc.from_latlon(
+                lat, lon, precision=4
+            )
+            pos['grid_6'] = calc.from_latlon(
+                lat, lon, precision=6
+            )
+            pos['grid_8'] = calc.from_latlon(
+                lat, lon, precision=8
+            )
+        except Exception:
+            pass
 
-            try:
-                position['grid_2'] = calc.from_latlon(
-                    lat, lon, precision=2
-                )
-                position['grid_4'] = calc.from_latlon(
-                    lat, lon, precision=4
-                )
-                position['grid_6'] = calc.from_latlon(
-                    lat, lon, precision=6
-                )
-                position['grid_8'] = calc.from_latlon(
-                    lat, lon, precision=8
-                )
-            except Exception:
-                pass
-
-        position['available'] = True
-        position['connected'] = True
-
-        return jsonify(position)
-
-    except Exception as e:
-        return jsonify({
-            'available': True,
-            'connected': True,
-            'error': str(e)
-        }), 500
+    pos['available'] = True
+    pos['connected'] = True
+    return jsonify(pos)
 
 
 @dashboard_bp.route('/api/gps_raw')
