@@ -518,9 +518,7 @@ class GrayWolfInstaller:
 
         # Step 1: Check Go toolchain
         print("\n[GrayWolf] Step 1: Checking Go...")
-        go_available, go_info = (
-            self._check_go_available()
-        )
+        go_available, go_info = (self._check_go_available())
         if go_available:
             print(f"[GrayWolf] ✓ Go: {go_info}")
         else:
