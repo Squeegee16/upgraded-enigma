@@ -316,7 +316,7 @@ class UARTGPSDevice(BaseGPSDevice):
         except Exception:
             return False
 
-def get_position(self):
+    def get_position(self):
         """
         Get the latest GPS position from cache.
 
