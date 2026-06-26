@@ -94,7 +94,8 @@ RUN apt-get update && apt-get install -y \
     librtlsdr0 \
     librtlsdr-dev \
     && rm -rf /var/lib/apt/lists/*
-
+    
+RUN python pip install -r requirements.txt
 # If you build RTL-SDR from source (preferred for ARM64),
 # the shared library is installed by 'make install' but
 # you must run ldconfig to update the library cache:
