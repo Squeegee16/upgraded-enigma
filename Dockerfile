@@ -2,41 +2,24 @@
 # =============================================
 # Multi-stage build for optimized image size and security.
 #
-# Stage 1 (builder): Installs all Python dependencies as root
-#                    into a virtual environment.
-# Stage 2 (runtime): Copies venv, builds SDR/radio tools,
-#                    installs system packages, and runs as
-#                    non-root user (hamradio:1000).
+# Stage 1 (builder): Installs all Python dependencies into a virtual environment.
+# Stage 2 (runtime): Uses the venv, builds SDR/radio tools, and runs as non-root.
 #
-# Architecture support:
-#   linux/amd64  - Standard x86_64 PC / server
-#   linux/arm64  - Raspberry Pi 4/5, Apple M1/M2
-#
-# All Python packages are installed at build time so the
-# non-root runtime user (hamradio) never needs to write
-# to /opt/venv.
-#
-# Usage:
-#   docker compose build
-#   docker compose up -d
+# Architecture support: linux/amd64, linux/arm64
 
 # ============================================================
 # Stage 1: Builder
-# Installs Python dependencies into /opt/venv as root.
 # ============================================================
 FROM python:3.11-slim-bookworm AS builder
 
 LABEL stage="builder"
 LABEL description="[BUILDER] Ham Rad App - Python Dependency Builder"
 
-# Python build environment
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Build dependencies for compiling Python C extensions
-# (psutil, numpy, cryptography, bcrypt etc.)
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     gcc \
@@ -50,71 +33,24 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
-
-# Copy requirements first for better layer cache reuse.
-# pip install only re-runs when requirements.txt changes.
 COPY requirements.txt .
 
-# Create virtual environment and install all packages as root.
 RUN python -m venv /opt/venv && \
     . /opt/venv/bin/activate && \
     pip install --upgrade pip setuptools wheel && \
     pip install -r requirements.txt
-##
-# add user to functional groups
-##
-RUN usermod -a -G dialout hamradio 2>/dev/null || true && \
-    usermod -a -G tty hamradio 2>/dev/null || true
+
 # ============================================================
 # Stage 2: Runtime
 # ============================================================
 FROM python:3.11-slim-bookworm
 
 LABEL maintainer="Ham Rad App Team"
-LABEL description="[BUILDER] Ham Radio Operator Web Application"
 LABEL version="0.2.0"
 
-# ============================================================
-# Install runtime system dependencies
-# IMPORTANT: librtlsdr0 is the RUNTIME shared library
-# needed by pyrtlsdr Python package.
-# librtlsdr-dev (in Stage 1) provides headers for building.
-# librtlsdr0 (here in Stage 2) provides the .so for running.
-# Both are needed in their respective stages.
-# ============================================================
-RUN apt-get update && apt-get install -y \
-    --no-install-recommends \
-    wget \
-    curl \
-    git \
-    # ... your other packages ... \
-    # RTL-SDR runtime library — required by pyrtlsdr
-    # WITHOUT this, 'import rtlsdr' fails even if
-    # pyrtlsdr is in requirements.txt
-    librtlsdr0 \
-    librtlsdr-dev \
-    && rm -rf /var/lib/apt/lists/*
-    
-RUN python pip install -r requirements.txt
-# If you build RTL-SDR from source (preferred for ARM64),
-# the shared library is installed by 'make install' but
-# you must run ldconfig to update the library cache:
-# ldconfig is already called after the RTL-SDR source build
-# Go version to install from go.dev/dl/
-# Must be >= version required by any plugin go.mod
-# GrayWolf currently requires Go 1.26.x
-# Check https://go.dev/dl/ for the latest stable release
-
 ARG GO_VERSION=1.22.3
-
-# TARGETARCH is set automatically by Docker buildx to match
-# the build target platform:
-#   linux/amd64  -> amd64   (x86_64 PC/server)
-#   linux/arm64  -> arm64   (Raspberry Pi 4/5, Apple M1)
 ARG TARGETARCH
 
-# Runtime environment variables.
-# PATH is extended after Go/Rust/venv are installed below.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     FLASK_APP=app.py \
@@ -123,756 +59,222 @@ ENV PYTHONUNBUFFERED=1 \
 
 # ============================================================
 # Package Group 1: Core utilities
-# Always available on all architectures and Debian versions.
 # ============================================================
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
-    wget \
-    curl \
-    git \
-    ca-certificates \
-    openssl \
-    procps \
-    lsb-release \
-    gnupg \
-    apt-transport-https \
-    pkg-config \
-    build-essential \
-    cmake \
-    autoconf \
-    automake \
-    libtool \
-    swig \
-    libpq-dev \
-    nano \
-    libxcb-cursor0 \
-    libxcb-icccm4 \
-    libxcb-image0 \
-    libxcb-keysyms1 \
-    libxcb-render-util0 \
+    wget curl git ca-certificates openssl procps \
+    lsb-release gnupg apt-transport-https pkg-config \
+    build-essential cmake autoconf automake libtool swig \
+    libpq-dev librtlsdr0 librtlsdr-dev nano \
+    libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+    libxcb-keysyms1 libxcb-render-util0 \
     && rm -rf /var/lib/apt/lists/*
 
-#RUN apt-get install -y ax25-tools ax25-apps
-
-# Audio libraries for USB sound card support
-# Required by sounddevice Python package
-# SoundBlaster Play 3 uses standard USB Audio Class
-# and is supported by ALSA/PulseAudio automatically
-# Audio packages for FLdigi
-# libasound2-plugins provides the ALSA->PulseAudio bridge
-# Without it, 'type pulse' in .asoundrc fails silently
+# Audio libraries
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
-    pulseaudio \
-    pulseaudio-utils \
-    alsa-utils \
-    libasound2-plugins \
-    libpulse0 \
-    libpulse-dev \
+    pulseaudio pulseaudio-utils alsa-utils libasound2-plugins \
+    libpulse0 libpulse-dev portaudio19-dev \
     && rm -rf /var/lib/apt/lists/*
-# ============================================================
-# Install Rust for building graywolf-modem
-#
-# graywolf-modem is a Rust binary required by the GrayWolf
-# Winlink plugin. Installed system-wide then copied to the
-# hamradio user home directory.
-# ============================================================
+
+# USB and device support
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    usbutils libusb-1.0-0-dev libusb-1.0-0 libudev-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# X11 display support + VNC
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    xvfb x11-utils tigervnc-standalone-server tigervnc-common \
+    libxft-dev libpng-dev libxinerama-dev libxfixes-dev \
+    libxcursor-dev libfontconfig1-dev libxext-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# GPS support
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    gpsd gpsd-clients && rm -rf /var/lib/apt/lists/*
+
+# Audio support (Bookworm compat)
+RUN apt-get update && \
+    (apt-get install -y --no-install-recommends libasound2t64 \
+    || apt-get install -y --no-install-recommends libasound2) && \
+    apt-get install -y --no-install-recommends \
+    libasound2-dev libasound2-plugins alsa-utils \
+    libsamplerate-dev libsndfile1-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# GNURadio (optional)
+RUN apt-get update && \
+    (apt-get install -y --no-install-recommends gnuradio \
+    || echo "[BUILDER] INFO: gnuradio not available") && \
+    rm -rf /var/lib/apt/lists/*
+
+# Qt5 platform plugins
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    libxcb1 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+    libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-shm0 \
+    libxcb-sync1 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 \
+    libxkbcommon-x11-0 libxkbcommon0 libgl1-mesa-glx libgl1 \
+    libglib2.0-0 libdbus-1-3 libfontconfig1 libfreetype6 \
+    libx11-6 libx11-xcb1 x11-utils xvfb \
+    && rm -rf /var/lib/apt/lists/*
+
+# FLdigi
 RUN set -eux; \
-    echo "[BUILDER] === Installing Rust ==="; \
-    curl --proto '=https' --tlsv1.2 \
-        -sSf https://sh.rustup.rs \
-        | sh -s -- -y \
-            --no-modify-path \
-            --default-toolchain stable; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+    libfltk1.3 libpulse0 libsamplerate0 libsndfile1 portaudio19-dev; \
+    (apt-get install -y --no-install-recommends libasound2t64 \
+    || apt-get install -y --no-install-recommends libasound2); \
+    apt-get install -y --no-install-recommends fldigi \
+    || echo "[BUILDER] INFO: fldigi not in apt repos"; \
+    apt-get install -y --no-install-recommends flrig \
+    || echo "[BUILDER] INFO: flrig not available"; \
+    rm -rf /var/lib/apt/lists/*; \
+    echo "[BUILDER] === FLdigi setup complete ==="
+
+# SoapySDR from source
+RUN set -eux; \
+    cd /tmp; \
+    git clone --depth 1 https://github.com/pothosware/SoapySDR.git; \
+    cd SoapySDR; mkdir build; cd build; \
+    cmake -DCMAKE_BUILD_TYPE=Release ..; \
+    make -j$(nproc); make install; ldconfig; \
+    cd /; rm -rf /tmp/SoapySDR; \
+    echo "[BUILDER] === SoapySDR build complete ==="
+
+# Hamlib from source
+RUN set -eux; \
+    cd /tmp; \
+    wget -q "https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download" -O hamlib-4.7.0.tar.gz; \
+    tar -xzf hamlib-4.7.0.tar.gz; cd hamlib-4.7.0; \
+    ./configure --prefix=/usr/local; \
+    make -j$(nproc); make install; ldconfig; \
+    cd /; rm -rf /tmp/hamlib-4.7.0 /tmp/hamlib-4.7.0.tar.gz; \
+    echo "[BUILDER] === Hamlib build complete ==="
+
+# RTL-SDR from source
+RUN set -eux; \
+    cd /tmp; \
+    git clone --depth 1 https://github.com/osmocom/rtl-sdr.git; \
+    cd rtl-sdr; mkdir build; cd build; \
+    cmake -DCMAKE_BUILD_TYPE=Release -DINSTALL_UDEV_RULES=ON ..; \
+    make -j$(nproc); make install; ldconfig; \
+    cd /; rm -rf /tmp/rtl-sdr; \
+    echo "[BUILDER] === RTL-SDR build complete ==="
+
+# Go installation
+RUN set -eux; \
+    if [ -n "${TARGETARCH}" ]; then \
+        case "${TARGETARCH}" in \
+            amd64) GO_ARCH=amd64 ;; \
+            arm64) GO_ARCH=arm64 ;; \
+            *) echo "Unsupported: ${TARGETARCH}"; exit 1 ;; \
+        esac; \
+    else \
+        GO_ARCH=amd64; \
+    fi; \
+    GO_URL="https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"; \
+    wget -q "${GO_URL}" -O /tmp/go.tar.gz; \
+    tar -C /usr/local -xzf /tmp/go.tar.gz; rm /tmp/go.tar.gz; \
+    /usr/local/go/bin/go version; \
+    echo "[BUILDER] === Go ${GO_VERSION} installed ==="
+
+# Rust installation
+RUN set -eux; \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --no-modify-path --default-toolchain stable; \
     /root/.cargo/bin/rustup --version; \
     /root/.cargo/bin/cargo --version; \
     echo "[BUILDER] === Rust installed ==="
 
-# ============================================================
-# Package Group 2: USB and device support
-# Required for RTL-SDR, GPS serial, and radio CAT control.
-# ============================================================
-RUN apt-get update && apt-get install -y \
-    --no-install-recommends \
-    usbutils \
-    libusb-1.0-0-dev \
-    libusb-1.0-0 \
-    libudev-dev \
+# QSSTV
+RUN apt-get update && apt-get install -y --no-install-recommends qsstv && rm -rf /var/lib/apt/lists/*
+
+# SatDump dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libvolk2-dev libnng-dev zenity libzstd-dev libomp-dev libarmadillo-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# RTL-SDR development library for pyrtlsdr Python bindings
-# Must be present before 'pip install pyrtlsdr'
-RUN apt-get update && apt-get install -y \
-    --no-install-recommends \
-    librtlsdr-dev \
-    librtlsdr0 \
-    && rm -rf /var/lib/apt/lists/*
-# ============================================================
-# Build RTL-SDR from source
-#
-# Provides rtl_sdr, rtl_test, and other utilities for
-# RTL2832U-based SDR USB dongles.
-# ============================================================
+# Install SatDump from .deb (optional, skipped if unavailable)
 RUN set -eux; \
-    echo "[BUILDER] === Building RTL-SDR ==="; \
-    cd /tmp; \
-    git clone https://github.com/osmocom/rtl-sdr.git; \
-    cd rtl-sdr; \
-    mkdir build; \
-    cd build; \
-    cmake \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DINSTALL_UDEV_RULES=ON \
-        ..; \
-    make -j$(nproc); \
-    make install; \
-    ldconfig; \
-    cd /; \
-    rm -rf /tmp/rtl-sdr; \
-    echo "[BUILDER] === RTL-SDR build complete ==="
+    echo "[BUILDER] Skipping SatDump binary install - will use repo fallback if available"
 
-# ============================================================
-# Package Group 3: X11 display support + VNC
-# Required for FLdigi and QSSTV which are GUI applications.
-# Xvfb provides a virtual framebuffer — no real monitor needed.
-# TigerVNC allows remote access to the virtual display.
-# ============================================================
-RUN apt-get update && apt-get install -y \
-    --no-install-recommends \
-    xvfb \
-    x11-utils \
-    tigervnc-standalone-server \
-    tigervnc-common \
-    libxft-dev \
-    libpng-dev \
-    libxinerama-dev \
-    libxfixes-dev \
-    libxcursor-dev \
-    libfontconfig1-dev \
-    libxext-dev \
-    && rm -rf /var/lib/apt/lists/*
+# WSJTX
+RUN apt-get update && apt-get install -y --no-install-recommends wsjtx && rm -rf /var/lib/apt/lists/*
 
-# ============================================================
-# Package Group 4: GPS support
-# ============================================================
-RUN apt-get update && apt-get install -y \
-    --no-install-recommends \
-    gpsd \
-    gpsd-clients \
-    && rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# Package Group 5: Audio support
-#
-# IMPORTANT: libasound2 was renamed to libasound2t64 in
-# Debian Bookworm (12). We try the new name first and fall
-# back to the old name for compatibility.
-#
-# alsa-base was removed from Debian Bookworm entirely.
-# Do NOT include it.
-# ============================================================
-RUN apt-get update && \
-    ( \
-        apt-get install -y --no-install-recommends \
-            libasound2t64 \
-        || \
-        apt-get install -y --no-install-recommends \
-            libasound2 \
-    ) && \
-    apt-get install -y --no-install-recommends \
-        libasound2-dev \
-        libasound2-plugins \
-        alsa-utils \
-        libsamplerate-dev \
-        libsndfile1-dev \
-        portaudio19-dev \
-        libpulse0 \
-        libpulse-dev \
-        pulseaudio \
-        pulseaudio-utils \
-        && rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# Package Group 6: GNURadio (optional)
-#
-# GNURadio is a large dependency chain and may not be
-# available on all ARM64 distributions. It is optional —
-# RTL-SDR via rtl-sdr tools works without it.
-# The build continues if GNURadio is not available.
-# ============================================================
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gnuradio \
-    || echo "[BUILDER] INFO: gnuradio not available on $(uname -m) — skipping" && \
-    rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# Qt5 platform plugins required by WSJT-X, QSSTV, and
-# other Qt GUI applications running under Xvfb.
-#
-# Without these packages Qt cannot find the xcb platform
-# plugin and crashes with:
-#   "Could not load the Qt platform plugin xcb"
-# ============================================================
-RUN apt-get update && apt-get install -y \
-    --no-install-recommends \
-    libxcb1 \
-    libxcb-icccm4 \
-    libxcb-image0 \
-    libxcb-keysyms1 \
-    libxcb-randr0 \
-    libxcb-render-util0 \
-    libxcb-shape0 \
-    libxcb-shm0 \
-    libxcb-sync1 \
-    libxcb-xfixes0 \
-    libxcb-xinerama0 \
-    libxcb-xkb1 \
-    libxkbcommon-x11-0 \
-    libxkbcommon0 \
-    libgl1-mesa-glx \
-    libgl1 \
-    libglib2.0-0 \
-    libdbus-1-3 \
-    libfontconfig1 \
-    libfreetype6 \
-    libx11-6 \
-    libx11-xcb1 \
-    x11-utils \
-    xvfb \
-    && rm -rf /var/lib/apt/lists/*
-# ============================================================
-# Install FLdigi and dependencies
-# NOTE: libasound2 renamed to libasound2t64 in Bookworm
-# NOTE: rm -rf must be a SEPARATE command, not a package name
-# ============================================================
-RUN set -eux; \
-    echo "[BUILDER] === Installing FLdigi ==="; \
-    apt-get update; \
-    \
-    # Install runtime libraries first
-    apt-get install -y --no-install-recommends \
-        libfltk1.3 \
-        libpulse0 \
-        libsamplerate0 \
-        libsndfile1 \
-        portaudio19-dev \
-    ; \
-    \
-    # Try libasound2t64 first (Debian Bookworm),
-    # fall back to libasound2 (older Debian/Ubuntu)
-    ( apt-get install -y --no-install-recommends \
-        libasound2t64 \
-    || apt-get install -y --no-install-recommends \
-        libasound2 \
-    ); \
-    \
-    # Install fldigi package
-    apt-get install -y --no-install-recommends fldigi \
-    || echo "[BUILDER] INFO: fldigi not in apt repos"; \
-    \
-    # Install optional companion (non-fatal)
-    apt-get install -y --no-install-recommends flrig \
-    || echo "[BUILDER] INFO: flrig not available"; \
-    \
-    # Clean up apt cache
-    rm -rf /var/lib/apt/lists/*; \
-    \
-    # Verify installation
-    if command -v fldigi >/dev/null 2>&1; then \
-        echo "[BUILDER] ✓ FLdigi: $(fldigi --version 2>&1 | head -1)"; \
-    else \
-        echo "[BUILDER] INFO: fldigi not installed via apt"; \
-    fi; \
-    \
-    echo "[BUILDER] === FLdigi setup complete ==="
-
-# ============================================================
-# Build SoapySDR from source
-#
-# SoapySDR is the SDR hardware abstraction layer used by
-# OpenWebRX and other SDR applications. Building from source
-# ensures the correct version for the target architecture.
-# ============================================================
-RUN set -eux; \
-    echo "[BUILDER] === Building SoapySDR ==="; \
-    cd /tmp; \
-    git clone \
-        --depth 1 \
-        https://github.com/pothosware/SoapySDR.git; \
-    cd SoapySDR; \
-    mkdir build; \
-    cd build; \
-    cmake \
-        -DCMAKE_BUILD_TYPE=Release \
-        ..; \
-    make -j$(nproc); \
-    make install; \
-    ldconfig; \
-    cd /; \
-    rm -rf /tmp/SoapySDR; \
-    echo "[BUILDER] === SoapySDR build complete ==="
-
-# ============================================================
-# Build Hamlib from source
-#
-# Hamlib provides radio control for 400+ radio models
-# including the Yaesu FT-891.
-# Version 4.7.0 used for stability and broad compatibility.
-# ============================================================
-RUN set -eux; \
-    echo "[BUILDER] === Building Hamlib 4.7.0 ==="; \
-    cd /tmp; \
-    wget -q \
-        "https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download" \
-        -O hamlib-4.7.0.tar.gz; \
-    tar -xzf hamlib-4.7.0.tar.gz; \
-    cd hamlib-4.7.0; \
-    ./configure --prefix=/usr/local; \
-    make -j$(nproc); \
-    make install; \
-    ldconfig; \
-    cd /; \
-    rm -rf /tmp/hamlib-4.7.0 /tmp/hamlib-4.7.0.tar.gz; \
-    echo "[BUILDER] === Hamlib build complete ==="
-
-
-# ============================================================
-# Install Go from official distribution
-#
-# Uses TARGETARCH (set by Docker buildx) to select the
-# correct binary for the build platform.
-#
-# Architecture mapping:
-#   TARGETARCH   Go arch    Platform
-#   amd64        amd64      x86_64 PC / server
-#   arm64        arm64      Raspberry Pi 4/5, Apple M1
-#   arm          armv6l     Raspberry Pi 3 (32-bit)
-#   386          386        32-bit x86
-# ============================================================
-RUN set -eux; \
-    \
-     echo "[BUILDER] === Building Go ==="; \
-    # Determine Go architecture from Docker TARGETARCH.
-    # Fall back to uname -m if TARGETARCH is not set
-    # (e.g. plain docker build without buildx).
-    if [ -n "${TARGETARCH}" ]; then \
-        case "${TARGETARCH}" in \
-            amd64)  GO_ARCH=amd64 ;; \
-            arm64)  GO_ARCH=arm64 ;; \
-            arm)    GO_ARCH=armv6l ;; \
-            386)    GO_ARCH=386 ;; \
-            *) \
-                echo "[BUILDER] Unknown TARGETARCH: ${TARGETARCH}"; \
-                exit 1 ;; \
-        esac; \
-    else \
-        MACHINE=$(uname -m); \
-        case "$MACHINE" in \
-            x86_64)  GO_ARCH=amd64 ;; \
-            aarch64) GO_ARCH=arm64 ;; \
-            armv7l)  GO_ARCH=armv6l ;; \
-            armv6l)  GO_ARCH=armv6l ;; \
-            *) \
-                echo "[BUILDER] Unsupported machine: $MACHINE"; \
-                exit 1 ;; \
-        esac; \
-    fi; \
-    \
-    echo "TARGETARCH : ${TARGETARCH:-not set}"; \
-    echo "uname -m   : $(uname -m)"; \
-    echo "GO_ARCH    : ${GO_ARCH}"; \
-    echo "GO_VERSION : ${GO_VERSION}"; \
-    \
-    GO_URL="https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"; \
-    echo "Downloading: ${GO_URL}"; \
-    wget -q "${GO_URL}" -O /tmp/go.tar.gz; \
-    \
-    # Verify the download is a reasonable size (>10 MB)
-    GO_SIZE=$(stat -c%s /tmp/go.tar.gz 2>/dev/null || echo 0); \
-    echo "Downloaded : ${GO_SIZE} bytes"; \
-    if [ "${GO_SIZE}" -lt 10000000 ]; then \
-        echo "ERROR: Downloaded file is too small."; \
-        echo "Expected >10 MB, got ${GO_SIZE} bytes."; \
-        echo "Check URL: ${GO_URL}"; \
-        exit 1; \
-    fi; \
-    \
-    rm -rf /usr/local/go; \
-    tar -C /usr/local -xzf /tmp/go.tar.gz; \
-    rm /tmp/go.tar.gz; \
-    \
-    # Verify Go runs on this architecture
-    /usr/local/go/bin/go version; \
-    echo "[BUILDER] === Go ${GO_VERSION} installed ==="
-
-# ============================================================
-# Install qsstv
-# ============================================================
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends qsstv && \
-    rm -rf /var/lib/apt/lists/*
-# ============================================================
-# SatDump — dependencies
-#
-# Note: libjemalloc-dev and libtiff-dev not available in Debian Bookworm
-# libvolk-dev has been replaced by libvolk2-dev
-
-RUN echo "[BUILDER] === Installing Essential SatDump Dependencies ===" && \
-    apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    cmake \
-    g++ \
-    pkgconf \
-    libpng-dev \
-    libcurl4-openssl-dev \
-    sqlite3 \
-    libvolk2-dev \
-    libnng-dev \
-    zenity \
-    portaudio19-dev \
-    libzstd-dev \
-    libomp-dev \
-    libarmadillo-dev \
-    && rm -rf /var/lib/apt/lists/* 
-# GUI libs (optional — uncomment if needed)
-# RUN apt-get update && apt-get install -y --no-install-recommends libdbus-1-dev libglfw3-dev libhdf5-dev && rm -rf /var/lib/apt/lists/*
-# libraries for other SDRS
-#RUN libhackrf-dev libairspy-dev libairspyhf-dev libad9361-dev libiio-dev libbladerf-dev 
-# RUN interl based computers
-# RUN apt install ocl-icd-opencl-dev intel-opencl-icd mesa-opencl-icd 
-  
-# ============================================================
-# Install SatDump from official .deb package
-#
-# There is no active apt repository for SatDump.
-# The official pre-built .deb packages are downloaded
-# directly from the SatDump GitHub releases page.
-#
-# ARM64 (Raspberry Pi 4/5 / aarch64):
-#   satdump_1.2.2_arm64.deb
-#
-# AMD64 (x86_64 PC/server):
-#   satdump_1.2.2_amd64.deb
-#
-# Release page:
-#   https://github.com/SatDump/SatDump/releases
-# ============================================================
-RUN set -eux; \
-    \
-    # Detect architecture for correct .deb selection
-    ARCH=$(dpkg --print-architecture); \
-    echo "Installing SatDump 1.2.2 for ${ARCH}"; \
-    \
-    # Install curl if not already present
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-        curl \
-        ca-certificates; \
-    \
-    # Select .deb URL based on architecture
-    case "${ARCH}" in \
-        arm64|aarch64) \
-            DEB_URL="https://github.com/SatDump/SatDump/releases/download/1.2.2/satdump_1.2.2_arm64.deb" \
-            ;; \
-        amd64|x86_64) \
-            DEB_URL="https://github.com/SatDump/SatDump/releases/download/1.2.2/satdump_1.2.2_amd64.deb" \
-            ;; \
-        *) \
-            echo "WARNING: No SatDump .deb for ${ARCH}"; \
-            echo "SatDump plugin will run in demo mode"; \
-            DEB_URL="" \
-            ;; \
-    esac; \
-    \
-    # Download and install if URL is available
-    if [ -n "${DEB_URL}" ]; then \
-        echo "Downloading: ${DEB_URL}"; \
-        curl -fsSL \
-            --retry 3 \
-            --retry-delay 5 \
-            -o /tmp/satdump.deb \
-            "${DEB_URL}"; \
-        \
-        # Verify download is a valid .deb
-        file /tmp/satdump.deb | grep -q "Debian" || \
-            (echo "ERROR: Invalid .deb file downloaded" && exit 1); \
-        \
-        # Install the .deb package
-        echo "Installing satdump.deb..."; \
-        dpkg -i /tmp/satdump.deb \
-            || apt-get install -f -y; \
-        \
-        # Verify installation
-        which satdump && \
-            echo "✓ SatDump installed: $(satdump --version 2>&1 | head -1)" \
-            || echo "WARNING: satdump binary not in PATH"; \
-        \
-        # Clean up
-        rm -f /tmp/satdump.deb; \
-    fi; \
-    \
-    rm -rf /var/lib/apt/lists/*; \
-    echo "=== SatDump setup complete ==="
-
-# ============================================================
-# Install wsjtx
-# ============================================================
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends wsjtx && \
-    rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# Install Pat for winlink
-# ============================================================
+# Pat for winlink
 RUN /usr/local/go/bin/go install github.com/la5nta/pat@latest
 
-#RUN apt-get install -y ax25-tools ax25-apps
-
-# ============================================================
-# Install op25 P25 decoder dependencies
-# CppUnit and GNURadio development headers required for op25 build
-# ============================================================
+# Op25 P25 decoder dependencies and build
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libcppunit-dev \
-    gnuradio-dev \
-    && rm -rf /var/lib/apt/lists/*
+    libcppunit-dev gnuradio-dev && rm -rf /var/lib/apt/lists/*
 
-# ============================================================
-# Install decoder for p25 survey
-# ============================================================
 RUN set -eux; \
-    echo "[BUILDER] === Building P25 decoder ==="; \
     cd /tmp; \
-    git clone \
-        https://github.com/boatbod/op25.git; \
-    cd op25; \
-    sed -i 's/sudo //g' install.sh; \
-    ./install.sh; \
-    ldconfig; \
-    cd /; \
-    rm -rf /tmp/op25; \
+    git clone https://github.com/boatbod/op25.git; \
+    cd op25; sed -i 's/sudo //g' install.sh; \
+    ./install.sh; ldconfig; \
+    cd /; rm -rf /tmp/op25; \
     echo "[BUILDER] === P25 decoder build complete ==="
 
-# ============================================================
-# Copy and configure entrypoint script AS ROOT
-#
-# Must happen BEFORE USER hamradio because:
-#   /usr/local/bin/ requires root to write to
-#   chmod +x requires file owner or root
-# ============================================================
+# Entrypoint and blacklist
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-# ============================================================
-# Copy RTL-SDR kernel module blacklist AS ROOT
-# /etc/modprobe.d/ requires root ownership
-# ============================================================
 COPY blacklist-rtl.conf /etc/modprobe.d/blacklist-rtl.conf
 
-# ============================================================
-# Create non-root runtime user
-#
-# Fixed UID/GID (1000:1000) ensures volume-mounted
-# directories on the host have matching ownership.
-# ============================================================
+# Create hamradio user
 RUN groupadd -r hamradio -g 1000 && \
-    useradd -r \
-        -g hamradio \
-        -u 1000 \
-        -m \
-        -s /bin/bash \
-        -d /home/hamradio \
-        hamradio && \
-    usermod -a -G plugdev hamradio 2>/dev/null || true
-
-# Add hamradio user to dialout group for serial access
-RUN usermod -a -G dialout hamradio 2>/dev/null || true && \
+    useradd -r -g hamradio -u 1000 -m -s /bin/bash -d /home/hamradio hamradio && \
+    usermod -a -G plugdev hamradio 2>/dev/null || true && \
+    usermod -a -G dialout hamradio 2>/dev/null || true && \
     usermod -a -G tty hamradio 2>/dev/null || true
 
-# ============================================================
-# Create data directories
-# Must happen as root before USER hamradio so chown works.
-# ============================================================
-RUN mkdir -p \
-        /data/db \
-        /data/certs \
-        /data/backups \
-        /data/callsigns \
-        /data/logs \
-        /data/plugins \
-        /app \
-    && chown -R hamradio:hamradio /data /app \
-    && chmod -R 755 /data
+# Data directories
+RUN mkdir -p /data/db /data/certs /data/backups /data/callsigns /data/logs /data/plugins /app && \
+    chown -R hamradio:hamradio /data /app && chmod -R 755 /data
 
-# ============================================================
-# Create X11 socket directory for Xvfb
-#
-# Xvfb needs /tmp/.X11-unix to exist with sticky bit set.
-# Must be created as root. The hamradio user can then
-# start Xvfb without permission errors.
-# ============================================================
-# Create X11 socket directory with sticky bit
-# Required for Xvfb to start as non-root
-RUN mkdir -p /tmp/.X11-unix && \
-    chmod 1777 /tmp/.X11-unix && \
-    chown root:root /tmp/.X11-unix
+# X11 socket directory
+RUN mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix && chown root:root /tmp/.X11-unix
 
-# ============================================================
-# Pre-create Go workspace directories for hamradio user
-#
-# go build needs writable GOPATH and GOCACHE directories.
-# Creating them here as root (then chown) ensures they exist
-# before the hamradio user tries to use them.
-# ============================================================
-RUN mkdir -p \
-        /home/hamradio/go/bin \
-        /home/hamradio/go/pkg \
-        /home/hamradio/go/src \
-        /home/hamradio/.cache/go-build \
-        /home/hamradio/.local/bin \
-    && chown -R hamradio:hamradio /home/hamradio
+# Go workspace for hamradio user
+RUN mkdir -p /home/hamradio/go/bin /home/hamradio/go/pkg /home/hamradio/go/src \
+    /home/hamradio/.cache/go-build /home/hamradio/.local/bin && \
+    chown -R hamradio:hamradio /home/hamradio
 
-# ============================================================
-# Copy Rust installation to hamradio user
-#
-# Rust was installed as root. Copy .cargo and .rustup
-# to the hamradio home so the user can run cargo.
-# ============================================================
-RUN echo "[BUILDER] === Installing Rust ==="
-RUN cp -r /root/.cargo /home/hamradio/.cargo \
-        2>/dev/null || true && \
-    cp -r /root/.rustup /home/hamradio/.rustup \
-        2>/dev/null || true && \
-    chown -R hamradio:hamradio \
-        /home/hamradio/.cargo \
-        /home/hamradio/.rustup \
-        2>/dev/null || true
+# Copy Rust installation
+RUN cp -r /root/.cargo /home/hamradio/.cargo 2>/dev/null || true && \
+    cp -r /root/.rustup /home/hamradio/.rustup 2>/dev/null || true && \
+    chown -R hamradio:hamradio /home/hamradio/.cargo /home/hamradio/.rustup 2>/dev/null || true
 
-# ============================================================
-# SatDump — Try official repo, fall back to skip
-#
-# SatDump ARM64 may not be in the official repo for
-# Debian Bookworm. The plugin will work in demo mode
-# without the binary and show install instructions.
-# ============================================================
-RUN set -eux; \
-    echo "[BUILDER] === Installing SatDump ==="; \
-    apt-get update; \
-    \
-    # Try to install from official SatDump repo
-    if apt-get install -y --no-install-recommends \
-        curl gnupg 2>/dev/null; then \
-        \
-        # Add SatDump GPG key (non-fatal if fails)
-        curl -fsSL https://downloads.satdump.org/key.gpg \
-            | apt-key add - 2>/dev/null || true; \
-        \
-        # Detect distro for repo URL
-        DISTRO=$(. /etc/os-release 2>/dev/null && \
-            echo "$VERSION_CODENAME" || echo "bookworm"); \
-        \
-        echo "deb [arch=$(dpkg --print-architecture)] \
-https://downloads.satdump.org/apt ${DISTRO} main" \
-            > /etc/apt/sources.list.d/satdump.list \
-            2>/dev/null || true; \
-        \
-        apt-get update -q 2>/dev/null || true; \
-        \
-        # Install SatDump (non-fatal if not available)
-        apt-get install -y --no-install-recommends \
-            satdump 2>/dev/null \
-        && echo "✓ SatDump installed" \
-        || echo "INFO: SatDump not available for \
-$(dpkg --print-architecture) — plugin runs in demo mode"; \
-    fi; \
-    \
-    rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# Configure PulseAudio for the hamradio user
-#
-# Creates a PulseAudio config with a null sink so FLdigi
-# can initialise its audio subsystem in Docker without
-# real audio hardware.
-# ============================================================
+# PulseAudio config
 RUN mkdir -p /home/hamradio/.config/pulse && \
     cat > /home/hamradio/.config/pulse/default.pa << 'PULSE_CONFIG'
-# PulseAudio configuration for FLdigi in Docker
-# Provides a virtual audio device so FLdigi can start
-# without real audio hardware being present.
-
 .include /etc/pulse/default.pa
-
-# Virtual output sink (no actual audio output)
-load-module module-null-sink \
-    sink_name=fldigi_null \
-    sink_properties=device.description="FLdigi_Virtual_Sink"
-
+load-module module-null-sink sink_name=fldigi_null sink_properties=device.description="FLdigi_Virtual_Sink"
 set-default-sink fldigi_null
-
-# Virtual input source (no actual microphone input)
-load-module module-null-source \
-    source_name=fldigi_null_source \
-    source_properties=device.description="FLdigi_Virtual_Source"
-
+load-module module-null-source source_name=fldigi_null_source source_properties=device.description="FLdigi_Virtual_Source"
 set-default-source fldigi_null_source
 PULSE_CONFIG
 
-# ============================================================
-# Configure ALSA to use PulseAudio
-#
-# Routes ALSA audio calls through PulseAudio so FLdigi
-# finds an audio device even without real hardware.
-# ============================================================
+# ALSA config
 RUN cat > /home/hamradio/.asoundrc << 'ALSA_CONFIG'
-# ALSA configuration routing audio through PulseAudio.
-# This is needed for FLdigi to find an audio device in Docker.
-
-pcm.!default {
-    type pulse
-    fallback "sysdefault"
-    hint {
-        show on
-        description "Default ALSA via PulseAudio"
-    }
-}
-
-ctl.!default {
-    type pulse
-    fallback "sysdefault"
-}
-
-# Explicit null device for applications that need it
-pcm.null {
-    type null
-}
-
-pcm.pulse {
-    type pulse
-}
+pcm.!default { type pulse; fallback "sysdefault"; hint { show on; description "Default ALSA via PulseAudio"; } }
+ctl.!default { type pulse; fallback "sysdefault"; }
+pcm.null { type null; }
+pcm.pulse { type pulse; }
 ALSA_CONFIG
 
-RUN chown -R hamradio:hamradio \
-    /home/hamradio/.config \
-    /home/hamradio/.asoundrc \
-    2>/dev/null || true
+RUN chown -R hamradio:hamradio /home/hamradio/.config /home/hamradio/.asoundrc 2>/dev/null || true
 
-# ============================================================
-# Copy Python virtual environment from builder stage.
-#
-# The venv is owned by root but has a+rX permissions so
-# the hamradio user can USE installed packages but cannot
-# INSTALL new packages (the intended security boundary).
-# ============================================================
+# Copy venv from builder
 COPY --from=builder /opt/venv /opt/venv
 RUN chmod -R a+rX /opt/venv
 
-# ============================================================
-# Set all runtime environment variables.
-#
-# Must come AFTER Go, Rust, and venv are installed so the
-# paths are valid when the container starts.
-# ============================================================
+# Runtime environment
 ENV GOROOT=/usr/local/go \
     GOPATH=/home/hamradio/go \
     GOCACHE=/home/hamradio/.cache/go-build \
@@ -881,18 +283,8 @@ ENV GOROOT=/usr/local/go \
     RUSTUP_HOME=/home/hamradio/.rustup \
     PATH="/usr/local/go/bin:/home/hamradio/.cargo/bin:/home/hamradio/.local/bin:/home/hamradio/go/bin:/opt/venv/bin:$PATH"
 
-# ============================================================
-# Set working directory
-# ============================================================
 WORKDIR /app
 
-# ============================================================
-# Copy application source files
-#
-# Files are ordered from least to most frequently changed
-# to maximise Docker build cache reuse.
-# All files are owned by hamradio.
-# ============================================================
 COPY --chown=hamradio:hamradio requirements.txt .
 COPY --chown=hamradio:hamradio config.py .
 COPY --chown=hamradio:hamradio secret_key_manager.py .
@@ -907,37 +299,18 @@ COPY --chown=hamradio:hamradio callsign_db ./callsign_db/
 COPY --chown=hamradio:hamradio templates ./templates/
 COPY --chown=hamradio:hamradio static ./static/
 
-# ============================================================
-# Create plugin implementations directory
-#
-# Users copy plugin packages here at runtime.
-# ============================================================
-RUN mkdir -p /app/plugins/implementations && \
-    chown -R hamradio:hamradio /app/plugins
+RUN mkdir -p /app/plugins/implementations && chown -R hamradio:hamradio /app/plugins
 
-# ============================================================
-# Switch to non-root user
-#
-# ALL subsequent operations run as hamradio (UID 1000).
-# This is the final configuration step — nothing requiring
-# root should appear after this line.
-# ============================================================
 USER hamradio
 
-# Document the application port
 EXPOSE 5000
 
-# Health check
-# Uses plain HTTP because the app may redirect to HTTPS.
-# The health check only needs a response, not a 200 status.
 HEALTHCHECK \
     --interval=30s \
     --timeout=10s \
     --start-period=60s \
     --retries=3 \
-    CMD python -c \
-        "import urllib.request; \
-         urllib.request.urlopen('http://localhost:5000/').read()" \
-    || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/').read()" || exit 1
+
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["python", "app.py"]
