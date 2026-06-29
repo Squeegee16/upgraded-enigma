@@ -203,6 +203,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN set -eux; \
     echo "[BUILDER] Skipping SatDump binary install - will use repo fallback if available"
 
+# Install SatDump from official .deb (v1.2.2)
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y \
+    --no-install-recommends \
+    curl ca-certificates; \
+    curl -fsSL \
+    -o /tmp/satdump.deb \
+    'https://github.com/SatDump/SatDump/releases/download/1.2.2/satdump_1.2.2_arm64.deb'; \
+    dpkg -i /tmp/satdump.deb \
+    || apt-get install -f -y; \
+    rm /tmp/satdump.deb; \
+    rm -rf /var/lib/apt/lists/*
+
 # WSJTX
 RUN apt-get update && apt-get install -y --no-install-recommends wsjtx && rm -rf /var/lib/apt/lists/*
 
