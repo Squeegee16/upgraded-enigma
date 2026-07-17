@@ -50,6 +50,25 @@ networks:
 # Services
 # ============================================================
 services:
+  rigctld:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rigctld
+    restart: unless-stopped
+    ports:
+      - "4533:4533"  # Changed from 4532 to match EXPOSE
+    devices:
+      - "/dev/ttyUSB0:/dev/ttyUSB0"  # Add this - pass through USB device
+    # Alternative: if device name changes, use:
+    # - "/dev/serial/by-id/usb-Silicon_Labs_CP2105_Dual_USB_to_UART_Bridge_Controller_XXXXXXX-if00-port0:/dev/ttyUSB0"
+    privileged: false  # Can add if needed, but devices: should be enough
+    environment:
+      - RIGCTLD_OPTS=-m 1035 -r /dev/ttyUSB0 -s 38400 -t 4533 -vvvvv
+    command: >
+      sh -c "echo 'Waiting for device...' &&
+             while [ ! -e /dev/ttyUSB0 ]; do sleep 1; done &&
+             rigctld $$RIGCTLD_OPTS"
 
   # ==========================================================
   # Main Ham Radio Application
