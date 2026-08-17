@@ -21,6 +21,246 @@
 # Named Volumes
 # ============================================================
 volumes:
+  app_data:
+    driver: local
+
+# ============================================================
+# Networks
+# ============================================================
+networks:
+  hamradio_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ============================================================
+# Services
+# ============================================================
+services:
+
+  # ==========================================================
+  # rigctld - Hamlib Radio Control Daemon
+  # ==========================================================
+  rigctld:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rigctld
+    restart: unless-stopped
+    ports:
+      - "4533:4533"
+    devices:
+      - "/dev/ttyUSB0:/dev/ttyUSB0"
+    privileged: false
+    environment:
+      - RIGCTLD_OPTS=-m 1035 -r /dev/ttyUSB0 -s 38400 -t 4533 -vvvvv
+    command: >
+      sh -c "echo 'Waiting for device...' &&
+             while [ ! -e /dev/ttyUSB0 ]; do sleep 1; done &&
+             /usr/local/bin/rigctld $$RIGCTLD_OPTS"
+    networks:
+      - hamradio_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - "com.hamradio.service=rigctld"
+
+  # ==========================================================
+  # Main Ham Radio Application
+  # ==========================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hamradio_app
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+      - "7362:7362"
+      - "8080:8080"
+      - "2237:2237"
+      - "8227:8227"
+      - "5999:5999"
+      - "2947:2947"
+    environment:
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - FLASK_DEBUG=${FLASK_DEBUG:-1}
+      - DATABASE_URL=sqlite:////data/db/ham_radio.db
+      - USE_MOCK_DEVICES=${USE_MOCK_DEVICES:-true}
+      - GPS_SOURCE=${GPS_SOURCE:-uart}
+      - GPS_SERIAL_PORT=${GPS_SERIAL_PORT:-/dev/ttyAMA0}
+      - GPS_BAUD_RATE=${GPS_BAUD_RATE:-9600}
+      - RADIO_MODEL=${RADIO_MODEL:-1035}
+      - RADIO_PORT=${RADIO_PORT:-/dev/ttyUSB1}
+      - RADIO_BAUD_RATE=${RADIO_BAUD_RATE:-38400}
+      - SDR_DEVICE_INDEX=${SDR_DEVICE_INDEX:-0}
+      - SDR_SAMPLE_RATE=${SDR_SAMPLE_RATE:-2048000}
+      - USE_SSL=${USE_SSL:-true}
+      - SSL_CERT=/data/certs/cert.pem
+      - SSL_KEY=/data/certs/key.pem
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=5000
+      - VALIDATE_CALLSIGNS=${VALIDATE_CALLSIGNS:-false}
+      - TZ=${TZ:-UTC}
+      - PLUGIN_SKIP_PIP_INSTALL=true
+      #- OPENWEBRX_URL=http://openwebrx:8073
+      - AUDIO_DEVICE=${AUDIO_DEVICE:-}
+      - AUDIO_INPUT_DEVICE=${AUDIO_INPUT_DEVICE:-}
+      - AUDIO_OUTPUT_DEVICE=${AUDIO_OUTPUT_DEVICE:-}
+      - QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-xcb}
+      - QT_DEBUG_PLUGINS=${QT_DEBUG_PLUGINS:-1}
+      - XVFB_DISPLAY=${XVFB_DISPLAY:-":99"}
+      - XVFB_READY=${XVFB_READY:-false}
+    volumes:
+      - app_data:/data
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ~/.Xauthority:/tmp/.Xauthority:ro
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+      - /dev/ttyAMA0:/dev/ttyAMA0
+      - /dev/ttyUSB0:/dev/ttyUSB0
+      - /dev/ttyUSB1:/dev/ttyUSB1
+      - /dev/snd/controlC0:/dev/snd/controlC0
+      - /dev/snd/pcmC0D0c:/dev/snd/pcmC0D0c
+      - /dev/snd/pcmC0D0p:/dev/snd/pcmC0D0p
+      - /dev/input/event0:/dev/input/event0
+    privileged: true
+    networks:
+      - hamradio_net
+    depends_on:
+      - rigctld
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:5000/')
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      - "com.hamradio.service=app"
+      - "com.hamradio.version=0.2.0"
+
+  # ==========================================================
+  # OpenWebRX SDR Receiver - Official Docker Image
+  # https://github.com/jketterl/openwebrx
+  # Uncomment to enable
+  # ==========================================================
+#  openwebrx:
+#    image: jketterl/openwebrx:stable
+#    container_name: hamradio_openwebrx
+#    restart: unless-stopped
+#    ports:
+#      - "8073:8073"
+#    volumes:
+#      - openwebrx_data:/var/lib/openwebrx
+#    devices:
+#      - /dev/bus/usb:/dev/bus/usb
+#    privileged: true
+#    networks:
+#      - hamradio_net
+#    cap_add:
+#      - SYS_NICE
+#    environment:
+#      - TZ=${TZ:-UTC}
+#      - OPENWEBRX_ADMIN_USER=VE1WTF
+#      - OPENWEBRX_ADMIN_PASSWORD=Password1!
+#    logging:
+#      driver: "json-file"
+#      options:
+#        max-size: "10m"
+#        max-file: "3"
+#    labels:
+#      - "com.hamradio.service=openwebrx"
+
+  # ==========================================================
+  # Database Backup Service
+  # ==========================================================
+  backup:
+    image: alpine:latest
+    container_name: hamradio_backup
+    restart: unless-stopped
+    environment:
+      - BACKUP_INTERVAL=${BACKUP_INTERVAL:-86400}
+      - BACKUP_RETENTION=${BACKUP_RETENTION:-7}
+    volumes:
+      - app_data:/data:rw
+    command: >
+      sh -c '
+      echo "Backup service starting...";
+      echo "Interval: $${BACKUP_INTERVAL}s | Retention: $${BACKUP_RETENTION}d";
+      mkdir -p /data/backups;
+      while true; do
+        if [ -f /data/db/ham_radio.db ]; then
+          TS=$$(date +%Y%m%d_%H%M%S);
+          BF="/data/backups/ham_radio_$${TS}.db";
+          if cp /data/db/ham_radio.db "$${BF}"; then
+            gzip "$${BF}";
+            echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Created: $${BF}.gz";
+          fi;
+          find /data/backups -name "ham_radio_*.db.gz" \
+            -mtime +$${BACKUP_RETENTION} -delete;
+          echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Pruned backups older than $${BACKUP_RETENTION}d";
+        else
+          echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] DB not found";
+        fi;
+        sleep $${BACKUP_INTERVAL};
+      done
+      '
+    networks:
+      - hamradio_net
+    depends_on:
+      - app
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+    labels:
+      - "com.hamradio.service=backup"# Ham Radio Operator Web Application - Docker Compose
+# =====================================================
+# Services:
+#   app       - Flask web application (port 5000)
+#   openwebrx - OpenWebRX SDR receiver sidecar (port 8073)
+#   backup    - Automated SQLite database backup
+#
+# Usage:
+#   docker compose up -d          # Start all services
+#   docker compose down           # Stop all services
+#   docker compose logs -f app    # Follow app logs
+#   docker compose build          # Rebuild app image
+#
+# RTL-SDR device assignment:
+#   The RTL-SDR can only be used by ONE container at a time.
+#   By default it is passed to the openwebrx container.
+#   If OpenWebRX is not used, assign it to the app service
+#   by moving the devices block from openwebrx to app.
+
+# ============================================================
+# Named Volumes
+# ============================================================
+volumes:
   # Single volume for all application persistent data.
   # Subdirectories created by entrypoint script:
   #   /data/db          - SQLite database
