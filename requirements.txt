@@ -4,6 +4,9 @@
 # Plugin installers will skip pip installs at runtime.
 # ============================================================
 
+setuptools>=65.0.0
+wheel>=0.40.0
+
 # Core Flask framework
 Flask==3.0.0
 Flask-Login==0.6.3
@@ -58,4 +61,3 @@ pyrtlsdr==0.3
 uv
 ephem
 pyorbital
-
