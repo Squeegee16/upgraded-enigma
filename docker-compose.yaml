@@ -2,7 +2,7 @@
 # =====================================================
 # Services:
 #   app       - Flask web application (port 5000)
-#   rigctld   - Hamlib Radio Control Daemon (port 4533)
+#   openwebrx - OpenWebRX SDR receiver sidecar (port 8073)
 #   backup    - Automated SQLite database backup
 #
 # Usage:
@@ -107,6 +107,7 @@ services:
       - VALIDATE_CALLSIGNS=${VALIDATE_CALLSIGNS:-false}
       - TZ=${TZ:-UTC}
       - PLUGIN_SKIP_PIP_INSTALL=true
+      #- OPENWEBRX_URL=http://openwebrx:8073
       - AUDIO_DEVICE=${AUDIO_DEVICE:-}
       - AUDIO_INPUT_DEVICE=${AUDIO_INPUT_DEVICE:-}
       - AUDIO_OUTPUT_DEVICE=${AUDIO_OUTPUT_DEVICE:-}
