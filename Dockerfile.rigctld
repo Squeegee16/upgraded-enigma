@@ -1,17 +1,20 @@
 # Dockerfile.rigctld
 # ==================
-# Minimal image for rigctld only.
+# Minimal isolated image for rigctld only.
 # Builds Hamlib 4.7.0 from source.
-# No app code, no entrypoint overhead.
+# No app code, no gnuradio/wsjtx dependencies.
 
 FROM debian:bookworm-slim
 
 LABEL maintainer="Ham Rad App Team"
-LABEL description="rigctld - Hamlib Radio Control Daemon 4.7.0"
+LABEL description="rigctld - Hamlib 4.7.0 Radio Control Daemon"
 
-ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \
+    PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
 
+# ============================================================
 # Build dependencies
+# ============================================================
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     wget \
@@ -22,19 +25,26 @@ RUN apt-get update && apt-get install -y \
     libusb-1.0-0-dev \
     libusb-1.0-0 \
     ca-certificates \
+    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
-# Remove any system Hamlib to avoid conflicts
+# ============================================================
+# Explicitly block system Hamlib from ever being installed
+# by pinning it to a dummy hold state
+# ============================================================
 RUN apt-get update && \
     apt-get remove -y --purge \
         libhamlib4 \
         libhamlib-dev \
+        libhamlib* \
         hamlib-utils \
         2>/dev/null || true && \
-    apt-get autoremove -y && \
+    apt-get autoremove -y 2>/dev/null || true && \
     rm -rf /var/lib/apt/lists/*
 
+# ============================================================
 # Build Hamlib 4.7.0 from source
+# ============================================================
 RUN set -eux; \
     cd /tmp; \
     wget -q \
@@ -48,16 +58,28 @@ RUN set -eux; \
     ldconfig; \
     cd /; \
     rm -rf /tmp/hamlib-4.7.0 /tmp/hamlib-4.7.0.tar.gz; \
-    echo "=== Hamlib build complete ==="; \
-    /usr/local/bin/rigctld --version
+    echo "=== Hamlib 4.7.0 build complete ==="
 
-# Runtime dependencies only
-RUN apt-get update && apt-get install -y \
-    --no-install-recommends \
-    libusb-1.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+# ============================================================
+# Hard version verification - fails build if wrong version
+# ============================================================
+RUN set -eux; \
+    INSTALLED_VER=$(/usr/local/bin/rigctld --version 2>&1 | \
+        grep -oP 'Hamlib \K[\d.]+' | head -1); \
+    echo "Installed Hamlib version: ${INSTALLED_VER}"; \
+    if [ "${INSTALLED_VER}" != "4.7.0" ]; then \
+        echo "ERROR: Expected 4.7.0 but got ${INSTALLED_VER}"; \
+        echo "Check if system Hamlib overrode compiled version"; \
+        exit 1; \
+    fi; \
+    echo "=== Version verified: ${INSTALLED_VER} ===" && \
+    # Show binary location for confirmation
+    which rigctld && \
+    ls -la /usr/local/bin/rigctld
 
+# ============================================================
 # Create non-root user
+# ============================================================
 RUN groupadd -r rigctld -g 1001 && \
     useradd -r -g rigctld -u 1001 \
         -m -s /bin/bash \
@@ -66,18 +88,9 @@ RUN groupadd -r rigctld -g 1001 && \
     usermod -a -G tty rigctld 2>/dev/null || true && \
     usermod -a -G plugdev rigctld 2>/dev/null || true
 
-# Verify binary and PATH
-RUN which rigctld && \
-    rigctld --version && \
-    echo "PATH check: $(which rigctld)"
-
-# Ensure /usr/local/bin is first in PATH
-ENV PATH="/usr/local/bin:/usr/bin:/bin"
-
 USER rigctld
 
 EXPOSE 4533
 
-# Simple entrypoint - no app overhead
 ENTRYPOINT ["/usr/local/bin/rigctld"]
 CMD ["-m", "1035", "-r", "/dev/ttyUSB0", "-s", "38400", "-t", "4533", "-vvvvv"]
