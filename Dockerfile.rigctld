@@ -1,0 +1,83 @@
+# Dockerfile.rigctld
+# ==================
+# Minimal image for rigctld only.
+# Builds Hamlib 4.7.0 from source.
+# No app code, no entrypoint overhead.
+
+FROM debian:bookworm-slim
+
+LABEL maintainer="Ham Rad App Team"
+LABEL description="rigctld - Hamlib Radio Control Daemon 4.7.0"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Build dependencies
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    wget \
+    build-essential \
+    autoconf \
+    automake \
+    libtool \
+    libusb-1.0-0-dev \
+    libusb-1.0-0 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Remove any system Hamlib to avoid conflicts
+RUN apt-get update && \
+    apt-get remove -y --purge \
+        libhamlib4 \
+        libhamlib-dev \
+        hamlib-utils \
+        2>/dev/null || true && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
+
+# Build Hamlib 4.7.0 from source
+RUN set -eux; \
+    cd /tmp; \
+    wget -q \
+        "https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download" \
+        -O hamlib-4.7.0.tar.gz; \
+    tar -xzf hamlib-4.7.0.tar.gz; \
+    cd hamlib-4.7.0; \
+    ./configure --prefix=/usr/local; \
+    make -j$(nproc); \
+    make install; \
+    ldconfig; \
+    cd /; \
+    rm -rf /tmp/hamlib-4.7.0 /tmp/hamlib-4.7.0.tar.gz; \
+    echo "=== Hamlib build complete ==="; \
+    /usr/local/bin/rigctld --version
+
+# Runtime dependencies only
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    libusb-1.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r rigctld -g 1001 && \
+    useradd -r -g rigctld -u 1001 \
+        -m -s /bin/bash \
+        -d /home/rigctld rigctld && \
+    usermod -a -G dialout rigctld 2>/dev/null || true && \
+    usermod -a -G tty rigctld 2>/dev/null || true && \
+    usermod -a -G plugdev rigctld 2>/dev/null || true
+
+# Verify binary and PATH
+RUN which rigctld && \
+    rigctld --version && \
+    echo "PATH check: $(which rigctld)"
+
+# Ensure /usr/local/bin is first in PATH
+ENV PATH="/usr/local/bin:/usr/bin:/bin"
+
+USER rigctld
+
+EXPOSE 4533
+
+# Simple entrypoint - no app overhead
+ENTRYPOINT ["/usr/local/bin/rigctld"]
+CMD ["-m", "1035", "-r", "/dev/ttyUSB0", "-s", "38400", "-t", "4533", "-vvvvv"]
