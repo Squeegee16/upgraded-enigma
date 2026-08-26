@@ -1,21 +1,5 @@
 # Ham Radio Operator Web Application - Docker Compose
 # =====================================================
-# Services:
-#   app       - Flask web application (port 5000)
-#   openwebrx - OpenWebRX SDR receiver sidecar (port 8073)
-#   backup    - Automated SQLite database backup
-#
-# Usage:
-#   docker compose up -d          # Start all services
-#   docker compose down           # Stop all services
-#   docker compose logs -f app    # Follow app logs
-#   docker compose build          # Rebuild app image
-#
-# RTL-SDR device assignment:
-#   The RTL-SDR can only be used by ONE container at a time.
-#   By default it is passed to the openwebrx container.
-#   If OpenWebRX is not used, assign it to the app service
-#   by moving the devices block from openwebrx to app.
 
 # ============================================================
 # Named Volumes
@@ -39,8 +23,8 @@ networks:
 # ============================================================
 services:
 
- # ==========================================================
-  # rigctld - Hamlib Radio Control Daemon
+  # ==========================================================
+  # rigctld - Hamlib Radio Control Daemon 4.7.0
   # ==========================================================
   rigctld:
     build:
@@ -53,14 +37,11 @@ services:
     devices:
       - "/dev/ttyUSB0:/dev/ttyUSB0"
     privileged: false
-    # All variables defined here to avoid compose interpolation warnings
     environment:
       - RIGCTLD_MODEL=1035
       - RIGCTLD_PORT=/dev/ttyUSB0
       - RIGCTLD_BAUD=38400
       - RIGCTLD_LISTEN_PORT=4533
-    # NOTE: Use $$ to escape variables from Docker Compose interpolation.
-    # WAIT uses $$((...)) arithmetic and $$WAIT to avoid WARN messages.
     command:
       - sh
       - -c
@@ -148,7 +129,6 @@ services:
       - VALIDATE_CALLSIGNS=${VALIDATE_CALLSIGNS:-false}
       - TZ=${TZ:-UTC}
       - PLUGIN_SKIP_PIP_INSTALL=true
-      #- OPENWEBRX_URL=http://openwebrx:8073
       - AUDIO_DEVICE=${AUDIO_DEVICE:-}
       - AUDIO_INPUT_DEVICE=${AUDIO_INPUT_DEVICE:-}
       - AUDIO_OUTPUT_DEVICE=${AUDIO_OUTPUT_DEVICE:-}
@@ -156,6 +136,8 @@ services:
       - QT_DEBUG_PLUGINS=${QT_DEBUG_PLUGINS:-1}
       - XVFB_DISPLAY=${XVFB_DISPLAY:-":99"}
       - XVFB_READY=${XVFB_READY:-false}
+      - RIGCTLD_HOST=rigctld
+      - RIGCTLD_PORT=4533
     volumes:
       - app_data:/data
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
@@ -204,9 +186,7 @@ services:
       - "com.hamradio.version=0.2.0"
 
   # ==========================================================
-  # OpenWebRX SDR Receiver - Official Docker Image
-  # https://github.com/jketterl/openwebrx
-  # Uncomment to enable
+  # OpenWebRX SDR Receiver - Uncomment to enable
   # ==========================================================
 #  openwebrx:
 #    image: jketterl/openwebrx:stable
@@ -214,19 +194,13 @@ services:
 #    restart: unless-stopped
 #    ports:
 #      - "8073:8073"
-#    volumes:
-#      - openwebrx_data:/var/lib/openwebrx
 #    devices:
 #      - /dev/bus/usb:/dev/bus/usb
 #    privileged: true
 #    networks:
 #      - hamradio_net
-#    cap_add:
-#      - SYS_NICE
 #    environment:
 #      - TZ=${TZ:-UTC}
-#      - OPENWEBRX_ADMIN_USER=VE1WTF
-#      - OPENWEBRX_ADMIN_PASSWORD=Password1!
 #    logging:
 #      driver: "json-file"
 #      options:
@@ -247,28 +221,29 @@ services:
       - BACKUP_RETENTION=${BACKUP_RETENTION:-7}
     volumes:
       - app_data:/data:rw
-    command: >
-      sh -c '
-      echo "Backup service starting...";
-      echo "Interval: $${BACKUP_INTERVAL}s | Retention: $${BACKUP_RETENTION}d";
-      mkdir -p /data/backups;
-      while true; do
-        if [ -f /data/db/ham_radio.db ]; then
-          TS=$$(date +%Y%m%d_%H%M%S);
-          BF="/data/backups/ham_radio_$${TS}.db";
-          if cp /data/db/ham_radio.db "$${BF}"; then
-            gzip "$${BF}";
-            echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Created: $${BF}.gz";
+    command:
+      - sh
+      - -c
+      - |
+        echo "Backup service starting...";
+        echo "Interval: $${BACKUP_INTERVAL}s | Retention: $${BACKUP_RETENTION}d";
+        mkdir -p /data/backups;
+        while true; do
+          if [ -f /data/db/ham_radio.db ]; then
+            TS=$$(date +%Y%m%d_%H%M%S);
+            BF="/data/backups/ham_radio_$${TS}.db";
+            if cp /data/db/ham_radio.db "$${BF}"; then
+              gzip "$${BF}";
+              echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Created: $${BF}.gz";
+            fi;
+            find /data/backups -name "ham_radio_*.db.gz" \
+              -mtime +$${BACKUP_RETENTION} -delete;
+            echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Pruned backups older than $${BACKUP_RETENTION}d";
+          else
+            echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] DB not found, skipping";
           fi;
-          find /data/backups -name "ham_radio_*.db.gz" \
-            -mtime +$${BACKUP_RETENTION} -delete;
-          echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Pruned backups older than $${BACKUP_RETENTION}d";
-        else
-          echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] DB not found";
-        fi;
-        sleep $${BACKUP_INTERVAL};
-      done
-      '
+          sleep $${BACKUP_INTERVAL};
+        done
     networks:
       - hamradio_net
     depends_on:
