@@ -19,6 +19,9 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
+# Ensure locally compiled binaries always take precedence
+# over any system-installed versions
+ENV PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
 
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
