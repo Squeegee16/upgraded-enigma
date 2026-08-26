@@ -160,10 +160,11 @@ RUN apt-get update && \
     apt-get autoremove -y 2>/dev/null || true && \
     rm -rf /var/lib/apt/lists/*
 
-# Hamlib 4.7.0 from source
+# Hamlib 4.7.0 from source - with hard version verification
 RUN set -eux; \
     cd /tmp; \
-    wget -q "https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download" \
+    wget -q \
+        "https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download" \
         -O hamlib-4.7.0.tar.gz; \
     tar -xzf hamlib-4.7.0.tar.gz; \
     cd hamlib-4.7.0; \
@@ -171,10 +172,18 @@ RUN set -eux; \
     make -j$(nproc); \
     make install; \
     ldconfig; \
-    cd /; rm -rf /tmp/hamlib-4.7.0 /tmp/hamlib-4.7.0.tar.gz; \
-    echo "[BUILDER] === Hamlib build complete ==="; \
-    # Verify correct version is installed
-    /usr/local/bin/rigctld --version
+    cd /; \
+    rm -rf /tmp/hamlib-4.7.0 /tmp/hamlib-4.7.0.tar.gz; \
+    echo "=== Hamlib build complete ==="; \
+    # Hard version check - fail build if wrong version
+    INSTALLED_VER=$(/usr/local/bin/rigctld --version 2>&1 | \
+        grep -oP 'Hamlib \K[\d.]+' | head -1); \
+    echo "Installed Hamlib version: ${INSTALLED_VER}"; \
+    if [ "${INSTALLED_VER}" != "4.7.0" ]; then \
+        echo "ERROR: Expected 4.7.0 but got ${INSTALLED_VER}"; \
+        exit 1; \
+    fi; \
+    echo "=== Version verified: ${INSTALLED_VER} ==="
 
 # RTL-SDR from source
 RUN set -eux; \
