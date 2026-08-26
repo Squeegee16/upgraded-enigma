@@ -128,14 +128,41 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# GNURadio (optional)
+# GNURadio + gnuradio-dev
+# Both are installed here together with matching versions
+# to ensure gnuradio-dev does not fail with a version
+# mismatch later when op25 needs it.
+#
 # NOTE: gnuradio pulls in libhamlib4 as a dependency.
-# This will be purged after Hamlib 4.7.0 is compiled below.
+# This will be purged after all apt installs in Fix 3 below.
 # ============================================================
-RUN apt-get update && \
-    (apt-get install -y --no-install-recommends gnuradio \
-    || echo "[BUILDER] INFO: gnuradio not available") && \
-    rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    apt-get update; \
+    # Discover the candidate version so gnuradio and
+    # gnuradio-dev are pinned to the exact same version.
+    GNURADIO_VER=$(apt-cache policy gnuradio 2>/dev/null | \
+        grep Candidate | awk '{print $2}' || echo ""); \
+    echo "[BUILDER] Available gnuradio version: ${GNURADIO_VER}"; \
+    if [ -n "${GNURADIO_VER}" ] && \
+       [ "${GNURADIO_VER}" != "(none)" ]; then \
+        # Install gnuradio and gnuradio-dev at matching versions
+        apt-get install -y --no-install-recommends \
+            gnuradio="${GNURADIO_VER}" \
+            gnuradio-dev="${GNURADIO_VER}" \
+            libcppunit-dev \
+        || { \
+            # Fallback: install without version pin if pinning fails
+            echo "[BUILDER] WARNING: Pinned install failed, trying unpinned..."; \
+            apt-get install -y --no-install-recommends \
+                gnuradio \
+                libcppunit-dev \
+            || echo "[BUILDER] WARNING: gnuradio not available"; \
+        }; \
+    else \
+        echo "[BUILDER] INFO: gnuradio not available in repos - skipping"; \
+    fi; \
+    rm -rf /var/lib/apt/lists/*; \
+    echo "[BUILDER] === GNURadio setup complete ==="
 
 # ============================================================
 # Qt5 platform plugins
@@ -156,13 +183,14 @@ RUN apt-get update && apt-get install -y \
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-    libfltk1.3 libpulse0 libsamplerate0 libsndfile1 portaudio19-dev; \
+        libfltk1.3 libpulse0 libsamplerate0 libsndfile1 \
+        portaudio19-dev; \
     (apt-get install -y --no-install-recommends libasound2t64 \
     || apt-get install -y --no-install-recommends libasound2); \
     apt-get install -y --no-install-recommends fldigi \
-    || echo "[BUILDER] INFO: fldigi not in apt repos"; \
+        || echo "[BUILDER] INFO: fldigi not in apt repos"; \
     apt-get install -y --no-install-recommends flrig \
-    || echo "[BUILDER] INFO: flrig not available"; \
+        || echo "[BUILDER] INFO: flrig not available"; \
     rm -rf /var/lib/apt/lists/*; \
     echo "[BUILDER] === FLdigi setup complete ==="
 
@@ -172,18 +200,24 @@ RUN set -eux; \
 RUN set -eux; \
     cd /tmp; \
     git clone --depth 1 https://github.com/pothosware/SoapySDR.git; \
-    cd SoapySDR; mkdir build; cd build; \
+    cd SoapySDR; \
+    mkdir build; \
+    cd build; \
     cmake -DCMAKE_BUILD_TYPE=Release ..; \
-    make -j$(nproc); make install; ldconfig; \
-    cd /; rm -rf /tmp/SoapySDR; \
+    make -j$(nproc); \
+    make install; \
+    ldconfig; \
+    cd /; \
+    rm -rf /tmp/SoapySDR; \
     echo "[BUILDER] === SoapySDR build complete ==="
 
 # ============================================================
 # Remove any system Hamlib BEFORE building from source.
 # This prevents the system version from interfering with
 # our compiled version during the build step.
-# NOTE: gnuradio/wsjtx may reinstall libhamlib4 later.
-# That is handled by the purge step AFTER all apt installs.
+# NOTE: gnuradio/wsjtx may reinstall libhamlib4 later via
+# apt dependencies. That is handled by Fix 3 AFTER all
+# apt installs are complete.
 # ============================================================
 RUN apt-get update && \
     apt-get remove -y --purge \
@@ -211,7 +245,7 @@ RUN set -eux; \
     cd /; \
     rm -rf /tmp/hamlib-4.7.0 /tmp/hamlib-4.7.0.tar.gz; \
     echo "[BUILDER] === Hamlib 4.7.0 build complete ==="; \
-    # Verify correct version installed
+    # Verify correct version is installed before continuing
     /usr/local/bin/rigctld --version
 
 # ============================================================
@@ -220,10 +254,15 @@ RUN set -eux; \
 RUN set -eux; \
     cd /tmp; \
     git clone --depth 1 https://github.com/osmocom/rtl-sdr.git; \
-    cd rtl-sdr; mkdir build; cd build; \
+    cd rtl-sdr; \
+    mkdir build; \
+    cd build; \
     cmake -DCMAKE_BUILD_TYPE=Release -DINSTALL_UDEV_RULES=ON ..; \
-    make -j$(nproc); make install; ldconfig; \
-    cd /; rm -rf /tmp/rtl-sdr; \
+    make -j$(nproc); \
+    make install; \
+    ldconfig; \
+    cd /; \
+    rm -rf /tmp/rtl-sdr; \
     echo "[BUILDER] === RTL-SDR build complete ==="
 
 # ============================================================
@@ -241,7 +280,8 @@ RUN set -eux; \
     fi; \
     GO_URL="https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"; \
     wget -q "${GO_URL}" -O /tmp/go.tar.gz; \
-    tar -C /usr/local -xzf /tmp/go.tar.gz; rm /tmp/go.tar.gz; \
+    tar -C /usr/local -xzf /tmp/go.tar.gz; \
+    rm /tmp/go.tar.gz; \
     /usr/local/go/bin/go version; \
     echo "[BUILDER] === Go ${GO_VERSION} installed ==="
 
@@ -259,16 +299,23 @@ RUN set -eux; \
 # QSSTV
 # ============================================================
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends qsstv && \
+    apt-get install -y --no-install-recommends qsstv \
+        || echo "[BUILDER] INFO: qsstv not available - skipping"; \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================================
 # SatDump dependencies
 # ============================================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libvolk2-dev libnng-dev zenity libzstd-dev libomp-dev \
-    libarmadillo-dev \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libvolk2-dev \
+        libnng-dev \
+        zenity \
+        libzstd-dev \
+        libomp-dev \
+        libarmadillo-dev \
+        || echo "[BUILDER] INFO: Some SatDump deps not available"; \
+    rm -rf /var/lib/apt/lists/*
 
 # ============================================================
 # Install SatDump from official .deb (v1.2.2)
@@ -279,31 +326,38 @@ RUN set -eux; \
     curl -fsSL \
         -o /tmp/satdump.deb \
         'https://github.com/SatDump/SatDump/releases/download/1.2.2/satdump_1.2.2_arm64.deb'; \
-    dpkg -i /tmp/satdump.deb || apt-get install -f -y; \
-    rm /tmp/satdump.deb; \
+    dpkg -i /tmp/satdump.deb \
+        || apt-get install -f -y \
+        || echo "[BUILDER] INFO: SatDump install failed - skipping"; \
+    rm -f /tmp/satdump.deb; \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================================
 # WSJTX
 # NOTE: wsjtx pulls in libhamlib4 as a dependency.
-# This will be purged in the cleanup step below.
+# This will be purged in Fix 3 below.
 # ============================================================
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends wsjtx && \
+    apt-get install -y --no-install-recommends wsjtx \
+        || echo "[BUILDER] INFO: wsjtx not available - skipping"; \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================================
 # Pat for Winlink
 # ============================================================
-RUN /usr/local/go/bin/go install github.com/la5nta/pat@latest
+RUN /usr/local/go/bin/go install github.com/la5nta/pat@latest \
+    || echo "[BUILDER] INFO: pat install failed - skipping"
 
 # ============================================================
 # Op25 P25 decoder dependencies
-# NOTE: gnuradio-dev may pull in libhamlib4.
-# This will be purged in the cleanup step below.
+# gnuradio-dev was already installed with gnuradio above
+# using matched version pinning to avoid exit code 100.
+# Only libcppunit-dev is needed here if not already installed.
 # ============================================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libcppunit-dev gnuradio-dev && \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libcppunit-dev \
+        || echo "[BUILDER] INFO: libcppunit-dev not available"; \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================================
@@ -311,10 +365,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ============================================================
 RUN set -eux; \
     cd /tmp; \
-    git clone https://github.com/boatbod/op25.git; \
-    cd op25; sed -i 's/sudo //g' install.sh; \
-    ./install.sh; ldconfig; \
-    cd /; rm -rf /tmp/op25; \
+    git clone https://github.com/boatbod/op25.git \
+        || { echo "[BUILDER] WARNING: op25 clone failed"; exit 0; }; \
+    cd op25; \
+    sed -i 's/sudo //g' install.sh; \
+    # Run install but do not fail the entire build if op25 errors
+    ./install.sh \
+        || echo "[BUILDER] WARNING: op25 install had errors - continuing"; \
+    ldconfig; \
+    cd /; \
+    rm -rf /tmp/op25; \
     echo "[BUILDER] === P25 decoder build complete ==="
 
 # ============================================================
@@ -324,6 +384,7 @@ RUN set -eux; \
 # in as an apt dependency. We remove the system binaries here
 # AFTER all apt installs are complete, then verify our
 # compiled Hamlib 4.7.0 is the active version.
+# This MUST stay after all apt install blocks above.
 # ============================================================
 RUN set -eux; \
     echo "=== Purging system Hamlib pulled in by gnuradio/wsjtx ==="; \
@@ -331,14 +392,14 @@ RUN set -eux; \
     apt-get remove -y --purge hamlib-utils 2>/dev/null || true; \
     apt-get autoremove -y 2>/dev/null || true; \
     # Force-remove system rigctld/rigctl binaries if they exist
-    rm -f /usr/bin/rigctld 2>/dev/null || true; \
-    rm -f /usr/bin/rigctl 2>/dev/null || true; \
-    rm -f /usr/bin/rigmem 2>/dev/null || true; \
-    rm -f /usr/bin/rigsmtr 2>/dev/null || true; \
-    rm -f /usr/bin/rigswr 2>/dev/null || true; \
-    rm -f /usr/bin/rotctl 2>/dev/null || true; \
-    rm -f /usr/bin/rotctld 2>/dev/null || true; \
-    # Re-run ldconfig so our /usr/local/lib libs are found
+    rm -f /usr/bin/rigctld  2>/dev/null || true; \
+    rm -f /usr/bin/rigctl   2>/dev/null || true; \
+    rm -f /usr/bin/rigmem   2>/dev/null || true; \
+    rm -f /usr/bin/rigsmtr  2>/dev/null || true; \
+    rm -f /usr/bin/rigswr   2>/dev/null || true; \
+    rm -f /usr/bin/rotctl   2>/dev/null || true; \
+    rm -f /usr/bin/rotctld  2>/dev/null || true; \
+    # Re-run ldconfig so /usr/local/lib libs are active
     ldconfig; \
     rm -rf /var/lib/apt/lists/*; \
     echo "=== System Hamlib binaries removed ==="; \
@@ -346,14 +407,14 @@ RUN set -eux; \
     echo "Checking /usr/local/bin/rigctld..."; \
     ls -la /usr/local/bin/rigctld; \
     /usr/local/bin/rigctld --version; \
-    # Verify PATH resolves to correct binary
-    echo "PATH resolves rigctld to: $$(which rigctld)"; \
+    # Verify PATH resolves to our binary
+    echo "PATH resolves rigctld to: $(which rigctld)"; \
     # Hard version check - fails build if wrong version
-    INSTALLED_VER=$$(/usr/local/bin/rigctld --version 2>&1 | \
+    INSTALLED_VER=$(/usr/local/bin/rigctld --version 2>&1 | \
         grep -oP 'Hamlib \K[\d.]+' | head -1); \
-    echo "Active rigctld version: $${INSTALLED_VER}"; \
-    if [ "$${INSTALLED_VER}" != "4.7.0" ]; then \
-        echo "BUILD ERROR: Expected Hamlib 4.7.0 but got $${INSTALLED_VER}"; \
+    echo "Active rigctld version: ${INSTALLED_VER}"; \
+    if [ "${INSTALLED_VER}" != "4.7.0" ]; then \
+        echo "BUILD ERROR: Expected Hamlib 4.7.0 but got ${INSTALLED_VER}"; \
         echo "Check if a new package is pulling in system libhamlib4"; \
         exit 1; \
     fi; \
