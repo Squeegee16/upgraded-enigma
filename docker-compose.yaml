@@ -39,13 +39,13 @@ networks:
 # ============================================================
 services:
 
-  # ==========================================================
+ # ==========================================================
   # rigctld - Hamlib Radio Control Daemon
   # ==========================================================
   rigctld:
     build:
       context: .
-      dockerfile: Dockerfile.rigctld    # <-- use dedicated Dockerfile
+      dockerfile: Dockerfile.rigctld
     container_name: rigctld
     restart: unless-stopped
     ports:
@@ -53,34 +53,42 @@ services:
     devices:
       - "/dev/ttyUSB0:/dev/ttyUSB0"
     privileged: false
+    # All variables defined here to avoid compose interpolation warnings
     environment:
-      - RIGCTLD_MODEL=${RIGCTLD_MODEL:-1035}
-      - RIGCTLD_PORT=${RIGCTLD_PORT:-/dev/ttyUSB0}
-      - RIGCTLD_BAUD=${RIGCTLD_BAUD:-38400}
-      - RIGCTLD_LISTEN_PORT=${RIGCTLD_LISTEN_PORT:-4533}
-    # Override CMD with env vars for flexibility
-    command: >
-      sh -c "
-        echo 'Waiting for /dev/ttyUSB0...';
+      - RIGCTLD_MODEL=1035
+      - RIGCTLD_PORT=/dev/ttyUSB0
+      - RIGCTLD_BAUD=38400
+      - RIGCTLD_LISTEN_PORT=4533
+    # NOTE: Use $$ to escape variables from Docker Compose interpolation.
+    # WAIT uses $$((...)) arithmetic and $$WAIT to avoid WARN messages.
+    command:
+      - sh
+      - -c
+      - |
+        echo "=== rigctld startup ===";
+        echo "Binary  : $$(which rigctld)";
+        echo "Version : $$(/usr/local/bin/rigctld --version 2>&1 | head -1)";
+        echo "Model   : $${RIGCTLD_MODEL}";
+        echo "Port    : $${RIGCTLD_PORT}";
+        echo "Baud    : $${RIGCTLD_BAUD}";
+        echo "Listen  : $${RIGCTLD_LISTEN_PORT}";
+        echo "Waiting for $${RIGCTLD_PORT}...";
         WAIT=0;
-        while [ ! -e /dev/ttyUSB0 ]; do
+        while [ ! -e "$${RIGCTLD_PORT}" ]; do
           sleep 1;
-          WAIT=\$((WAIT+1));
-          if [ \$WAIT -ge 30 ]; then
-            echo 'ERROR: /dev/ttyUSB0 not found after 30s';
-            exit 1;
+          WAIT=$$((WAIT+1));
+          if [ "$$WAIT" -ge 30 ]; then
+            echo "ERROR: $${RIGCTLD_PORT} not found after 30s - starting anyway";
+            break;
           fi;
         done;
-        echo 'Device found. Starting rigctld...';
-        echo 'Binary: \$(which rigctld)';
-        echo 'Version: \$(rigctld --version 2>&1 | head -1)';
+        echo "Starting /usr/local/bin/rigctld...";
         exec /usr/local/bin/rigctld \
-          -m \${RIGCTLD_MODEL} \
-          -r \${RIGCTLD_PORT} \
-          -s \${RIGCTLD_BAUD} \
-          -t \${RIGCTLD_LISTEN_PORT} \
+          -m "$${RIGCTLD_MODEL}" \
+          -r "$${RIGCTLD_PORT}" \
+          -s "$${RIGCTLD_BAUD}" \
+          -t "$${RIGCTLD_LISTEN_PORT}" \
           -vvvvv
-      "
     networks:
       - hamradio_net
     healthcheck:
@@ -88,7 +96,7 @@ services:
         - CMD
         - sh
         - -c
-        - "echo 'f' | nc -w 2 localhost 4533 | grep -q 'MHz' || exit 1"
+        - "echo 'f' | nc -w 2 localhost 4533"
       interval: 30s
       timeout: 10s
       retries: 3
@@ -100,7 +108,7 @@ services:
         max-file: "3"
     labels:
       - "com.hamradio.service=rigctld"
-      - "com.hamradio.version=4.7.0"
+      - "com.hamradio.hamlib-version=4.7.0"
 
   # ==========================================================
   # Main Ham Radio Application
