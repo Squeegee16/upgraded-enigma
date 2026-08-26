@@ -77,7 +77,32 @@ echo ""
 echo -e "${YELLOW}[2/7] Validating environment...${NC}"
 echo -e "${GREEN}✓ Environment validated${NC}"
 echo ""
+# =================================================================
+# [2b/7] Verify critical binary versions
+# =================================================================
+echo -e "${YELLOW}[2b/7] Verifying binary versions...${NC}"
 
+# Check rigctld version
+if command -v rigctld >/dev/null 2>&1; then
+    RIGCTLD_PATH=$(which rigctld)
+    RIGCTLD_VER=$(rigctld --version 2>&1 | \
+        grep -oP 'Hamlib \K[\d.]+' | head -1 || echo "unknown")
+    echo "  rigctld path    : $RIGCTLD_PATH"
+    echo "  rigctld version : $RIGCTLD_VER"
+
+    if [ "$RIGCTLD_VER" = "4.5.4" ]; then
+        echo -e "${RED}  ✗ WRONG VERSION: 4.5.4 detected!${NC}"
+        echo -e "${RED}    System Hamlib is overriding compiled version${NC}"
+        echo -e "${RED}    Fix: Rebuild image with --no-cache${NC}"
+    elif [ "$RIGCTLD_VER" = "4.7.0" ]; then
+        echo -e "${GREEN}  ✓ rigctld $RIGCTLD_VER (correct)${NC}"
+    else
+        echo -e "${YELLOW}  ⚠ rigctld $RIGCTLD_VER (unexpected)${NC}"
+    fi
+else
+    echo -e "${YELLOW}  ⚠ rigctld not found in PATH${NC}"
+fi
+echo ""
 # =================================================================
 # [3/7] Set up directories
 # =================================================================
