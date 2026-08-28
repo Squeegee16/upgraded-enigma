@@ -129,29 +129,23 @@ RUN apt-get update && \
 
 # ============================================================
 # GNURadio + gnuradio-dev
-# Both are installed here together with matching versions
-# to ensure gnuradio-dev does not fail with a version
-# mismatch later when op25 needs it.
-#
+# Both installed together with matching versions to ensure
+# gnuradio-dev does not fail with a version mismatch.
 # NOTE: gnuradio pulls in libhamlib4 as a dependency.
-# This will be purged after all apt installs in Fix 3 below.
+# Hamlib will be rebuilt from source AFTER all apt installs.
 # ============================================================
 RUN set -eux; \
     apt-get update; \
-    # Discover the candidate version so gnuradio and
-    # gnuradio-dev are pinned to the exact same version.
     GNURADIO_VER=$(apt-cache policy gnuradio 2>/dev/null | \
         grep Candidate | awk '{print $2}' || echo ""); \
     echo "[BUILDER] Available gnuradio version: ${GNURADIO_VER}"; \
     if [ -n "${GNURADIO_VER}" ] && \
        [ "${GNURADIO_VER}" != "(none)" ]; then \
-        # Install gnuradio and gnuradio-dev at matching versions
         apt-get install -y --no-install-recommends \
             gnuradio="${GNURADIO_VER}" \
             gnuradio-dev="${GNURADIO_VER}" \
             libcppunit-dev \
         || { \
-            # Fallback: install without version pin if pinning fails
             echo "[BUILDER] WARNING: Pinned install failed, trying unpinned..."; \
             apt-get install -y --no-install-recommends \
                 gnuradio \
@@ -210,43 +204,6 @@ RUN set -eux; \
     cd /; \
     rm -rf /tmp/SoapySDR; \
     echo "[BUILDER] === SoapySDR build complete ==="
-
-# ============================================================
-# Remove any system Hamlib BEFORE building from source.
-# This prevents the system version from interfering with
-# our compiled version during the build step.
-# NOTE: gnuradio/wsjtx may reinstall libhamlib4 later via
-# apt dependencies. That is handled by Fix 3 AFTER all
-# apt installs are complete.
-# ============================================================
-RUN apt-get update && \
-    apt-get remove -y --purge \
-        libhamlib4 \
-        libhamlib-dev \
-        hamlib-utils \
-        2>/dev/null || true && \
-    apt-get autoremove -y 2>/dev/null || true && \
-    rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# Hamlib 4.7.0 from source
-# ============================================================
-RUN set -eux; \
-    cd /tmp; \
-    wget -q \
-        "https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download" \
-        -O hamlib-4.7.0.tar.gz; \
-    tar -xzf hamlib-4.7.0.tar.gz; \
-    cd hamlib-4.7.0; \
-    ./configure --prefix=/usr/local; \
-    make -j$(nproc); \
-    make install; \
-    ldconfig; \
-    cd /; \
-    rm -rf /tmp/hamlib-4.7.0 /tmp/hamlib-4.7.0.tar.gz; \
-    echo "[BUILDER] === Hamlib 4.7.0 build complete ==="; \
-    # Verify correct version is installed before continuing
-    /usr/local/bin/rigctld --version
 
 # ============================================================
 # RTL-SDR from source
@@ -335,7 +292,7 @@ RUN set -eux; \
 # ============================================================
 # WSJTX
 # NOTE: wsjtx pulls in libhamlib4 as a dependency.
-# This will be purged in Fix 3 below.
+# Hamlib will be rebuilt from source after all apt installs.
 # ============================================================
 RUN apt-get update && \
     apt-get install -y --no-install-recommends wsjtx \
@@ -350,9 +307,7 @@ RUN /usr/local/go/bin/go install github.com/la5nta/pat@latest \
 
 # ============================================================
 # Op25 P25 decoder dependencies
-# gnuradio-dev was already installed with gnuradio above
-# using matched version pinning to avoid exit code 100.
-# Only libcppunit-dev is needed here if not already installed.
+# libcppunit-dev only - gnuradio-dev installed above
 # ============================================================
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -369,7 +324,6 @@ RUN set -eux; \
         || { echo "[BUILDER] WARNING: op25 clone failed"; exit 0; }; \
     cd op25; \
     sed -i 's/sudo //g' install.sh; \
-    # Run install but do not fail the entire build if op25 errors
     ./install.sh \
         || echo "[BUILDER] WARNING: op25 install had errors - continuing"; \
     ldconfig; \
@@ -378,47 +332,90 @@ RUN set -eux; \
     echo "[BUILDER] === P25 decoder build complete ==="
 
 # ============================================================
-# FIX 3: Purge system Hamlib reinstalled by gnuradio/wsjtx/op25
+# ALL APT INSTALLS ARE NOW COMPLETE
 # ============================================================
-# gnuradio, wsjtx, and gnuradio-dev all pull libhamlib4 back
-# in as an apt dependency. We remove the system binaries here
-# AFTER all apt installs are complete, then verify our
-# compiled Hamlib 4.7.0 is the active version.
-# This MUST stay after all apt install blocks above.
+# Purge ALL system Hamlib binaries and libs installed by
+# gnuradio, wsjtx, op25 or any other apt package above.
+# We do this once here before rebuilding from source so
+# nothing can overwrite our compiled version afterwards.
 # ============================================================
 RUN set -eux; \
-    echo "=== Purging system Hamlib pulled in by gnuradio/wsjtx ==="; \
-    # Remove system hamlib utilities/binaries
-    apt-get remove -y --purge hamlib-utils 2>/dev/null || true; \
+    echo "=== Purging ALL system Hamlib before source rebuild ==="; \
+    apt-get remove -y --purge \
+        hamlib-utils \
+        libhamlib4 \
+        libhamlib-dev \
+        libhamlib* \
+        2>/dev/null || true; \
     apt-get autoremove -y 2>/dev/null || true; \
-    # Force-remove system rigctld/rigctl binaries if they exist
-    rm -f /usr/bin/rigctld  2>/dev/null || true; \
-    rm -f /usr/bin/rigctl   2>/dev/null || true; \
-    rm -f /usr/bin/rigmem   2>/dev/null || true; \
-    rm -f /usr/bin/rigsmtr  2>/dev/null || true; \
-    rm -f /usr/bin/rigswr   2>/dev/null || true; \
-    rm -f /usr/bin/rotctl   2>/dev/null || true; \
-    rm -f /usr/bin/rotctld  2>/dev/null || true; \
-    # Re-run ldconfig so /usr/local/lib libs are active
+    # Remove any hamlib binaries from ALL common locations
+    find /usr/bin /usr/local/bin /usr/sbin /usr/local/sbin \
+        -name "rigctld" -o \
+        -name "rigctl"  -o \
+        -name "rigmem"  -o \
+        -name "rigsmtr" -o \
+        -name "rigswr"  -o \
+        -name "rotctl"  -o \
+        -name "rotctld" \
+        2>/dev/null | xargs rm -f 2>/dev/null || true; \
+    # Remove any hamlib libraries from ALL common locations
+    find /usr/lib /usr/local/lib \
+        -name "libhamlib*" \
+        2>/dev/null | xargs rm -f 2>/dev/null || true; \
     ldconfig; \
     rm -rf /var/lib/apt/lists/*; \
-    echo "=== System Hamlib binaries removed ==="; \
-    # Verify our compiled version is still intact
-    echo "Checking /usr/local/bin/rigctld..."; \
+    echo "=== All system Hamlib files removed ==="
+
+# ============================================================
+# Hamlib 4.7.0 from source
+# Built LAST after all apt installs so nothing can
+# overwrite our compiled binary or libraries.
+# ============================================================
+RUN set -eux; \
+    cd /tmp; \
+    wget -q \
+        "https://sourceforge.net/projects/hamlib/files/hamlib/4.7.0/hamlib-4.7.0.tar.gz/download" \
+        -O hamlib-4.7.0.tar.gz; \
+    tar -xzf hamlib-4.7.0.tar.gz; \
+    cd hamlib-4.7.0; \
+    ./configure --prefix=/usr/local; \
+    make -j$(nproc); \
+    make install; \
+    ldconfig; \
+    cd /; \
+    rm -rf /tmp/hamlib-4.7.0 /tmp/hamlib-4.7.0.tar.gz; \
+    echo "[BUILDER] === Hamlib 4.7.0 build complete ==="
+
+# ============================================================
+# FINAL VERSION VERIFICATION
+# Hard fail if wrong version - catches any future regressions
+# ============================================================
+RUN set -eux; \
+    echo "=== Final Hamlib version verification ==="; \
+    # Show exactly what is installed and where
+    echo "Binary location:"; \
     ls -la /usr/local/bin/rigctld; \
+    echo "Version output:"; \
     /usr/local/bin/rigctld --version; \
-    # Verify PATH resolves to our binary
-    echo "PATH resolves rigctld to: $(which rigctld)"; \
-    # Hard version check - fails build if wrong version
+    echo "PATH resolution:"; \
+    which rigctld; \
+    # Check no system hamlib binaries snuck back in
+    echo "Checking for stray system hamlib binaries..."; \
+    find /usr/bin /usr/sbin \
+        -name "rigctld" -o \
+        -name "rigctl" \
+        2>/dev/null && \
+        echo "WARNING: stray binaries found" || \
+        echo "OK: No stray binaries in /usr/bin or /usr/sbin"; \
+    # Extract and validate version number
     INSTALLED_VER=$(/usr/local/bin/rigctld --version 2>&1 | \
         grep -oP 'Hamlib \K[\d.]+' | head -1); \
-    echo "Active rigctld version: ${INSTALLED_VER}"; \
+    echo "Installed version: ${INSTALLED_VER}"; \
     if [ "${INSTALLED_VER}" != "4.7.0" ]; then \
-        echo "BUILD ERROR: Expected Hamlib 4.7.0 but got ${INSTALLED_VER}"; \
-        echo "Check if a new package is pulling in system libhamlib4"; \
+        echo "BUILD ERROR: Expected 4.7.0 but got ${INSTALLED_VER}"; \
         exit 1; \
     fi; \
-    echo "=== Hamlib 4.7.0 confirmed active and correct ==="
+    echo "=== Hamlib 4.7.0 verified OK ==="
 
 # ============================================================
 # Entrypoint and RTL-SDR blacklist
