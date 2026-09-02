@@ -92,5 +92,6 @@ USER rigctld
 
 EXPOSE 4533
 
+# Default device can be overridden via docker run or compose
 ENTRYPOINT ["/usr/local/bin/rigctld"]
 CMD ["-m", "1035", "-r", "/dev/ttyUSB0", "-s", "38400", "-t", "4533", "-vvvvv"]
