@@ -39,7 +39,6 @@ COPY requirements.txt .
 RUN python -m venv /opt/venv && \
     . /opt/venv/bin/activate && \
     pip install --upgrade pip setuptools wheel && \
-    pip install setuptools wheel && \
     pip install -r requirements.txt
 
 # ============================================================
@@ -105,20 +104,20 @@ RUN apt-get update && apt-get install -y \
 
 # ============================================================
 # GPS support
-# Disable gpsd socket/service so it does not grab
-# the serial port before our application does.
+# NOTE: gpsd socket is disabled via app logic, not systemctl
 # ============================================================
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     gpsd gpsd-clients \
     && rm -rf /var/lib/apt/lists/*
 
-RUN systemctl disable gpsd 2>/dev/null || true && \
-    systemctl disable gpsd.socket 2>/dev/null || true
-
 # ============================================================
-# Audio support (Bookworm compat)
+# USB support (needed for Hamlib build)
 # ============================================================
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    libusb-1.0-0-dev \
+    && rm -rf /var/lib/apt/lists/*
 RUN apt-get update && \
     (apt-get install -y --no-install-recommends libasound2t64 \
     || apt-get install -y --no-install-recommends libasound2) && \
@@ -276,17 +275,26 @@ RUN apt-get update && \
 
 # ============================================================
 # Install SatDump from official .deb (v1.2.2)
+# Detect architecture and use correct binary
 # ============================================================
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends curl ca-certificates; \
-    curl -fsSL \
-        -o /tmp/satdump.deb \
-        'https://github.com/SatDump/SatDump/releases/download/1.2.2/satdump_1.2.2_arm64.deb'; \
-    dpkg -i /tmp/satdump.deb \
-        || apt-get install -f -y \
-        || echo "[BUILDER] INFO: SatDump install failed - skipping"; \
-    rm -f /tmp/satdump.deb; \
+    ARCH=$(dpkg --print-architecture); \
+    case "${ARCH}" in \
+        arm64|aarch64) DEB_URL="https://github.com/SatDump/SatDump/releases/download/1.2.2/satdump_1.2.2_arm64.deb" ;; \
+        amd64|x86_64) DEB_URL="https://github.com/SatDump/SatDump/releases/download/1.2.2/satdump_1.2.2_amd64.deb" ;; \
+        *) echo "[BUILDER] WARNING: No SatDump for ${ARCH}"; DEB_URL="" ;; \
+    esac; \
+    if [ -n "${DEB_URL}" ]; then \
+        curl -fsSL -o /tmp/satdump.deb "${DEB_URL}" || { echo "[BUILDER] INFO: SatDump download failed"; DEB_URL=""; }; \
+    fi; \
+    if [ -n "${DEB_URL}" ] && [ -f /tmp/satdump.deb ]; then \
+        dpkg -i /tmp/satdump.deb || apt-get install -f -y || echo "[BUILDER] INFO: SatDump install failed"; \
+        rm -f /tmp/satdump.deb; \
+    else \
+        echo "[BUILDER] INFO: SatDump skipped for ${ARCH}"; \
+    fi; \
     rm -rf /var/lib/apt/lists/*
 
 # ============================================================
