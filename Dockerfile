@@ -35,11 +35,31 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /build
 COPY requirements.txt .
 
-# Install setuptools and wheel first to ensure pkg_resources is available
-RUN python -m venv /opt/venv && \
-    . /opt/venv/bin/activate && \
-    pip install --upgrade pip setuptools wheel && \
-    pip install -r requirements.txt
+# Create venv and install all packages
+# setuptools MUST be installed first and explicitly
+RUN set -eux; \
+    python -m venv /opt/venv; \
+    # Upgrade pip first
+    /opt/venv/bin/pip install --upgrade pip; \
+    # Install setuptools and wheel explicitly FIRST
+    # This ensures pkg_resources is available
+    /opt/venv/bin/pip install \
+        "setuptools>=68.0.0" \
+        "wheel>=0.41.0"; \
+    # Now install all requirements
+    /opt/venv/bin/pip install -r requirements.txt; \
+    # Reinstall setuptools AFTER requirements in case
+    # something downgraded it
+    /opt/venv/bin/pip install \
+        "setuptools>=68.0.0" \
+        "wheel>=0.41.0"; \
+    echo "=== Builder venv packages ==="; \
+    /opt/venv/bin/pip list; \
+    echo "=== Verifying pkg_resources in builder ==="; \
+    /opt/venv/bin/python -c "import pkg_resources; \
+        print('pkg_resources version:', \
+        pkg_resources.get_distribution('setuptools').version)"; \
+    echo "=== Builder venv complete ==="
 
 # ============================================================
 # Stage 2: Runtime
