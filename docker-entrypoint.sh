@@ -14,6 +14,21 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# =================================================================
+# Activate Python virtual environment
+# This MUST be first so all python3 calls use venv packages
+# =================================================================
+VENV_PATH="/opt/venv"
+if [ -f "${VENV_PATH}/bin/activate" ]; then
+    . "${VENV_PATH}/bin/activate"
+    echo -e "${GREEN}✓ Python venv activated: ${VENV_PATH}${NC}"
+    echo "  Python: $(which python3)"
+    echo "  Pip:    $(which pip)"
+else
+    echo -e "${RED}ERROR: venv not found at ${VENV_PATH}${NC}"
+    echo "  Falling back to system Python"
+fi
+
 echo -e "${GREEN}=================================================${NC}"
 echo -e "${GREEN}Ham Radio Operator Web Application${NC}"
 echo -e "${GREEN}Docker Container Initialization${NC}"
