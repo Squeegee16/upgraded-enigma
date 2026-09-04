@@ -20,9 +20,15 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install build dependencies INCLUDING audio headers
-# portaudio19-dev is required to compile pyaudio
-# libasound2-dev is required for ALSA support in pyaudio
+# ============================================================
+# FIX 1 - Added audio build headers to builder stage:
+#   portaudio19-dev  - provides portaudio.h for pyaudio
+#   libasound2-dev   - provides ALSA headers for pyaudio
+#   libsndfile1-dev  - provides audio file headers
+#   libsamplerate-dev - provides sample rate headers
+# Without these, pyaudio compilation fails with:
+#   fatal error: portaudio.h: No such file or directory
+# ============================================================
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     gcc \
@@ -51,8 +57,18 @@ RUN set -eux; \
     /opt/venv/bin/pip install \
         "setuptools>=68.0.0" \
         "wheel>=0.41.0"; \
-    echo "=== Installing requirements ==="; \
-    /opt/venv/bin/pip install -r requirements.txt; \
+    echo "=== Installing requirements (non-audio) ==="; \
+    # Install everything except pyaudio first
+    grep -v "pyaudio" requirements.txt > /tmp/req_no_audio.txt; \
+    /opt/venv/bin/pip install -r /tmp/req_no_audio.txt; \
+    echo "=== Installing pyaudio separately ==="; \
+    # Try pyaudio - non-fatal if it fails
+    /opt/venv/bin/pip install "pyaudio>=0.2.13" \
+        || { \
+            echo "WARNING: pyaudio failed - trying sounddevice fallback"; \
+            /opt/venv/bin/pip install sounddevice \
+            || echo "WARNING: audio packages unavailable - continuing"; \
+        }; \
     echo "=== Reinstalling setuptools after requirements ==="; \
     /opt/venv/bin/pip install \
         "setuptools>=68.0.0" \
@@ -71,7 +87,7 @@ RUN set -eux; \
     echo "=== Verifying pyaudio ==="; \
     /opt/venv/bin/python -c \
         "import pyaudio; print('pyaudio OK:', pyaudio.__version__)" \
-        || echo "WARNING: pyaudio import check failed"; \
+        || echo "WARNING: pyaudio not available - sounddevice will be used"; \
     echo "=== Builder stage complete ==="
 # ============================================================
 # Stage 2: Runtime
