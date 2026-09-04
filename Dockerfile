@@ -35,32 +35,33 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /build
 COPY requirements.txt .
 
-# Create venv and install all packages
-# setuptools MUST be installed first and explicitly
 RUN set -eux; \
+    echo "=== Creating Python venv ==="; \
     python -m venv /opt/venv; \
-    # Upgrade pip first
+    echo "=== Upgrading pip ==="; \
     /opt/venv/bin/pip install --upgrade pip; \
-    # Install setuptools and wheel explicitly FIRST
-    # This ensures pkg_resources is available
+    echo "=== Installing setuptools first ==="; \
     /opt/venv/bin/pip install \
         "setuptools>=68.0.0" \
         "wheel>=0.41.0"; \
-    # Now install all requirements
+    echo "=== Installing requirements ==="; \
     /opt/venv/bin/pip install -r requirements.txt; \
-    # Reinstall setuptools AFTER requirements in case
-    # something downgraded it
+    echo "=== Reinstalling setuptools after requirements ==="; \
     /opt/venv/bin/pip install \
         "setuptools>=68.0.0" \
-        "wheel>=0.41.0"; \
-    echo "=== Builder venv packages ==="; \
+        "wheel>=0.41.0" \
+        --force-reinstall; \
+    echo "=== Installed packages ==="; \
     /opt/venv/bin/pip list; \
-    echo "=== Verifying pkg_resources in builder ==="; \
-    /opt/venv/bin/python -c "import pkg_resources; \
-        print('pkg_resources version:', \
+    echo "=== Verifying pkg_resources ==="; \
+    /opt/venv/bin/python -c \
+        "import pkg_resources; \
+        print('pkg_resources OK - setuptools:', \
         pkg_resources.get_distribution('setuptools').version)"; \
-    echo "=== Builder venv complete ==="
-
+    echo "=== Verifying flask ==="; \
+    /opt/venv/bin/python -c \
+        "import flask; print('flask OK:', flask.__version__)"; \
+    echo "=== Builder stage complete ==="
 # ============================================================
 # Stage 2: Runtime
 # ============================================================
@@ -534,28 +535,47 @@ RUN chown -R hamradio:hamradio \
 # Copy venv from builder stage
 # ============================================================
 COPY --from=builder /opt/venv /opt/venv
+
+# Fix permissions
 RUN chmod -R a+rX /opt/venv
 
-# Ensure setuptools is present in the venv at runtime
-# This fixes: No module named 'pkg_resources'
-RUN /opt/venv/bin/pip install --upgrade setuptools wheel
+# Force reinstall setuptools after copy from builder
+# The multi-stage copy can sometimes drop setuptools metadata
+RUN set -eux; \
+    echo "=== Reinstalling setuptools in runtime venv ==="; \
+    /opt/venv/bin/pip install --upgrade \
+        "setuptools>=68.0.0" \
+        "wheel>=0.41.0" \
+        --force-reinstall; \
+    /opt/venv/bin/python -c \
+        "import pkg_resources; \
+        print('pkg_resources OK:', \
+        pkg_resources.get_distribution('setuptools').version)"; \
+    echo "=== setuptools reinstall complete ==="
 
-# Verify critical packages are present
-# Fails build immediately if core packages are missing
+# Verify ALL critical packages
 RUN set -eux; \
     echo "=== Verifying venv packages ==="; \
-    /opt/venv/bin/python -c "import flask" || \
-        { echo "ERROR: flask not in venv"; exit 1; }; \
-    /opt/venv/bin/python -c "import flask_sqlalchemy" || \
-        { echo "ERROR: flask_sqlalchemy not in venv"; exit 1; }; \
-    /opt/venv/bin/python -c "import flask_login" || \
-        { echo "ERROR: flask_login not in venv"; exit 1; }; \
-    /opt/venv/bin/python -c "import sqlalchemy" || \
-        { echo "ERROR: sqlalchemy not in venv"; exit 1; }; \
-    /opt/venv/bin/python -c "import pkg_resources" || \
-        { echo "ERROR: pkg_resources not in venv"; exit 1; }; \
-    echo "Flask version: $(/opt/venv/bin/python -c \
-        'import flask; print(flask.__version__)')"; \
+    /opt/venv/bin/python -c \
+        "import flask; \
+        print('  flask:', flask.__version__)"; \
+    /opt/venv/bin/python -c \
+        "import flask_sqlalchemy; \
+        print('  flask_sqlalchemy: OK')"; \
+    /opt/venv/bin/python -c \
+        "import flask_login; \
+        print('  flask_login: OK')"; \
+    /opt/venv/bin/python -c \
+        "import sqlalchemy; \
+        print('  sqlalchemy:', sqlalchemy.__version__)"; \
+    /opt/venv/bin/python -c \
+        "import pkg_resources; \
+        print('  pkg_resources:', \
+        pkg_resources.get_distribution('setuptools').version)"; \
+    /opt/venv/bin/python -c \
+        "import rtlsdr; \
+        print('  pyrtlsdr: OK')" \
+        || echo "  pyrtlsdr: not available (non-fatal)"; \
     echo "=== All critical packages verified OK ==="
 
 # ============================================================
