@@ -1,30 +1,59 @@
 # ============================================================
-# Ham Radio App - Python Requirements
-# All packages installed at Docker build time as root.
-# Plugin installers will skip pip installs at runtime.
+# Core - Must be first
 # ============================================================
+setuptools>=68.0.0
+wheel>=0.41.0
 
-setuptools>=65.0.0
-wheel>=0.40.0
-
-# Core Flask framework
+# ============================================================
+# Flask Framework
+# ============================================================
 Flask==3.0.0
+Flask-SQLAlchemy>=3.0.0
 Flask-Login==0.6.3
 Flask-WTF==1.2.1
+Werkzeug>=2.3.0
+WTForms>=3.0.0
 email_validator==1.1.1
-Flask-SQLAlchemy==3.1.1
-WTForms==3.1.1
 
-# Security
-bcrypt==4.1.2
-pyopenssl==23.3.0
-
+# ============================================================
 # Database
+# ============================================================
 SQLAlchemy==2.0.23
 
-# Hardware interfaces
-pyserial==3.5
+# ============================================================
+# Security
+# ============================================================
+cryptography>=41.0.0
+pyopenssl==23.3.0
+bcrypt==4.1.2
+
+# ============================================================
+# Serial / GPS
+# ============================================================
+pyserial>=3.5
+gpsd-py3>=0.3.0
 pynmea2==1.18.0
+# ============================================================
+# SDR
+# ============================================================
+pyrtlsdr>=0.3.0
+
+# ============================================================
+# Audio
+# ============================================================
+pyaudio>=0.2.13
+
+# ============================================================
+# Utilities
+# ============================================================
+requests>=2.28.0
+python-dotenv>=1.0.0
+
+# ============================================================
+# WSGI Server
+# ============================================================
+gunicorn>=21.0.0
+
 
 # HTTP and networking
 requests==2.31.0
@@ -57,8 +86,7 @@ sounddevice==0.4.6
 # Requires librtlsdr system library (already built
 # from source in Dockerfile):
 #   RUN apt-get install librtlsdr-dev
-pyrtlsdr
-#==0.3
+
 uv
 ephem
 pyorbital
