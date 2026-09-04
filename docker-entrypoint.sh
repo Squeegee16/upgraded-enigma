@@ -233,7 +233,7 @@ if spec:
     print('  pyrtlsdr package files: FOUND at', spec.origin)
 else:
     print('  pyrtlsdr package files: NOT FOUND')
-    print('  Add pyrtlsdr to requirements.txt')
+    print('  Add pyrtlsdr>=0.3.0 to requirements.txt')
     sys.exit(0)
 
 # Test 2: Does it actually import?
@@ -244,7 +244,6 @@ try:
 except OSError as e:
     print('  pyrtlsdr import: FAILED (native lib missing)')
     print('  Error:', str(e))
-    print('  Fix: Ensure RTL-SDR source build ran ldconfig')
 except ImportError as e:
     print('  pyrtlsdr import: FAILED')
     print('  Error:', str(e))
