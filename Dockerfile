@@ -529,7 +529,9 @@ ENV GOROOT=/usr/local/go \
     GOMODCACHE=/home/hamradio/go/pkg/mod \
     CARGO_HOME=/home/hamradio/.cargo \
     RUSTUP_HOME=/home/hamradio/.rustup \
-    PATH="/usr/local/bin:/usr/local/go/bin:/home/hamradio/.cargo/bin:/home/hamradio/.local/bin:/home/hamradio/go/bin:/opt/venv/bin:/usr/bin:/bin"
+    # Venv activation
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:/usr/local/bin:/usr/local/go/bin:/home/hamradio/.cargo/bin:/home/hamradio/.local/bin:/home/hamradio/go/bin:/usr/bin:/bin"
 
 # ============================================================
 # Application files
@@ -571,4 +573,4 @@ HEALTHCHECK \
         || exit 1
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["python", "app.py"]
+CMD ["/opt/venv/bin/python", "app.py"]
