@@ -20,6 +20,9 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# Install build dependencies INCLUDING audio headers
+# portaudio19-dev is required to compile pyaudio
+# libasound2-dev is required for ALSA support in pyaudio
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     gcc \
@@ -30,6 +33,10 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     python3-dev \
     librtlsdr-dev \
+    portaudio19-dev \
+    libasound2-dev \
+    libsndfile1-dev \
+    libsamplerate-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
@@ -61,6 +68,10 @@ RUN set -eux; \
     echo "=== Verifying flask ==="; \
     /opt/venv/bin/python -c \
         "import flask; print('flask OK:', flask.__version__)"; \
+    echo "=== Verifying pyaudio ==="; \
+    /opt/venv/bin/python -c \
+        "import pyaudio; print('pyaudio OK:', pyaudio.__version__)" \
+        || echo "WARNING: pyaudio import check failed"; \
     echo "=== Builder stage complete ==="
 # ============================================================
 # Stage 2: Runtime
