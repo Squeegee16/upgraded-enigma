@@ -520,6 +520,24 @@ RUN chmod -R a+rX /opt/venv
 # This fixes: No module named 'pkg_resources'
 RUN /opt/venv/bin/pip install --upgrade setuptools wheel
 
+# Verify critical packages are present
+# Fails build immediately if core packages are missing
+RUN set -eux; \
+    echo "=== Verifying venv packages ==="; \
+    /opt/venv/bin/python -c "import flask" || \
+        { echo "ERROR: flask not in venv"; exit 1; }; \
+    /opt/venv/bin/python -c "import flask_sqlalchemy" || \
+        { echo "ERROR: flask_sqlalchemy not in venv"; exit 1; }; \
+    /opt/venv/bin/python -c "import flask_login" || \
+        { echo "ERROR: flask_login not in venv"; exit 1; }; \
+    /opt/venv/bin/python -c "import sqlalchemy" || \
+        { echo "ERROR: sqlalchemy not in venv"; exit 1; }; \
+    /opt/venv/bin/python -c "import pkg_resources" || \
+        { echo "ERROR: pkg_resources not in venv"; exit 1; }; \
+    echo "Flask version: $(/opt/venv/bin/python -c \
+        'import flask; print(flask.__version__)')"; \
+    echo "=== All critical packages verified OK ==="
+
 # ============================================================
 # Runtime environment variables
 # ============================================================
@@ -529,7 +547,6 @@ ENV GOROOT=/usr/local/go \
     GOMODCACHE=/home/hamradio/go/pkg/mod \
     CARGO_HOME=/home/hamradio/.cargo \
     RUSTUP_HOME=/home/hamradio/.rustup \
-    # Venv activation
     VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:/usr/local/bin:/usr/local/go/bin:/home/hamradio/.cargo/bin:/home/hamradio/.local/bin:/home/hamradio/go/bin:/usr/bin:/bin"
 
@@ -567,10 +584,12 @@ HEALTHCHECK \
     --timeout=10s \
     --start-period=60s \
     --retries=3 \
-    CMD python -c \
+    CMD /opt/venv/bin/python -c \
         "import urllib.request; \
         urllib.request.urlopen('http://localhost:5000/').read()" \
         || exit 1
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+# Explicitly use venv python to avoid system python being used
+CMD ["/opt/venv/bin/python", "app.py"]cal/bin/docker-entrypoint.sh"]
 CMD ["/opt/venv/bin/python", "app.py"]
